@@ -49,6 +49,7 @@ End Sub
 
 
 Public Sub LoadPhoenixModule()
+    On Error GoTo LoadPhoenixModule_Err
     m_LastPhoenixSpawnAttempt = GetTickCountRaw()
     If Not FileExist(DatPath & "PhoenixMapPool.dat", vbArchive) Then
         Debug.Assert False
@@ -60,6 +61,10 @@ Public Sub LoadPhoenixModule()
     Call IniFile.Initialize(DatPath & "PhoenixMapPool.dat")
     Dim MaxPhoenixMaps
     MaxPhoenixMaps = val(IniFile.GetValue("INIT", "MaxPhoenixMaps"))
+    If MaxPhoenixMaps < 1 Then
+        Call LogError("PhoenixMapPool.dat: MaxPhoenixMaps invalido: " & MaxPhoenixMaps)
+        Exit Sub
+    End If
     ReDim Preserve PhoenixMapPool(1 To MaxPhoenixMaps)
     Dim i As Integer
     For i = 1 To MaxPhoenixMaps
@@ -67,4 +72,7 @@ Public Sub LoadPhoenixModule()
     Next i
     PhoenixSpawnPosition.x = 50
     PhoenixSpawnPosition.y = 50
+    Exit Sub
+LoadPhoenixModule_Err:
+    Call TraceError(Err.Number, Err.Description, "ModPhoenix.LoadPhoenixModule", Erl)
 End Sub

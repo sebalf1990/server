@@ -37,3 +37,9 @@ vb6build.log
 *.pdb
 /dumps
 _assets
+
+# Archivos temporales de debug
+migrations_debug.log
+*.bak*
+test_ado*.vbs
+"Empty_db - copia.db"

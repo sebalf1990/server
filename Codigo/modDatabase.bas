@@ -40,7 +40,7 @@ Public Sub Database_Connect_Async()
     If Len(Database_Source) <> 0 Then
         ConnectionID = "DATA SOURCE=" & Database_Source & ";"
     Else
-        ConnectionID = "DRIVER={SQLite3 ODBC Driver};" & "DATABASE=" & App.Path & "/Database.db"
+        ConnectionID = "DRIVER={SQLite3 ODBC Driver};DATABASE=" & App.Path & "\Database.db"
     End If
     Dim i As Byte
     For i = 1 To MAX_ASYNC
@@ -64,17 +64,19 @@ Public Sub Database_Connect()
     If Len(Database_Source) <> 0 Then
         ConnectionID = "DATA SOURCE=" & Database_Source & ";"
     Else
-        ConnectionID = "DRIVER={SQLite3 ODBC Driver};" & "DATABASE=" & App.Path & "/" & DatabaseFileName
+        ConnectionID = "DRIVER={SQLite3 ODBC Driver};DATABASE=" & App.Path & "\" & DatabaseFileName
     End If
     Set Connection = New ADODB.Connection
     Connection.CursorLocation = adUseClient
     Connection.ConnectionString = ConnectionID
     Set Builder = New cStringBuilder
+    On Error GoTo Database_Connect_Err
     Call Connection.Open
     Exit Sub
 Database_Connect_Err:
     Call LogDatabaseError("Database Error: " & Err.Number & " - " & Err.Description & " - Database_Connect")
 End Sub
+
 
 Public Sub Database_Close()
     On Error GoTo Database_Close_Err

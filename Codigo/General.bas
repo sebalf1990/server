@@ -485,7 +485,8 @@ End Sub
 
 Sub Main()
     On Error GoTo Handler
-        
+
+
     Call TryInitShard
     
     Call Uptime_Init

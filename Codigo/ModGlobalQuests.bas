@@ -104,7 +104,7 @@ Public Sub LoadGlobalQuests()
             .BossSpawnPositionBottomRight.y = CInt(val(IniFile.GetValue("GlobalQuest" & i, "BossSpawnPositionBottomRightY")))
             .BossSpawnPositionTopLeft.x = CInt(val(IniFile.GetValue("GlobalQuest" & i, "BossSpawnPositionTopLeftX")))
             .BossSpawnPositionTopLeft.y = CInt(val(IniFile.GetValue("GlobalQuest" & i, "BossSpawnPositionTopLeftY")))
-            .BossIndex = CInt(val(IniFile.GetValue("GlobalQuest" & i, "BossIndex")))
+            .BossIndex = CInt(val(IniFile.GetValue("GlobalQuest" & i, "NPCID")))
             .FinishOnThresholdReach = val(IniFile.GetValue("GlobalQuest" & i, "FinishOnThresholdReach"))
             .Name = IniFile.GetValue("GlobalQuest" & i, "Name")
             .StartDate = CDate(IniFile.GetValue("GlobalQuest" & i, "StartDate"))
@@ -126,9 +126,15 @@ Public Sub LoadGlobalQuests()
                 .EndDate = SQLiteToDate(RS!end_date)
                 .IsActive = RS!is_active
                 Set RS = Query(SUM_TOTAL_AMOUNT_FROM_USER_CONTRIBUTION, i)
-                If Not IsNull(RS!total_amount) Then
-                    .GatheringGlobalCounter = RS!total_amount
-                    .GatheringGlobalInstallments = RS!total_amount + .GatheringInitialInstallments
+                If Not RS Is Nothing Then
+                    If RS.RecordCount > 0 Then
+                        If Not IsNull(RS!total_amount) Then
+                            .GatheringGlobalCounter = RS!total_amount
+                            .GatheringGlobalInstallments = RS!total_amount + .GatheringInitialInstallments
+                        End If
+                    End If
+                    Call RS.Close
+                    Set RS = Nothing
                 End If
             End If
         End With
