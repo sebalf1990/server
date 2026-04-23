@@ -1,0 +1,30 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(where sqlite3.exe)",
+      "Bash(ls /c/sqlite3*)",
+      "Read(//c//**)",
+      "Bash(reg query *)",
+      "Bash(python -c ' *)",
+      "Bash(powershell -command \"Get-EventLog -LogName Application -Source 'Argentum20Server' -Newest 10 2>/dev/null | Select-Object TimeGenerated, EventID, Message | Format-Table -Wrap\")",
+      "Bash(regsvr32 /s \"c:/AO20/argentum-online-server-5.6.35/Aurora.Network.dll\")",
+      "Bash(echo \"Exit: $?\")",
+      "Bash(\"%SystemRoot%\\\\SysWOW64\\\\regsvr32.exe\" /s \"c:/AO20/argentum-online-server-5.6.35/Aurora.Network.dll\")",
+      "Bash(cmd /c \"C:\\\\\\\\Windows\\\\\\\\SysWOW64\\\\\\\\regsvr32.exe /s C:\\\\\\\\AO20\\\\\\\\argentum-online-server-5.6.35\\\\\\\\Aurora.Network.dll\")",
+      "Bash(cmd /c \"reg query \\\\\"HKLM\\\\SOFTWARE\\\\WOW6432Node\\\\Classes\\\\CLSID\\\\\" /f \\\\\"Aurora.Network\\\\\" /d /s 2>&1 | head -30\")",
+      "Bash(cmd /c \"reg query \\\\\"HKCU\\\\SOFTWARE\\\\Classes\\\\CLSID\\\\\" /f \\\\\"Aurora.Network\\\\\" /d /s 2>&1\")",
+      "Bash(cmd /c \"dumpbin /exports C:\\\\\\\\AO20\\\\\\\\argentum-online-server-5.6.35\\\\\\\\Aurora.Network.dll 2>&1 | head -40\")",
+      "Bash(cmd /c \"powershell -Command \\\\\"& { Add-Type -Path 'C:\\\\\\\\AO20\\\\\\\\argentum-online-server-5.6.35\\\\\\\\Aurora.Network.dll' 2>&1 | Out-String }\\\\\"\")",
+      "Bash(cmd /c \"powershell -Command \\\\\"[System.Reflection.Assembly]::LoadFile\\('C:\\\\\\\\AO20\\\\\\\\argentum-online-server-5.6.35\\\\\\\\Aurora.Network.dll'\\).GetExportedTypes\\(\\) 2>&1\\\\\"\")",
+      "Bash(cmd /c \"C:\\\\\\\\Windows\\\\\\\\SysWOW64\\\\\\\\regsvr32.exe C:\\\\\\\\AO20\\\\\\\\argentum-online-server-5.6.35\\\\\\\\Aurora.Network.dll 2>&1\")",
+      "Bash(cmd /c \"reg query HKCR /f \\\\\"Aurora.Network\\\\\" /d /s 2>&1\")",
+      "Bash(cmd /c \"powershell -Command \\\\\"[System.Diagnostics.FileVersionInfo]::GetVersionInfo\\('C:\\\\\\\\AO20\\\\\\\\argentum-online-server-5.6.35\\\\\\\\Aurora.Network.dll'\\) | Select-Object FileDescription, ProductName, CompanyName, FileVersion, ProductVersion 2>&1\\\\\"\")",
+      "Bash(cmd /c \"powershell -Command \\\\\"Get-Content 'C:\\\\\\\\AO20\\\\\\\\argentum-online-server-5.6.35\\\\\\\\server.exe' -Raw | Select-String -Pattern 'Network.Server' 2>&1 | head -5\\\\\"\")",
+      "Bash(cmd /c \"strings C:\\\\\\\\AO20\\\\\\\\argentum-online-server-5.6.35\\\\\\\\Aurora.Network.dll 2>&1 | head -50\")",
+      "Bash(cmd /c 'powershell -c \"try { $s = [System.Activator]::CreateInstance\\([System.Type]::GetTypeFromProgID\\('\\\\''Network.Server'\\\\''\\)\\); Write-Host '\\\\''OK: '\\\\'' + $s.GetType\\(\\) } catch { Write-Host '\\\\''FAIL:'\\\\'' $_.Exception.Message }\" 2>&1')",
+      "Bash(grep \"\\\\.csm$\")",
+      "Bash(\"C:/Program Files \\(x86\\)/Microsoft Visual Studio/VB98/vb6.exe\" /make /d \"UsarQueSocket=1:ConUpTime=1:AntiExternos=0:Lac=1:DEBUGGING=0:PYMMO=1:UNLOCK_CPU=1:DIRECT_PLAY=0\" /out vb6build.log Server.VBP)",
+      "Bash(cmd.exe //c '\"C:\\\\Program Files \\(x86\\)\\\\Microsoft Visual Studio\\\\VB98\\\\vb6.exe\" /make /d \"UsarQueSocket=1:ConUpTime=1:AntiExternos=0:Lac=1:DEBUGGING=0:PYMMO=1:UNLOCK_CPU=1:DIRECT_PLAY=0\" /out vb6build.log Server.VBP')"
+    ]
+  }
+}

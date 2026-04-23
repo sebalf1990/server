@@ -17,7 +17,7 @@ Attribute VB_Name = "TCP"
 '    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 '
 '    This program was based on Argentum Online 0.11.6
-'    Copyright (C) 2002 Márquez Pablo Ignacio
+'    Copyright (C) 2002 Mï¿½rquez Pablo Ignacio
 '
 '    Argentum Online is based on Baronsoft's VB6 Online RPG
 '    You can contact the original creator of ORE at aaron@baronsoft.com
@@ -86,7 +86,7 @@ Sub RellenarInventario(ByVal UserIndex As String)
         .invent.Object(NumItems).ObjIndex = 4335 'Pocion Roja
         .invent.Object(NumItems).amount = 500
         NumItems = NumItems + 1
-        ' Magicas puras reciben más azules
+        ' Magicas puras reciben mï¿½s azules
         Select Case .clase
             Case e_Class.Mage, e_Class.Druid
                 .invent.Object(NumItems).ObjIndex = 4336 ' Pocion Azul
@@ -104,10 +104,10 @@ Sub RellenarInventario(ByVal UserIndex As String)
         ' Hechizos
         Select Case .clase
             Case e_Class.Mage, e_Class.Cleric, e_Class.Druid, e_Class.Bard
-                .Stats.UserHechizos(1) = 1 ' Dardo mágico
+                .Stats.UserHechizos(1) = 1 ' Dardo mï¿½gico
                 .Stats.UserHechizos(2) = 7 ' Invocar lobo
             Case e_Class.Paladin, e_Class.Bandit, e_Class.Assasin
-                .Stats.UserHechizos(1) = 291 ' Onda mágica
+                .Stats.UserHechizos(1) = 291 ' Onda mï¿½gica
                 .Stats.UserHechizos(2) = 12 ' Curar heridas leves
         End Select
         ' Pociones amarillas y verdes
@@ -124,7 +124,7 @@ Sub RellenarInventario(ByVal UserIndex As String)
                 .invent.Object(NumItems).amount = 80
                 NumItems = NumItems + 1
         End Select
-        ' Poción violeta
+        ' Pociï¿½n violeta
         .invent.Object(NumItems).ObjIndex = 4334 ' Pocion violeta
         .invent.Object(NumItems).amount = 35
         NumItems = NumItems + 1
@@ -271,7 +271,7 @@ Sub RellenarInventario(ByVal UserIndex As String)
                 .invent.Object(NumItems).amount = 1
                 NumItems = NumItems + 1
             Case e_Class.Mage
-                .invent.Object(NumItems).ObjIndex = 3495 ' Bastón del Principiante
+                .invent.Object(NumItems).ObjIndex = 3495 ' Bastï¿½n del Principiante
                 .invent.Object(NumItems).amount = 1
                 NumItems = NumItems + 1
                 .invent.Object(NumItems).ObjIndex = 3493 ' Sombrero del Principiante
@@ -316,18 +316,18 @@ Sub RellenarInventario(ByVal UserIndex As String)
                 .invent.Object(NumItems).ObjIndex = 3490 ' Anillo del Principiante
                 .invent.Object(NumItems).amount = 1
                 NumItems = NumItems + 1
-                .invent.Object(NumItems).ObjIndex = 3496 ' Laúd del Principiante
+                .invent.Object(NumItems).ObjIndex = 3496 ' Laï¿½d del Principiante
                 .invent.Object(NumItems).amount = 1
                 NumItems = NumItems + 1
         End Select
-        ' Armadura o túnica de principiante
+        ' Armadura o tï¿½nica de principiante
         Select Case .clase
                 ' Todas menos mago, druida y bardo:
             Case e_Class.Trabajador, e_Class.Thief, e_Class.Paladin, e_Class.Cleric, e_Class.Assasin, e_Class.Bandit, e_Class.Pirat, e_Class.Warrior, e_Class.Hunter
                 .invent.Object(NumItems).ObjIndex = 3500 ' Armadura de Principiante
                 ' Mago, druida y bardo:
             Case e_Class.Mage, e_Class.Druid, e_Class.Bard
-                .invent.Object(NumItems).ObjIndex = 3502 ' Túnica del Principiante
+                .invent.Object(NumItems).ObjIndex = 3502 ' Tï¿½nica del Principiante
         End Select
         .invent.Object(NumItems).Equipped = 0
         Call EquiparInvItem(UserIndex, NumItems)
@@ -336,7 +336,7 @@ Sub RellenarInventario(ByVal UserIndex As String)
         .invent.EquippedArmorSlot = NumItems
         .invent.EquippedArmorObjIndex = .invent.Object(NumItems).ObjIndex
         NumItems = NumItems + 1
-        ' Animación según raza
+        ' Animaciï¿½n segï¿½n raza
         .Char.body = ObtenerRopaje(UserIndex, ObjData(.invent.EquippedArmorObjIndex))
         ' Comida y bebida
         .invent.Object(NumItems).ObjIndex = 3684 ' Manzana
@@ -442,35 +442,35 @@ Function ConnectNewUser(ByVal UserIndex As Integer, _
         End If
         
 #If LOGIN_STRESS_TEST = 0 Then
-        ' Nombre válido
+        ' Nombre vï¿½lido
         If Not ValidarNombre(name) Then
             Call LogSecurity("ValidarNombre failed in ConnectNewUser for " & name & " desde la IP " & .ConnectionDetails.IP)
             Call CloseSocketSL(UserIndex)
             Exit Function
         End If
         If Not NombrePermitido(name) Then
-            Call WriteShowMessageBox(UserIndex, 1768, vbNullString) 'Msg1768=El nombre no está permitido.
+            Call WriteShowMessageBox(UserIndex, 1768, vbNullString) 'Msg1768=El nombre no estï¿½ permitido.
             Exit Function
         End If
 #End If
-        '¿Existe el personaje?
+        'ï¿½Existe el personaje?
         If PersonajeExiste(name) Then
             Call WriteShowMessageBox(UserIndex, 1769, vbNullString) 'Msg1769=Ya existe el personaje.
             Exit Function
         End If
-        ' Raza válida
+        ' Raza vï¿½lida
         If UserRaza <= 0 Or UserRaza > NUMRAZAS Then Exit Function
-        ' Género válido
+        ' Gï¿½nero vï¿½lido
         If UserSexo < Hombre Or UserSexo > Mujer Then Exit Function
-        ' Ciudad válida
+        ' Ciudad vï¿½lida
         If Hogar <= 0 Or Hogar > NUMCIUDADES Then Exit Function
-        ' Cabeza válida
+        ' Cabeza vï¿½lida
 #If LOGIN_STRESS_TEST = 0 Then
         If Not ValidarCabeza(UserRaza, UserSexo, head) Then Exit Function
 #Else
         head = GetRandomHead(UserRaza, UserSexo)
 #End If
-        'Prevenimos algun bug con dados inválidos
+        'Prevenimos algun bug con dados invï¿½lidos
         'If .Stats.UserAtributos(e_Atributos.Fuerza) = 0 Then Exit Function
         .Stats.UserAtributos(e_Atributos.Fuerza) = 18 + ModRaza(UserRaza).Fuerza
         .Stats.UserAtributos(e_Atributos.Agilidad) = 18 + ModRaza(UserRaza).Agilidad
@@ -491,7 +491,7 @@ Function ConnectNewUser(ByVal UserIndex As Integer, _
         .raza = UserRaza
         .Char.head = head
         .genero = UserSexo
-        .Hogar = cForgat
+        .Hogar = Hogar
         '%%%%%%%%%%%%% PREVENIR HACKEO DE LOS SKILLS %%%%%%%%%%%%%
         .Stats.SkillPts = 10
         .Char.Heading = e_Heading.SOUTH
@@ -502,7 +502,7 @@ Function ConnectNewUser(ByVal UserIndex As Integer, _
         .Stats.MaxHp = .Stats.UserAtributos(e_Atributos.Constitucion)
         .Stats.MinHp = .Stats.MaxHp
         .Stats.shield = 0
-        '  Maná inicial
+        '  Manï¿½ inicial
         .Stats.MaxMAN = .Stats.UserAtributos(e_Atributos.Inteligencia) * ModClase(.clase).ManaInicial
         .Stats.MinMAN = .Stats.MaxMAN
         Dim MiInt As Integer
@@ -697,7 +697,7 @@ Function EntrarCuenta(ByVal UserIndex As Integer, ByVal CuentaEmail As String, B
     If ServerSoloGMs > 0 Then
         laCuentaEsDeAdmin = False
         For adminIdx = 0 To AdministratorAccounts.count - 1
-            ' Si el e-mail está declarado junto al nick de la cuenta donde esta el PJ GM en el Server.ini te dejo entrar.
+            ' Si el e-mail estï¿½ declarado junto al nick de la cuenta donde esta el PJ GM en el Server.ini te dejo entrar.
             If UCase$(AdministratorAccounts.Items(adminIdx)) = UCase$(CuentaEmail) Then
                 laCuentaEsDeAdmin = True
             End If
@@ -714,7 +714,7 @@ Function EntrarCuenta(ByVal UserIndex As Integer, ByVal CuentaEmail As String, B
         End If
     #End If
     If Not CheckMailString(CuentaEmail) Then
-        Call WriteShowMessageBox(UserIndex, 1772, vbNullString) 'Msg1772=Email inválido.
+        Call WriteShowMessageBox(UserIndex, 1772, vbNullString) 'Msg1772=Email invï¿½lido.
         Exit Function
     End If
     EntrarCuenta = EnterAccountDatabase(UserIndex, CuentaEmail)
@@ -757,7 +757,7 @@ Function ConnectUser(ByVal UserIndex As Integer, ByRef name As String, Optional 
 
 ErrHandler:
     Call TraceError(Err.Number, Err.Description, "TCP.ConnectUser", Erl)
-    Call WriteShowMessageBox(UserIndex, "El personaje contiene un error. Comuníquese con un miembro del staff.")
+    Call WriteShowMessageBox(UserIndex, "El personaje contiene un error. Comunï¿½quese con un miembro del staff.")
     Call CloseSocket(UserIndex)
     Call PerformTimeLimitCheck(PerformanceTimer, "ConnectUser")
 End Function
@@ -826,7 +826,7 @@ Public Function ConnectUserByID(ByVal UserIndex As Integer, ByVal CharID As Long
 
 ErrHandler:
     Call TraceError(Err.Number, Err.Description, "TCP.ConnectUserByID", Erl)
-    Call WriteShowMessageBox(UserIndex, "El personaje contiene un error. Comuníquese con un miembro del staff.")
+    Call WriteShowMessageBox(UserIndex, "El personaje contiene un error. Comunï¿½quese con un miembro del staff.")
     Call CloseSocket(UserIndex)
     Call PerformTimeLimitCheck(PerformanceTimer, "ConnectUserByID")
 End Function
@@ -989,7 +989,7 @@ Sub ResetBasicUserInfo(ByVal UserIndex As Integer)
     'Last modified: 03/15/2006
     'Resetea todos los valores generales y las stats
     '03/15/2006 Maraxus - Uso de With para mayor performance y claridad.
-    'Agregue que se resetee el maná
+    'Agregue que se resetee el manï¿½
     '*************************************************
     Dim LoopC As Integer
     With UserList(UserIndex)
@@ -1417,7 +1417,7 @@ Sub ClearAndSaveUser(ByVal UserIndex As Integer)
     End With
     Exit Sub
 ErrHandler:
-    'Call LogError("Error en CloseUser. Número " & Err.Number & ". Descripción: " & Err.Description & ". Detalle:" & errordesc)
+    'Call LogError("Error en CloseUser. Nï¿½mero " & Err.Number & ". Descripciï¿½n: " & Err.Description & ". Detalle:" & errordesc)
     Call TraceError(Err.Number, Err.Description & ". Detalle:" & errordesc, Erl)
     Resume Next ' TODO: Provisional hasta solucionar bugs graves
 End Sub
@@ -1463,7 +1463,7 @@ Sub CloseUser(ByVal UserIndex As Integer)
     End With
     Exit Sub
 ErrHandler:
-    'Call LogError("Error en CloseUser. Número " & Err.Number & ". Descripción: " & Err.Description & ". Detalle:" & errordesc)
+    'Call LogError("Error en CloseUser. Nï¿½mero " & Err.Number & ". Descripciï¿½n: " & Err.Description & ". Detalle:" & errordesc)
     Call TraceError(Err.Number, Err.Description & ". Detalle:" & errordesc, Erl)
     Resume Next ' TODO: Provisional hasta solucionar bugs graves
 End Sub
