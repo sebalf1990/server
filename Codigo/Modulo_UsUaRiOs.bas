@@ -2871,9 +2871,10 @@ Public Function ModifyHealth(ByVal UserIndex As Integer, ByVal amount As Long, O
 End Function
 
 Public Function ModifyStamina(ByVal UserIndex As Integer, ByVal amount As Integer, ByVal CancelIfNotEnought As Boolean, Optional ByVal MinValue = 0) As Boolean
-    ' Toggle: stamina no se modifica por hechizos ni pociones
+    ' Toggle: con stamina desactivada retornamos False (no cancelado).
+    ' True implicaria 'no alcanzo la sta' y abortaria DoTs con TickStaminaConsumption.
     If IsFeatureEnabled("disable_hunger_thirst_stamina") Then
-        ModifyStamina = True
+        ModifyStamina = False
         Exit Function
     End If
     ModifyStamina = False

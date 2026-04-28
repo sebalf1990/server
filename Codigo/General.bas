@@ -880,14 +880,17 @@ Public Sub EfectoStamina(ByVal UserIndex As Integer)
         ' Toggle: sistema de hambre, sed y stamina desactivado
         ' Restaura stats al maximo en cada tick (cubre carga desde DB con valores en 0)
         If IsFeatureEnabled("disable_hunger_thirst_stamina") Then
+            Dim bUpdHamSed As Boolean
+            bUpdHamSed = False
             If .Stats.MinHam < .Stats.MaxHam Then
                 .Stats.MinHam = .Stats.MaxHam
-                Call WriteUpdateHungerAndThirst(UserIndex)
+                bUpdHamSed = True
             End If
             If .Stats.MinAGU < .Stats.MaxAGU Then
                 .Stats.MinAGU = .Stats.MaxAGU
-                Call WriteUpdateHungerAndThirst(UserIndex)
+                bUpdHamSed = True
             End If
+            If bUpdHamSed Then Call WriteUpdateHungerAndThirst(UserIndex)
             If .Stats.MinSta < .Stats.MaxSta Then
                 .Stats.MinSta = .Stats.MaxSta
                 Call WriteUpdateSta(UserIndex)
@@ -1204,6 +1207,8 @@ End Sub
 
 Public Sub PierdeEnergia(ByVal UserIndex As Integer, ByRef EnviarStats As Boolean, ByVal Intervalo As Integer)
     On Error GoTo RecStamina_Err
+    ' Toggle: con stamina desactivada nunca se pierde energia (evita flicker en desnudo/lluvia)
+    If IsFeatureEnabled("disable_hunger_thirst_stamina") Then Exit Sub
     With UserList(UserIndex)
         If .Stats.MinSta > 0 Then
             If .Counters.STACounter < Intervalo Then
