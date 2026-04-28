@@ -34,7 +34,9 @@ Public Sub ChopWood(ByVal UserIndex As Integer)
             Dim MiObj As t_Obj
             Call ActualizarRecurso(.pos.Map, .AutomatedAction.x, .AutomatedAction.y)
             MapData(.pos.Map, .AutomatedAction.x, .AutomatedAction.y).ObjInfo.data = GetTickCountRaw() ' Ultimo uso
-            If .clase = Trabajador Then
+            If IsFeatureEnabled("professions_learnable") Then
+                MiObj.amount = CalcularCantidadExtraccion(UserIndex, e_Skill.Talar)
+            ElseIf .clase = Trabajador Then
                 MiObj.amount = GetExtractResourceForLevel(.Stats.ELV)
             Else
                 MiObj.amount = RandomNumber(1, 2)

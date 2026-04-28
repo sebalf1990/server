@@ -1295,6 +1295,12 @@ Public Sub HandleEditChar(ByVal UserIndex As Integer)
                 With UserList(userindex)
                     Call WarpUserChar(userindex, .pos.Map, .pos.x, .pos.y, True)
                 End With
+            Case e_EditOptions.eo_AprendeProfesion
+                If (.flags.Privilegios And (e_PlayerType.User Or e_PlayerType.Consejero Or e_PlayerType.SemiDios)) Then Exit Sub
+                Call AprenderProfesion(tUser.ArrayIndex, CInt(val(Arg1)))
+            Case e_EditOptions.eo_OlvidaProfesion
+                If (.flags.Privilegios And (e_PlayerType.User Or e_PlayerType.Consejero Or e_PlayerType.SemiDios)) Then Exit Sub
+                Call OlvidarProfesion(tUser.ArrayIndex, CInt(val(Arg1)))
             Case Else
                 ' Msg546=Comando no permitido.
                 Call WriteLocaleMsg(UserIndex, MSG_NO_COMANDO_PERMITIDO, e_FontTypeNames.FONTTYPE_INFO)
@@ -1356,6 +1362,10 @@ Public Sub HandleEditChar(ByVal UserIndex As Integer)
                 commandString = vbNullString
             Case e_EditOptions.eo_Escudo
                 commandString = vbNullString
+            Case e_EditOptions.eo_AprendeProfesion
+                commandString = commandString & "APRENDE_PROF "
+            Case e_EditOptions.eo_OlvidaProfesion
+                commandString = commandString & "OLVIDA_PROF "
             Case Else
                 commandString = commandString & "UNKOWN "
         End Select

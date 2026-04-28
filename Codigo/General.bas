@@ -877,7 +877,25 @@ Public Sub EfectoStamina(ByVal UserIndex As Integer)
     Dim bEnviarStats_HP  As Boolean
     Dim bEnviarStats_STA As Boolean
     With UserList(UserIndex)
-        HambreOSed = .Stats.MinHam = 0 Or .Stats.MinAGU = 0
+        ' Toggle: sistema de hambre, sed y stamina desactivado
+        ' Restaura stats al maximo en cada tick (cubre carga desde DB con valores en 0)
+        If IsFeatureEnabled("disable_hunger_thirst_stamina") Then
+            If .Stats.MinHam < .Stats.MaxHam Then
+                .Stats.MinHam = .Stats.MaxHam
+                Call WriteUpdateHungerAndThirst(UserIndex)
+            End If
+            If .Stats.MinAGU < .Stats.MaxAGU Then
+                .Stats.MinAGU = .Stats.MaxAGU
+                Call WriteUpdateHungerAndThirst(UserIndex)
+            End If
+            If .Stats.MinSta < .Stats.MaxSta Then
+                .Stats.MinSta = .Stats.MaxSta
+                Call WriteUpdateSta(UserIndex)
+            End If
+            HambreOSed = False
+        Else
+            HambreOSed = .Stats.MinHam = 0 Or .Stats.MinAGU = 0
+        End If
         'if hunger or thirst = 0 and not in combat
         If Not HambreOSed And .Counters.EnCombate = 0 Then
             If .Stats.MinHp < .Stats.MaxHp Then
@@ -1295,6 +1313,11 @@ End Sub
 
 Public Function HambreYSed(ByVal UserIndex As Integer) As Boolean
     On Error GoTo HambreYSed_Err
+    ' Toggle: sistema de hambre y sed desactivado
+    If IsFeatureEnabled("disable_hunger_thirst_stamina") Then
+        HambreYSed = False
+        Exit Function
+    End If
     If (UserList(UserIndex).flags.Privilegios And e_PlayerType.User) = 0 Then Exit Function
     'Sed
     If UserList(UserIndex).Stats.MinAGU > 0 Then

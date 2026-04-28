@@ -38,7 +38,9 @@ Public Sub MineMinerals(ByVal UserIndex As Integer)
             MapData(.pos.Map, .AutomatedAction.x, .AutomatedAction.y).ObjInfo.data = GetTickCountRaw() ' Ultimo uso
             Yacimiento = ObjData(MapData(.pos.Map, .AutomatedAction.x, .AutomatedAction.y).ObjInfo.ObjIndex)
             MiObj.ObjIndex = Yacimiento.MineralIndex
-            If .clase = Trabajador Then
+            If IsFeatureEnabled("professions_learnable") Then
+                MiObj.amount = CalcularCantidadExtraccion(UserIndex, e_Skill.Mineria)
+            ElseIf .clase = Trabajador Then
                 MiObj.amount = GetExtractResourceForLevel(.Stats.ELV)
             Else
                 MiObj.amount = RandomNumber(1, 2)

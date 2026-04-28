@@ -72,6 +72,11 @@ Public Sub StartAutomatedAction(ByVal x As Byte, ByVal y As Byte, ByVal skill As
 End Sub
 
 Public Function DecreaseUserStamina(ByVal UserIndex As Integer, ByVal StaminaRequirement As Integer) As Boolean
+    ' Toggle: acciones automaticas no consumen stamina
+    If IsFeatureEnabled("disable_hunger_thirst_stamina") Then
+        DecreaseUserStamina = True
+        Exit Function
+    End If
     With UserList(UserIndex)
         If .Stats.MinSta > StaminaRequirement Then
             Call QuitarSta(UserIndex, StaminaRequirement)

@@ -113,13 +113,29 @@ Function ClasePuedeUsarItem(ByVal UserIndex As Integer, ByVal ObjIndex As Intege
         ClasePuedeUsarItem = True
         Exit Function
     End If
-    Dim i As Integer
-    For i = 1 To NUMCLASES
-        If ObjData(ObjIndex).ClaseProhibida(i) = UserList(UserIndex).clase Then
+    Dim profReqHerr As Integer
+    Dim toggleProfOn As Boolean
+    toggleProfOn = IsFeatureEnabled("professions_learnable")
+    If toggleProfOn Then
+        profReqHerr = ProfesionDelItem(ObjIndex)
+    End If
+    If profReqHerr > 0 Then
+        ' Herramienta de profesion: con toggle ON ignoramos las ClaseProhibida
+        ' y solo validamos que tenga la profesion aprendida.
+        If Not TieneProfesionAprendida(UserIndex, profReqHerr) Then
+            Call WriteLocaleMsg(UserIndex, MSG_PROF_ITEM_NO_USABLE, e_FontTypeNames.FONTTYPE_INFO)
             ClasePuedeUsarItem = False
             Exit Function
         End If
-    Next i
+    Else
+        Dim i As Integer
+        For i = 1 To NUMCLASES
+            If ObjData(ObjIndex).ClaseProhibida(i) = UserList(UserIndex).clase Then
+                ClasePuedeUsarItem = False
+                Exit Function
+            End If
+        Next i
+    End If
     ClasePuedeUsarItem = True
     Exit Function
 manejador:
@@ -1737,6 +1753,16 @@ Sub UseInvItem(ByVal UserIndex As Integer, ByVal Slot As Byte, ByVal ByClick As 
         ObjIndex = .invent.Object(Slot).ObjIndex
         .flags.TargetObjInvIndex = ObjIndex
         .flags.TargetObjInvSlot = Slot
+
+        If obj.ProfesionId > 0 Then
+            If obj.OBJType = e_OBJType.otUseOnce Then
+                Call UsarManualProfesion(UserIndex, Slot)
+                Exit Sub
+            ElseIf obj.OBJType = e_OBJType.otPotions Then
+                Call UsarPocionOlvidoProfesion(UserIndex, Slot)
+                Exit Sub
+            End If
+        End If
 
         Select Case obj.OBJType
             Case e_OBJType.otSkinsArmours, e_OBJType.otSkinsSpells, e_OBJType.otSkinsBoats, e_OBJType.otSkinsHelmets, e_OBJType.otSkinsShields, e_OBJType.otSkinsWeapons, e_OBJType.otSkinsWings

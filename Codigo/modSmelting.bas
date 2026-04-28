@@ -22,7 +22,13 @@ Public Function CanUserSmelt(ByVal UserIndex As Integer, ByVal ResourceType As e
     On Error GoTo CanUserSmelt_Err
     CanUserSmelt = False
     With UserList(UserIndex)
-        If .clase <> e_Class.Trabajador Then
+        If IsFeatureEnabled("professions_learnable") Then
+            If Not TieneProfesionAprendida(UserIndex, e_Skill.Mineria) Then
+                Call WriteLocaleMsg(UserIndex, MSG_CLASS_LACKS_KNOWLEDGE_FOR_THIS_ORE, e_FontTypeNames.FONTTYPE_INFO)
+                Call ResetUserAutomatedActions(UserIndex)
+                Exit Function
+            End If
+        ElseIf .clase <> e_Class.Trabajador Then
             Call WriteLocaleMsg(UserIndex, MSG_CLASS_LACKS_KNOWLEDGE_FOR_THIS_ORE, e_FontTypeNames.FONTTYPE_INFO)
             Call ResetUserAutomatedActions(UserIndex)
             Exit Function

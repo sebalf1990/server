@@ -155,7 +155,14 @@ Public Sub PerformFishing(ByVal UserIndex As Integer)
         ' Determine what fish was caught
         Dim fishingCatch As t_Obj
         fishingCatch.ObjIndex = ObtenerPezRandom(ObjData(WorkingTool.ObjIndex).Power)
-        If .clase = e_Class.Trabajador Then
+        If IsFeatureEnabled("professions_learnable") Then
+            fishingCatch.amount = CalcularCantidadExtraccion(UserIndex, e_Skill.Pescar)
+            If IsFeatureEnabled("gain_exp_while_working") Then
+                Call GiveExpWhileWorking(UserIndex, WorkingTool, e_JobsTypes.Fisherman)
+                Call WriteUpdateExp(UserIndex)
+                Call CheckUserLevel(UserIndex)
+            End If
+        ElseIf .clase = e_Class.Trabajador Then
             If IsUsingFishingNet Then
                 fishingCatch.amount = RandomNumber(2, 6)
             Else

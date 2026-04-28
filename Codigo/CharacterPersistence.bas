@@ -249,6 +249,7 @@ Public Function LoadCharacterFromDB(ByVal UserIndex As Integer) As Boolean
         Call SetupUserPets(UserList(UserIndex))
         Call SetupUserBankInventory(UserList(UserIndex))
         Call SetupUserSkills(UserList(UserIndex))
+        Call SetupUserProfessions(UserList(UserIndex))
         Call SetupUserQuests(UserList(UserIndex))
         Call SetupUserQuestsDone(UserList(UserIndex))
         ' Load additional inventories.
@@ -320,6 +321,7 @@ Private Sub SetupUserBasicInfo(ByRef User As t_User, ByRef RS As ADODB.Recordset
         .Stats.Advertencias = RS!warnings
         .GuildIndex = SanitizeNullValue(RS!Guild_Index, 0)
         .LastGuildRejection = SanitizeNullValue(RS!guild_rejected_because, vbNullString)
+        .ProfessionForgotCount = SanitizeNullValue(RS!profession_forgot_count, 0)
     End With
 End Sub
 
@@ -565,6 +567,7 @@ Public Sub SaveCharacterDB(ByVal UserIndex As Integer)
             QueryBreakdown = QueryBreakdown & "save bank inventory: skipped"
         End If
         Call SaveCharacterSkillsDB(UserList(UserIndex), QueryBreakdown)
+        Call SaveCharacterProfessionsDB(UserList(UserIndex), QueryBreakdown)
         Call SaveCharacterPetsDB(UserList(UserIndex), QueryBreakdown)
         ' ************************** User quests *********************************
         Call SaveCharacterQuestsDB(UserList(UserIndex), QueryBreakdown, Builder)
@@ -581,7 +584,7 @@ End Sub
 Private Sub SaveCharacterMainDB(ByRef U As t_User, ByRef QueryBreakdown As String)
     Dim QueryTimer As Long
     Dim Params() As Variant
-    ReDim Params(61)
+    ReDim Params(62)
     Dim i As Integer
     Params(post_increment(i)) = U.Stats.ELV
     Params(post_increment(i)) = U.Stats.Exp
@@ -644,6 +647,7 @@ Private Sub SaveCharacterMainDB(ByRef U As t_User, ByRef QueryBreakdown As Strin
     Params(post_increment(i)) = U.flags.ReturnPos.y
     Params(post_increment(i)) = U.Stats.JineteLevel
     Params(post_increment(i)) = U.Char.BackpackAnim
+    Params(post_increment(i)) = U.ProfessionForgotCount
     ' WHERE block
     Params(post_increment(i)) = U.Id
     Debug.Assert i = UBound(Params) + 1
@@ -1683,3 +1687,54 @@ SaveInventorySkins_Error:
     Call Logging.TraceError(Err.Number, Err.Description, "CharacterPersistence.SaveInventorySkins Nick: " & UserList(UserIndex).name, Erl())
 
 End Function
+Private Sub SetupUserProfessions(ByRef User As t_User)
+    On Error GoTo SetupUserProfessions_Err
+    Dim RS    As ADODB.Recordset
+    Dim slot  As Byte
+    User.Professions(1) = 0
+    User.Professions(2) = 0
+    slot = 1
+    Set RS = Query("SELECT profession_id FROM user_professions WHERE user_id = ? ORDER BY learned_at ASC;", User.Id)
+    If RS Is Nothing Then Exit Sub
+    Do While Not RS.EOF
+        If slot > 2 Then Exit Do
+        User.Professions(slot) = CInt(RS!profession_id)
+        slot = slot + 1
+        RS.MoveNext
+    Loop
+    Call RS.Close
+    Exit Sub
+SetupUserProfessions_Err:
+    Call LogDatabaseError("Error en SetupUserProfessions: " & User.name & ". " & Err.Number & " - " & Err.Description)
+End Sub
+
+Private Sub SaveCharacterProfessionsDB(ByRef U As t_User, ByRef QueryBreakdown As String)
+    On Error GoTo SaveCharacterProfessionsDB_Err
+    Dim QueryTimer As Long
+    Dim i          As Byte
+    Dim p1         As Integer
+    Dim p2         As Integer
+    p1 = U.Professions(1)
+    p2 = U.Professions(2)
+    QueryTimer = GetTickCountRaw()
+    ' UPSERT por slot que tenga profesion (idempotente, sin DELETE+INSERT en orden)
+    For i = 1 To 2
+        If U.Professions(i) > 0 Then
+            Call Execute("INSERT OR REPLACE INTO user_professions (user_id, profession_id, learned_at) VALUES (?, ?, ?);", U.Id, CInt(U.Professions(i)), CLng(GetTickCountRaw() \ 1000))
+        End If
+    Next i
+    ' Borro filas que no esten en los slots actuales (sin TRUNCATE general)
+    If p1 = 0 And p2 = 0 Then
+        Call Execute("DELETE FROM user_professions WHERE user_id = ?;", U.Id)
+    ElseIf p1 = 0 Then
+        Call Execute("DELETE FROM user_professions WHERE user_id = ? AND profession_id <> ?;", U.Id, CInt(p2))
+    ElseIf p2 = 0 Then
+        Call Execute("DELETE FROM user_professions WHERE user_id = ? AND profession_id <> ?;", U.Id, CInt(p1))
+    Else
+        Call Execute("DELETE FROM user_professions WHERE user_id = ? AND profession_id NOT IN (?, ?);", U.Id, CInt(p1), CInt(p2))
+    End If
+    Call AppendQueryDuration(QueryBreakdown, "save professions", QueryTimer)
+    Exit Sub
+SaveCharacterProfessionsDB_Err:
+    Call LogDatabaseError("Error en SaveCharacterProfessionsDB: " & U.name & ". " & Err.Number & " - " & Err.Description)
+End Sub

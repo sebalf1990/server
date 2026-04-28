@@ -973,6 +973,8 @@ Private Sub LoadNpcInfoIntoCache(ByVal NpcNumber As Integer)
         .TestOnly = Val(LeerNPCs.GetValue(SectionName, "TESTONLY"))
         .DisabledInBattleServer = val(LeerNPCs.GetValue(SectionName, "DISABLEDINBATTLESERVER"))
         .RequireToggle = LeerNPCs.GetValue(SectionName, "REQUIRETOGGLE")
+        .EsMaestroProfesion = CByte(val(LeerNPCs.GetValue(SectionName, "EsMaestroProfesion")))
+        .ProfesionEnsenada = CInt(val(LeerNPCs.GetValue(SectionName, "ProfesionEnsenada")))
         .name = LeerNPCs.GetValue(SectionName, "Name")
         .SubName = LeerNPCs.GetValue(SectionName, "SubName")
         .Desc = LeerNPCs.GetValue(SectionName, "Desc")
@@ -1402,6 +1404,8 @@ Private Sub InitializeNpcFromInfo(ByVal NpcIndex As Integer, _
         .OnlyForGuilds = Info.OnlyForGuilds
         .ShowKillerConsole = Info.ShowKillerConsole
         .DisabledInBattleServer = Info.DisabledInBattleServer
+        .EsMaestroProfesion = Info.EsMaestroProfesion
+        .ProfesionEnsenada = Info.ProfesionEnsenada
         If .IntervaloMovimiento = 0 Then
             .IntervaloMovimiento = 380
             .Char.speeding = IntervaloNPCAI / 330

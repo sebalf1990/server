@@ -55,7 +55,9 @@ Public Sub Trabajar(ByVal UserIndex As Integer, ByVal Skill As e_Skill)
             Case e_Skill.Carpinteria
                 'Veo cual es la cantidad máxima que puede construir de una
                 Dim cantidad_maxima As Long
-                If UserList(UserIndex).clase = e_Class.Trabajador Then
+                If IsFeatureEnabled("professions_learnable") Then
+                    cantidad_maxima = CantidadFijaArtesania(e_Skill.Carpinteria)
+                ElseIf UserList(UserIndex).clase = e_Class.Trabajador Then
                     cantidad_maxima = UserList(UserIndex).Stats.UserSkills(e_Skill.Carpinteria) / 10
                     If cantidad_maxima = 0 Then cantidad_maxima = 1
                 Else
@@ -1049,6 +1051,10 @@ End Sub
 
 Function ModAlquimia(ByVal clase As e_Class) As Integer
     On Error GoTo ModAlquimia_Err
+    If IsFeatureEnabled("professions_learnable") Then
+        ModAlquimia = 1
+        Exit Function
+    End If
     Select Case clase
         Case e_Class.Druid
             ModAlquimia = 1
@@ -1064,6 +1070,10 @@ End Function
 
 Function ModSastre(ByVal clase As e_Class) As Integer
     On Error GoTo ModSastre_Err
+    If IsFeatureEnabled("professions_learnable") Then
+        ModSastre = 1
+        Exit Function
+    End If
     Select Case clase
         Case e_Class.Trabajador
             ModSastre = 1
@@ -1077,6 +1087,10 @@ End Function
 
 Function ModCarpinteria(ByVal clase As e_Class) As Integer
     On Error GoTo ModCarpinteria_Err
+    If IsFeatureEnabled("professions_learnable") Then
+        ModCarpinteria = 1
+        Exit Function
+    End If
     Select Case clase
         Case e_Class.Trabajador
             ModCarpinteria = 1
@@ -1090,6 +1104,10 @@ End Function
 
 Function ModHerreria(ByVal clase As e_Class) As Single
     On Error GoTo ModHerreriA_Err
+    If IsFeatureEnabled("professions_learnable") Then
+        ModHerreria = 1
+        Exit Function
+    End If
     Select Case clase
         Case e_Class.Trabajador
             ModHerreria = 1
@@ -1479,6 +1497,8 @@ End Sub
 
 Public Sub QuitarSta(ByVal UserIndex As Integer, ByVal Cantidad As Integer)
     On Error GoTo QuitarSta_Err
+    ' Toggle: stamina no se consume
+    If IsFeatureEnabled("disable_hunger_thirst_stamina") Then Exit Sub
     UserList(UserIndex).Stats.MinSta = UserList(UserIndex).Stats.MinSta - Cantidad
     If UserList(UserIndex).Stats.MinSta < 0 Then UserList(UserIndex).Stats.MinSta = 0
     If UserList(UserIndex).Stats.MinSta = 0 Then Exit Sub

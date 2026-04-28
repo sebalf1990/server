@@ -91,6 +91,10 @@ Public Sub Comercio(ByVal Modo As eModoComercio, ByVal UserIndex As Integer, ByV
             Call logVentaCasa(UserList(UserIndex).name & " compro " & ObjData(Objeto.ObjIndex).name)
         End If
     ElseIf Modo = eModoComercio.Venta Then
+        If NpcList(NpcIndex).EsMaestroProfesion = 1 Then
+            Call WriteLocaleMsg(UserIndex, MSG_PROF_NPC_NO_COMPRA, e_FontTypeNames.FONTTYPE_INFO)
+            Exit Sub
+        End If
         If Slot > UserList(UserIndex).CurrentInventorySlots Then Exit Sub
         If Cantidad > UserList(UserIndex).invent.Object(Slot).amount Then Cantidad = UserList(UserIndex).invent.Object(Slot).amount
         Objeto.amount = Cantidad

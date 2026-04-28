@@ -464,6 +464,11 @@ Function ConnectNewUser(ByVal UserIndex As Integer, _
         If UserSexo < Hombre Or UserSexo > Mujer Then Exit Function
         ' Ciudad vï¿½lida
         If Hogar <= 0 Or Hogar > NUMCIUDADES Then Exit Function
+        ' Bloqueo de clase Trabajador cuando el sistema de profesiones esta activo
+        If IsFeatureEnabled("professions_learnable") And UserClase = e_Class.Trabajador Then
+            Call WriteShowMessageBox(UserIndex, MSG_PROF_CLASE_TRABAJADOR_NO_DISPONIBLE, vbNullString)
+            Exit Function
+        End If
         ' Cabeza vï¿½lida
 #If LOGIN_STRESS_TEST = 0 Then
         If Not ValidarCabeza(UserRaza, UserSexo, head) Then Exit Function

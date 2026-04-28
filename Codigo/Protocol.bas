@@ -72,6 +72,8 @@ Public Enum e_EditOptions
     eo_Intervalo
     eo_Hogar
     eo_Alias
+    eo_AprendeProfesion
+    eo_OlvidaProfesion
 End Enum
 
 Public Enum e_FontTypeNames
@@ -1468,6 +1470,12 @@ Private Sub HandleTalk(ByVal UserIndex As Integer)
         Packet_ID = PacketNames.Talk
         If Not verifyTimeStamp(PacketCounter, .PacketCounters(Packet_ID), .PacketTimers(Packet_ID), .MacroIterations(Packet_ID), UserIndex, "Talk", PacketTimerThreshold( _
                 Packet_ID), MacroIterations(Packet_ID)) Then Exit Sub
+        ' Comandos de chat para profesiones (solo GM/SemiDios/Dios)
+        If Left$(chat, 1) = "~" Then
+            If (.flags.Privilegios And (e_PlayerType.SemiDios Or e_PlayerType.Dios Or e_PlayerType.Admin)) Then
+                If HandleProfesionChatCommand(UserIndex, chat) Then Exit Sub
+            End If
+        End If
         '[Consejeros & GMs]
         If (.flags.Privilegios And (e_PlayerType.Consejero Or e_PlayerType.SemiDios)) Then
             Call LogGM(GetUserRealName(UserIndex), "Dijo: " & chat)
@@ -2256,6 +2264,15 @@ Private Sub HandleWork(ByVal UserIndex As Integer)
         End If
         'If exiting, cancel
         Call CancelExit(UserIndex)
+        'Gating del sistema de profesiones aprendibles
+        If IsFeatureEnabled("professions_learnable") Then
+            If Skill = e_Skill.Pescar Or Skill = e_Skill.Talar Or Skill = e_Skill.Mineria Or Skill = e_Skill.Carpinteria Or Skill = e_Skill.Herreria Or Skill = e_Skill.Sastreria Or Skill = e_Skill.Alquimia Then
+                If Not TieneProfesionAprendida(UserIndex, CInt(Skill)) Then
+                    Call WriteLocaleMsg(UserIndex, MSG_PROF_NO_APRENDIDA, e_FontTypeNames.FONTTYPE_INFO)
+                    Exit Sub
+                End If
+            End If
+        End If
         Select Case Skill
             Case Robar, Magia, Domar
                 Call WriteWorkRequestTarget(UserIndex, Skill)
@@ -3108,6 +3125,14 @@ Private Sub HandleModifySkills(ByVal UserIndex As Integer)
         '<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
         With .Stats
             For i = 1 To NUMSKILLS
+                If points(i) > 0 And IsFeatureEnabled("professions_learnable") Then
+                    If i >= 17 And i <= 23 Then
+                        If Not TieneProfesionAprendida(UserIndex, CInt(i)) Then
+                            Call WriteLocaleMsg(UserIndex, MSG_PROF_SKILL_BLOQUEADA, e_FontTypeNames.FONTTYPE_INFO)
+                            points(i) = 0
+                        End If
+                    End If
+                End If
                 .SkillPts = .SkillPts - points(i)
                 If .UserSkills(i) <> .UserSkills(i) + points(i) Then
                     .UserSkills(i) = .UserSkills(i) + points(i)
