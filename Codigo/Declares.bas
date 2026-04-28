@@ -1555,6 +1555,8 @@ Public Enum e_OBJType
     otPlants = 54
     otElementalRune = 55
     otFactionForgiveness = 56
+    otManualProfesion = 57
+    otPocionOlvidoProfesion = 58
     otElse = 100
 End Enum
 
@@ -2393,6 +2395,7 @@ Public Type t_ObjData
     BowCategory As Byte
     ArrowCategory As Byte
     RepairTo As Integer ' ObjIndex of the item granted when this object is repaired.
+    ProfesionId As Integer ' id de profesion que este manual/pocion afecta (0 = no aplica)
 End Type
 
 '[Pablo ToxicWaste]
@@ -2415,6 +2418,7 @@ Public Type t_ModClase
     HitPre36 As Integer
     HitPost36 As Integer
     ResistenciaMagica As Double
+    MagicDamageLevelBonus As Double
     LevelSkillPoints As Integer
     WeaponHitBonus(0 To e_WeaponType.eWeaponTypeCount) As Integer
 End Type
@@ -3002,6 +3006,8 @@ Public Type t_User
     PacketTimers(1 To MAX_PACKET_COUNTERS) As Long
     PacketCounters(1 To MAX_PACKET_COUNTERS) As Long
     AutomatedAction As t_AutomatedAction
+    Professions(1 To 2) As Integer
+    ProfessionForgotCount As Byte
 End Type
 
 Public MacroIterations(1 To MAX_PACKET_COUNTERS)      As Long
@@ -3283,6 +3289,8 @@ Public Type t_NpcInfoCache
     PuedeInvocar As Integer
     CaminataLen As Integer
     Caminata() As t_NpcCaminataCache
+    EsMaestroProfesion As Byte
+    ProfesionEnsenada As Integer
 End Type
 
 Public Enum e_TipoAI
@@ -3404,6 +3412,8 @@ Public Type t_Npc
     PuedeInvocar As Byte
     Humanoide As Boolean
     DisabledInBattleServer As Byte
+    EsMaestroProfesion As Byte
+    ProfesionEnsenada As Integer
 End Type
 
 '**********************************************************

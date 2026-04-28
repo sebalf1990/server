@@ -834,6 +834,7 @@ Sub LoadBalance()
             .HitPre36 = val(BalanceIni.GetValue("GOLPE_PRE_36", SearchVar))
             .HitPost36 = val(BalanceIni.GetValue("GOLPE_POST_36", SearchVar))
             .ResistenciaMagica = val(BalanceIni.GetValue("MODRESISTENCIAMAGICA", SearchVar))
+            .MagicDamageLevelBonus = val(BalanceIni.GetValue("MODDANOMAGICO", SearchVar, 3))
             .LevelSkillPoints = val(BalanceIni.GetValue("MODSKILLPOINTS", SearchVar))
             For j = 1 To eWeaponTypeCount - 1
                 .WeaponHitBonus(j) = val(BalanceIni.GetValue(SearchVar, WeaponTypeNames(j)))
@@ -1046,6 +1047,7 @@ Sub LoadOBJData()
             .BowCategory = val(Leer.GetValue(ObjKey, "BowCategory"))
             .ArrowCategory = val(Leer.GetValue(ObjKey, "ArrowCategory"))
             .RepairTo = val(Leer.GetValue(ObjKey, "RepairTo"))
+            .ProfesionId = val(Leer.GetValue(ObjKey, "ProfesionId"))
             If val(Leer.GetValue(ObjKey, "Bindable")) > 0 Then Call SetMask(.ObjFlags, e_ObjFlags.e_Bindable)
             If val(Leer.GetValue(ObjKey, "UseOnSafeAreaOnly")) > 0 Then Call SetMask(.ObjFlags, e_ObjFlags.e_UseOnSafeAreaOnly)
             Dim i As Integer
@@ -1853,6 +1855,7 @@ Sub LoadSini()
     End If
     Call CargarCiudades
     Call LoadFeatureToggles
+    Call LoadProfesionesConfig
     Set Lector = Nothing
     Exit Sub
 LoadSini_Err:

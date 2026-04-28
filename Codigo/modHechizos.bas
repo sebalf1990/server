@@ -2378,7 +2378,7 @@ Sub HechizoPropNPC(ByVal hIndex As Integer, ByVal NpcIndex As Integer, ByVal Use
         End If
         Call NPCAtacado(NpcIndex, UserIndex)
         Damage = RandomNumber(Hechizos(hIndex).MinHp, Hechizos(hIndex).MaxHp)
-        Damage = Damage + Porcentaje(Damage, 3 * UserList(UserIndex).Stats.ELV)
+        Damage = Damage + Porcentaje(Damage, UserMod.GetMagicLevelDamageBonus(UserList(UserIndex)) * UserList(UserIndex).Stats.ELV)
         Dim MagicPenetration As Integer
         If UserList(UserIndex).invent.EquippedWeaponObjIndex > 0 Then
             Damage = Damage + Porcentaje(Damage, ObjData(UserList(UserIndex).invent.EquippedWeaponObjIndex).MagicDamageBonus)
@@ -3071,7 +3071,7 @@ Sub HechizoPropUsuario(ByVal UserIndex As Integer, ByRef b As Boolean, ByRef IsA
         End If
         If Not PuedeAtacar(UserIndex, tempChr) Then Exit Sub
         Damage = RandomNumber(Hechizos(h).MinHp, Hechizos(h).MaxHp)
-        Damage = Damage + Porcentaje(Damage, 3 * UserList(UserIndex).Stats.ELV)
+        Damage = Damage + Porcentaje(Damage, UserMod.GetMagicLevelDamageBonus(UserList(UserIndex)) * UserList(UserIndex).Stats.ELV)
         ' Si al hechizo le afecta el daño mágico
         Dim PorcentajeRM As Integer
         If UserList(UserIndex).invent.EquippedWeaponObjIndex > 0 Then
@@ -3320,7 +3320,7 @@ Sub HechizoCombinados(ByVal UserIndex As Integer, ByRef b As Boolean, ByRef IsAl
         End If
         If Not PuedeAtacar(UserIndex, targetUserIndex) Then Exit Sub
         Damage = RandomNumber(Hechizos(h).MinHp, Hechizos(h).MaxHp)
-        Damage = Damage + Porcentaje(Damage, 3 * UserList(UserIndex).Stats.ELV)
+        Damage = Damage + Porcentaje(Damage, UserMod.GetMagicLevelDamageBonus(UserList(UserIndex)) * UserList(UserIndex).Stats.ELV)
         ' mage has 30% damage reduction
         If UserList(UserIndex).clase = e_Class.Mage Then
             Damage = Damage * 0.7
@@ -3821,7 +3821,7 @@ Private Sub AreaHechizo(UserIndex As Integer, NpcIndex As Integer, x As Byte, y 
             TilesDifNpc = NpcList(NpcIndex).pos.x + NpcList(NpcIndex).pos.y
             tilDif = TilesDifUser - TilesDifNpc
             Hit = RandomNumber(Hechizos(h2).MinHp, Hechizos(h2).MaxHp)
-            Hit = Hit + Porcentaje(Hit, 3 * UserList(UserIndex).Stats.ELV)
+            Hit = Hit + Porcentaje(Hit, UserMod.GetMagicLevelDamageBonus(UserList(UserIndex)) * UserList(UserIndex).Stats.ELV)
             ' Daño mágico arma
             If UserList(UserIndex).invent.EquippedWeaponObjIndex > 0 Then
                 Hit = Hit + Porcentaje(Hit, ObjData(UserList(UserIndex).invent.EquippedWeaponObjIndex).MagicDamageBonus)
@@ -3862,7 +3862,7 @@ Private Sub AreaHechizo(UserIndex As Integer, NpcIndex As Integer, x As Byte, y 
                 Call UsuarioAtacadoPorUsuario(UserIndex, NpcIndex)
             End If
             Hit = RandomNumber(Hechizos(h2).MinHp, Hechizos(h2).MaxHp)
-            Hit = Hit + Porcentaje(Hit, 3 * UserList(UserIndex).Stats.ELV)
+            Hit = Hit + Porcentaje(Hit, UserMod.GetMagicLevelDamageBonus(UserList(UserIndex)) * UserList(UserIndex).Stats.ELV)
             ' Daño mágico arma
             If UserList(UserIndex).invent.EquippedWeaponObjIndex > 0 Then
                 Hit = Hit + Porcentaje(Hit, ObjData(UserList(UserIndex).invent.EquippedWeaponObjIndex).MagicDamageBonus)

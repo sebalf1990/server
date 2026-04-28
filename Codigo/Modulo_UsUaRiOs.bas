@@ -2871,6 +2871,11 @@ Public Function ModifyHealth(ByVal UserIndex As Integer, ByVal amount As Long, O
 End Function
 
 Public Function ModifyStamina(ByVal UserIndex As Integer, ByVal amount As Integer, ByVal CancelIfNotEnought As Boolean, Optional ByVal MinValue = 0) As Boolean
+    ' Toggle: stamina no se modifica por hechizos ni pociones
+    If IsFeatureEnabled("disable_hunger_thirst_stamina") Then
+        ModifyStamina = True
+        Exit Function
+    End If
     ModifyStamina = False
     With UserList(UserIndex)
         If CancelIfNotEnought And amount < 0 And .Stats.MinSta < Abs(amount) Then
@@ -3083,6 +3088,17 @@ End Function
 'Defines bonus when healing someone with magic
 Public Function GetMagicHealingBonus(ByRef User As t_User) As Single
     GetMagicHealingBonus = max(1 + User.Modifiers.MagicHealingBonus, 0)
+End Function
+
+'Magic damage % per level. Class-configurable via Balance.dat [MODDANOMAGICO]. Fallback 3 (legacy).
+Public Function GetMagicLevelDamageBonus(ByRef User As t_User) As Double
+    Dim c As Integer
+    c = User.clase
+    If c < 1 Or c > NUMCLASES Then
+        GetMagicLevelDamageBonus = 3
+        Exit Function
+    End If
+    GetMagicLevelDamageBonus = ModClase(c).MagicDamageLevelBonus
 End Function
 
 Public Function GetWeaponHitBonus(ByVal WeaponIndex As Integer, ByVal UserClass As e_Class)
