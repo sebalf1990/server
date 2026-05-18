@@ -617,6 +617,15 @@ Public Sub CargarHechizos()
         SubeHP = val(Leer.GetValue("Hechizo" & Hechizo, "SubeHP"))
         If SubeHP = 1 Then Call SetMask(Hechizos(Hechizo).Effects, e_SpellEffects.eDoHeal)
         If SubeHP = 2 Then Call SetMask(Hechizos(Hechizo).Effects, e_SpellEffects.eDoDamage)
+        ' Mascara para hechizo de deteccion de personajes (eMinimapUserDetect).
+        ' Bits: 1=Ciuda, 2=Crimi, 4=Imperial(Armada+Consejo), 8=Caos(Caos+Concilio).
+        Dim DetectMask As Byte
+        DetectMask = 0
+        If val(Leer.GetValue("Hechizo" & Hechizo, "DetectaCiuda")) > 0 Then DetectMask = DetectMask Or 1
+        If val(Leer.GetValue("Hechizo" & Hechizo, "DetectaCrimi")) > 0 Then DetectMask = DetectMask Or 2
+        If val(Leer.GetValue("Hechizo" & Hechizo, "DetectaImpe")) > 0 Then DetectMask = DetectMask Or 4
+        If val(Leer.GetValue("Hechizo" & Hechizo, "DetectaCaos")) > 0 Then DetectMask = DetectMask Or 8
+        Hechizos(Hechizo).UserDetectMask = DetectMask
     Next Hechizo
     Set Leer = Nothing
     Exit Sub
@@ -2276,6 +2285,7 @@ Sub LoadMainConfigFile()
     On Error GoTo LoadMainConfigFile_Err
     Set SvrConfig = New ServerConfig
     Call SvrConfig.LoadSettings(IniPath & "Configuracion.ini")
+    Call SvrConfig.LoadAISettings(IniPath & "configia.ini")
     Call CargarEventos
     Call CargarInfoRetos
     Call CargarInfoEventos

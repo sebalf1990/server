@@ -1806,6 +1806,7 @@ Public Type t_Hechizo
     RequireWeaponType As e_WeaponType
     MaxLevelCasteable As Byte
     IsElementalTagsOnly As Boolean
+    UserDetectMask As Byte
 End Type
 
 Public Type t_ActiveModifiers
@@ -2707,6 +2708,8 @@ Public Type t_UserFlags
     jugando_captura_timer As Integer
     jugando_captura_muertes As Integer
     tiene_bandera As Byte
+    NpcRadarActive As Byte
+    UserDetectMask As Byte
 End Type
 
 Public Enum e_EstadoMimetismo
@@ -2793,6 +2796,25 @@ Public Type t_UserCounters
     TimerBarra As Integer
     LastResetTick As Long
     LastTransferGold As Long
+    NpcRadarTick As Long
+    QuestRadarTick As Long
+    NpcRadarHashHostile As Long
+    NpcRadarHashNeutralNpc As Long
+    NpcRadarHashQuestNpc As Long
+    NpcRadarHashGuardiaReal As Long
+    NpcRadarHashGuardiaCaos As Long
+    NpcRadarHashMascota As Long
+    NpcRadarHashUserGm As Long
+    NpcRadarHashUserCiudadano As Long
+    NpcRadarHashUserCriminal As Long
+    NpcRadarHashUserImperial As Long
+    NpcRadarHashUserCaos As Long
+    NpcRadarHashNpcSymbol As Long
+    NpcRadarHashPartyMember As Long
+    NpcRadarHashClanMember As Long
+    NpcSymbolRadarTick As Long
+    SocialRadarTick As Long
+    NpcRadarLastMap As Integer
 End Type
 
 Public Type t_QuestStats
@@ -3211,6 +3233,7 @@ Public Type t_NpcInfoCache
     PreferedRange As Integer
     GiveEXP As Long
     Distancia As Integer
+    DesistirExtra As Integer
     GiveEXPClan As Long
     Veneno As Integer
     Domable As Integer
@@ -3334,6 +3357,7 @@ Public Type t_Npc
     'We experience a lot of error trying to delete the same npc more than once, we use this to keep track of kills and help debug
     LastReset As e_DeleteSource
     Distancia As Byte
+    DesistirExtra As Byte
     NumDropQuest As Byte
     DropQuest() As t_QuestObj
     InformarRespawn As Byte
@@ -3704,7 +3728,26 @@ Public Enum e_EffectOverTimeType
     eProtection = 15
     eTransform = 16
     eBonusDamage = 17
+    eMinimapRadar = 18
+    eMinimapUserDetect = 19
     [EffectTypeCount]
+End Enum
+
+Public Enum e_RadarCategory
+    eRadarHostile = 0
+    eRadarNeutralNpc = 1
+    eRadarQuestNpc = 2
+    eRadarGuardiaReal = 3
+    eRadarGuardiaCaos = 4
+    eRadarMascota = 5
+    eRadarUserGm = 6
+    eRadarUserCiudadano = 7
+    eRadarUserCriminal = 8
+    eRadarNpcSymbol = 9
+    eRadarUserImperial = 10
+    eRadarUserCaos = 11
+    eRadarPartyMember = 12
+    eRadarClanMember = 13
 End Enum
 
 Public Enum e_EotTypeId

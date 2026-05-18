@@ -677,6 +677,8 @@ Sub Main()
         Call PerformTimeLimitCheck(PerformanceTimer, "General modNetwork.Tick")
         Call UpdateEffectOverTime
         Call PerformTimeLimitCheck(PerformanceTimer, "General Update Effects over time")
+        Call UpdateNpcRadarTick
+        Call PerformTimeLimitCheck(PerformanceTimer, "General UpdateNpcRadarTick")
         Call MaybeRunGameEvents
         Call PerformTimeLimitCheck(PerformanceTimer, "General MaybeRunGameEvents")
         Call MaybeRunUserAutoSave

@@ -4683,3 +4683,61 @@ WriteShowPickUpObj_Err:
     Call Writer.Clear
     Call TraceError(Err.Number, Err.Description, "Argentum20Server.Protocol_Writes.WriteShowPickUpObj", Erl)
 End Sub
+
+''
+' Prepares the NpcRadar message: list of hostile NPC tile positions for the minimap radar.
+'
+' @param    Count   Number of (X,Y) pairs that follow.
+' @param    Xs      Array of X tile coords (1 to Count).
+' @param    Ys      Array of Y tile coords (1 to Count).
+' Generic radar packet writer. Used by category-specific wrappers below.
+Public Function PrepareMessageRadarCategory(ByVal packetId As ServerPacketID, ByVal count As Byte, ByRef Xs() As Byte, ByRef Ys() As Byte)
+    On Error GoTo PrepareMessageRadarCategory_Err
+    Call Writer.WriteInt16(packetId)
+    Call Writer.WriteInt8(count)
+    Dim i As Integer
+    For i = 1 To count
+        Call Writer.WriteInt8(Xs(i))
+        Call Writer.WriteInt8(Ys(i))
+    Next i
+    Exit Function
+PrepareMessageRadarCategory_Err:
+    Call Writer.Clear
+    Call TraceError(Err.Number, Err.Description, "Argentum20Server.Protocol_Writes.PrepareMessageRadarCategory", Erl)
+End Function
+
+Public Function PrepareMessageRadarCategoryEmpty(ByVal packetId As ServerPacketID)
+    On Error GoTo PrepareMessageRadarCategoryEmpty_Err
+    Call Writer.WriteInt16(packetId)
+    Call Writer.WriteInt8(0)
+    Exit Function
+PrepareMessageRadarCategoryEmpty_Err:
+    Call Writer.Clear
+    Call TraceError(Err.Number, Err.Description, "Argentum20Server.Protocol_Writes.PrepareMessageRadarCategoryEmpty", Erl)
+End Function
+
+Public Function PrepareMessageNpcRadarEmpty()
+    Call PrepareMessageRadarCategoryEmpty(ServerPacketID.eNpcRadar)
+End Function
+
+Public Function PrepareMessageNpcRadar(ByVal count As Byte, ByRef Xs() As Byte, ByRef Ys() As Byte)
+    Call PrepareMessageRadarCategory(ServerPacketID.eNpcRadar, count, Xs, Ys)
+End Function
+
+' Variante extendida para QuestNpc: por cada entidad serializa 3 bytes (X, Y, State).
+' State: 0=plano, 1=disponible, 2=en progreso, 3=lista para entregar.
+Public Function PrepareMessageRadarQuestNpc(ByVal packetId As ServerPacketID, ByVal count As Byte, ByRef Xs() As Byte, ByRef Ys() As Byte, ByRef Ss() As Byte)
+    On Error GoTo PrepareMessageRadarQuestNpc_Err
+    Call Writer.WriteInt16(packetId)
+    Call Writer.WriteInt8(count)
+    Dim i As Integer
+    For i = 1 To count
+        Call Writer.WriteInt8(Xs(i))
+        Call Writer.WriteInt8(Ys(i))
+        Call Writer.WriteInt8(Ss(i))
+    Next i
+    Exit Function
+PrepareMessageRadarQuestNpc_Err:
+    Call Writer.Clear
+    Call TraceError(Err.Number, Err.Description, "Argentum20Server.Protocol_Writes.PrepareMessageRadarQuestNpc", Erl)
+End Function

@@ -307,6 +307,24 @@ Public Sub CreateEffect(ByVal SourceIndex As Integer, _
             ElseIf TargetType = eNpc Then
                 Call AddEffect(NpcList(TargetIndex).EffectOverTime, BonusDamage)
             End If
+        Case e_EffectOverTimeType.eMinimapRadar
+            Dim Radar As EffectMinimapRadar
+            Set Radar = GetEOT(EffectType)
+            UniqueIdCounter = GetNextId()
+            Call Radar.Setup(SourceIndex, SourceType, TargetIndex, TargetType, EffectIndex, UniqueIdCounter)
+            Call AddEffectToUpdate(Radar)
+            If TargetType = eUser Then
+                Call AddEffect(UserList(TargetIndex).EffectOverTime, Radar)
+            End If
+        Case e_EffectOverTimeType.eMinimapUserDetect
+            Dim UserDetect As EffectMinimapUDetect
+            Set UserDetect = GetEOT(EffectType)
+            UniqueIdCounter = GetNextId()
+            Call UserDetect.Setup(SourceIndex, SourceType, TargetIndex, TargetType, EffectIndex, UniqueIdCounter)
+            Call AddEffectToUpdate(UserDetect)
+            If TargetType = eUser Then
+                Call AddEffect(UserList(TargetIndex).EffectOverTime, UserDetect)
+            End If
         Case Else
             Debug.Assert False
     End Select
@@ -418,6 +436,10 @@ Private Function InstantiateEOT(ByVal EffectType As e_EffectOverTimeType) As IBa
             Set InstantiateEOT = New TransformEffect
         Case e_EffectOverTimeType.eBonusDamage
             Set InstantiateEOT = New BonusDamageEffect
+        Case e_EffectOverTimeType.eMinimapRadar
+            Set InstantiateEOT = New EffectMinimapRadar
+        Case e_EffectOverTimeType.eMinimapUserDetect
+            Set InstantiateEOT = New EffectMinimapUDetect
         Case Else
             Debug.Assert False
     End Select
@@ -579,6 +601,23 @@ Public Sub RemoveEffectAtPos(ByRef EffectList As t_EffectOverTimeList, ByVal Pos
     Exit Sub
 RemoveEffectAtPos_Err:
     Call TraceError(Err.Number, Err.Description, "EffectsOverTime.RemoveEffectAtPos", Erl)
+End Sub
+
+' Remueve todos los EOTs de la lista cuyo TypeId coincide con el tipo dado.
+' Llama OnRemove de cada uno (limpia flags, envia packets, etc).
+Public Sub RemoveEffectsByType(ByRef EffectList As t_EffectOverTimeList, ByVal TypeId As e_EffectOverTimeType)
+    On Error GoTo RemoveEffectsByType_Err
+    Dim i As Integer
+    i = EffectList.EffectCount - 1
+    Do While i >= 0
+        If EffectList.EffectList(i).TypeId = TypeId Then
+            Call RemoveEffectAtPos(EffectList, i, True)
+        End If
+        i = i - 1
+    Loop
+    Exit Sub
+RemoveEffectsByType_Err:
+    Call TraceError(Err.Number, Err.Description, "EffectsOverTime.RemoveEffectsByType", Erl)
 End Sub
 
 Public Sub TargetUseMagic(ByRef EffectList As t_EffectOverTimeList, ByVal TargetUserId As Integer, ByVal SourceType As e_ReferenceType, ByVal MagicId As Integer)

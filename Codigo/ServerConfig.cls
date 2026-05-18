@@ -197,6 +197,43 @@ Public Function LoadSettings(ByVal Filename As String) As Long
     DumpSettings
 End Function
 
+Private Sub SetOrUpdate(ByVal key As String, ByVal value As Variant)
+    If mSettings.Exists(key) Then Call mSettings.Remove(key)
+    Call mSettings.Add(key, value)
+End Sub
+
+Public Function LoadAISettings(ByVal Filename As String) As Long
+    On Error GoTo LoadAISettings_Err
+    LoadAISettings = -1
+    If Not FileExist(Filename) Then Exit Function
+    Dim r As clsIniManager
+    Set r = New clsIniManager
+    Call r.Initialize(Filename)
+    Call SetOrUpdate("NPC_VISION_RANGE_X",          CInt(val(r.GetValue("IA", "RangoVisionX",              DEFAULT_NPC_VISION_RANGE_X))))
+    Call SetOrUpdate("NPC_VISION_RANGE_Y",          CInt(val(r.GetValue("IA", "RangoVisionY",              DEFAULT_NPC_VISION_RANGE_Y))))
+    Call SetOrUpdate("NPC_MAX_VISION_RANGE",        CInt(val(r.GetValue("IA", "RangoVisionMaximo",         DEFAULT_NPC_MAX_VISION_RANGE))))
+    Call SetOrUpdate("NPC_SPELL_RANGE_X",           CInt(val(r.GetValue("IA", "RangoHechizosX",            DEFAULT_NPC_SPELL_RANGE_X))))
+    Call SetOrUpdate("NPC_SPELL_RANGE_Y",           CInt(val(r.GetValue("IA", "RangoHechizosY",            DEFAULT_NPC_SPELL_RANGE_Y))))
+    Call SetOrUpdate("NPC_PATHFINDING_MAX_STEPS",   CInt(val(r.GetValue("IA", "MaxPasosPathfinding",       500))))
+    Call SetOrUpdate("NPC_PATHFINDING_NOISE",       CSng(val(r.GetValue("IA", "RuidoPathfinding",          0.75))))
+    Call SetOrUpdate("PATH_RECOMPUTE_COOLDOWN_MS",  CLng(val(r.GetValue("IA", "CooldownRecalculoCamino",   DEFAULT_PATH_RECOMPUTE_COOLDOWN_MS))))
+    Call SetOrUpdate("NPC_ORBIT_REEVALUATE_MS",     CLng(val(r.GetValue("IA", "IntervaloReevaluarOrbita",  DEFAULT_ORBIT_REEVALUATE_MS))))
+    Call SetOrUpdate("NPC_ORBIT_TANGENT_WEIGHT",    CDbl(val(r.GetValue("IA", "PesoTangencialOrbita",      DEFAULT_NPC_ORBIT_TANGENT_WEIGHT))))
+    Call SetOrUpdate("NPC_RETREAT_DISTANCE_BUFFER", CDbl(val(r.GetValue("IA", "BufferDistanciaRetirada",   DEFAULT_NPC_RETREAT_DISTANCE_BUFFER))))
+    Call SetOrUpdate("NPC_ORBIT_STEP_DEGREES",      CDbl(val(r.GetValue("IA", "PasoGradosOrbita",          DEFAULT_NPC_ORBIT_STEP_DEGREES))))
+    Call SetOrUpdate("NPC_STRAFE_DURATION_MS",      CLng(val(r.GetValue("IA", "DuracionStrafe",            DEFAULT_NPC_STRAFE_DURATION_MS))))
+    Call SetOrUpdate("NPC_RADIO_DEAMBULACION",      CInt(val(r.GetValue("IA", "RadioDeambulacion",         4))))
+    Call SetOrUpdate("NPC_PROB_MOV_DIVISOR",        CInt(val(r.GetValue("IA", "ProbabilidadMovimientoDivisor", 6))))
+    Call SetOrUpdate("NPC_PROB_MOV_VALOR",          CInt(val(r.GetValue("IA", "ProbabilidadMovimientoValor",   3))))
+    Call SetOrUpdate("NPC_DIAMETRO_GUARDIAS",       CInt(val(r.GetValue("IA", "DiametroVisionGuardias",    DIAMETRO_VISION_GUARDIAS_NPCS))))
+    Call SetOrUpdate("NPC_DESISTIR_EXTRA",         CInt(val(r.GetValue("IA", "DesistirExtra",             6))))
+    Set r = Nothing
+    LoadAISettings = 0
+    Exit Function
+LoadAISettings_Err:
+    Call TraceError(Err.Number, Err.Description, "ServerConfig.LoadAISettings", Erl)
+End Function
+
 Private Sub Class_Initialize()
     Set mSettings = New Dictionary
 End Sub

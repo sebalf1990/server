@@ -1013,7 +1013,8 @@ Private Sub LoadNpcInfoIntoCache(ByVal NpcNumber As Integer)
         .ProjectileType = Val(LeerNPCs.GetValue(SectionName, "ProjectileType"))
         .PreferedRange = Val(LeerNPCs.GetValue(SectionName, "PreferedRange"))
         .GiveEXP = Val(LeerNPCs.GetValue(SectionName, "GiveEXP"))
-        .Distancia = Val(LeerNPCs.GetValue(SectionName, "Distancia"))
+        .Distancia = Val(LeerNPCs.GetValue(SectionName, "RangoVision"))
+        .DesistirExtra = Val(LeerNPCs.GetValue(SectionName, "DesistirExtra"))
         .GiveEXPClan = Val(LeerNPCs.GetValue(SectionName, "GiveEXPClan"))
         .Veneno = Val(LeerNPCs.GetValue(SectionName, "Veneno"))
         .Domable = Val(LeerNPCs.GetValue(SectionName, "Domable"))
@@ -1175,7 +1176,7 @@ Private Sub LoadNpcInfoIntoCache(ByVal NpcNumber As Integer)
         Else
             Erase .DropQuest
         End If
-        .PathFindingVision = Val(LeerNPCs.GetValue(SectionName, "Distancia", RANGO_VISION_X))
+        .PathFindingVision = Val(LeerNPCs.GetValue(SectionName, "RangoVision", SvrConfig.GetValue("NPC_VISION_RANGE_X")))
         aux = LeerNPCs.GetValue(SectionName, "NumDestinos")
         If LenB(aux) = 0 Then
             .NumDestinos = 0
@@ -1366,6 +1367,7 @@ Private Sub InitializeNpcFromInfo(ByVal NpcIndex As Integer, _
         .PreferedRange = Info.PreferedRange
         .GiveEXP = Info.GiveEXP
         .Distancia = Info.Distancia
+        .DesistirExtra = Info.DesistirExtra
         .GiveEXPClan = Info.GiveEXPClan
         .flags.ExpCount = .GiveEXP
         .Veneno = Info.Veneno

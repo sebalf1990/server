@@ -1,11 +1,10 @@
 VERSION 5.00
 Begin VB.Form frmMain 
    BackColor       =   &H00E0E0E0&
-   BorderStyle     =   4  'Fixed ToolWindow
    Caption         =   "Servidor Argentum 20"
    ClientHeight    =   6255
-   ClientLeft      =   1950
-   ClientTop       =   1695
+   ClientLeft      =   21765
+   ClientTop       =   10305
    ClientWidth     =   8595
    FillColor       =   &H00C0C0C0&
    BeginProperty Font 
@@ -20,12 +19,9 @@ Begin VB.Form frmMain
    ForeColor       =   &H80000004&
    Icon            =   "frmMain.frx":0000
    LinkTopic       =   "Form1"
-   MaxButton       =   0   'False
-   MinButton       =   0   'False
    PaletteMode     =   1  'UseZOrder
    ScaleHeight     =   6255
    ScaleWidth      =   8595
-   StartUpPosition =   2  'CenterScreen
    Begin VB.Timer tControlHechizos 
       Left            =   4440
       Top             =   4800
@@ -595,7 +591,7 @@ Private Sub Form_Load()
     'First load our list of Service Providers into our box
     For lCount = 1 To dps.GetCountServiceProviders
         dpn = dps.GetServiceProvider(lCount)
-        Debug.Print dpn.name; " " & dpn.Guid
+        Debug.Print dpn.Name; " " & dpn.Guid
     Next
 End Sub
 
@@ -921,7 +917,7 @@ Private Sub CMDDUMP_Click()
     On Error GoTo CMDDUMP_Click_Err
     Dim i As Integer
     For i = 1 To MaxUsers
-        Call LogCriticEvent(i & ") ConnIDValida: " & UserList(i).ConnectionDetails.ConnIDValida & " Name: " & UserList(i).name & " UserLogged: " & UserList(i).flags.UserLogged)
+        Call LogCriticEvent(i & ") ConnIDValida: " & UserList(i).ConnectionDetails.ConnIDValida & " Name: " & UserList(i).Name & " UserLogged: " & UserList(i).flags.UserLogged)
     Next i
     Call LogCriticEvent("Lastuser: " & LastUser & " NextOpenUser: " & NextOpenUser)
     Exit Sub
@@ -931,7 +927,7 @@ End Sub
 
 Private Sub Command1_Click()
     On Error GoTo Command1_Click_Err
-    Call SendData(SendTarget.ToAll, 0, PrepareMessageShowMessageBox(BroadMsg.Text))
+    Call SendData(SendTarget.ToAll, 0, PrepareMessageShowMessageBox(BroadMsg.text))
     Exit Sub
 Command1_Click_Err:
     Call TraceError(Err.Number, Err.Description, "frmMain.Command1_Click", Erl)
@@ -985,7 +981,7 @@ End Sub
 
 Private Sub Command2_Click()
     On Error GoTo Command2_Click_Err
-    Call SendData(SendTarget.ToAll, 0, PrepareMessageLocaleMsg(MSG_SERVIDOR, BroadMsg.Text, e_FontTypeNames.FONTTYPE_SERVER)) 'Msg1660=Servidor » ¬1
+    Call SendData(SendTarget.ToAll, 0, PrepareMessageLocaleMsg(MSG_SERVIDOR, BroadMsg.text, e_FontTypeNames.FONTTYPE_SERVER)) 'Msg1660=Servidor » ¬1
     Exit Sub
 Command2_Click_Err:
     Call TraceError(Err.Number, Err.Description, "frmMain.Command2_Click", Erl)
@@ -1049,8 +1045,8 @@ Private Sub EstadoTimer_Timer()
     Call PerformanceTestStart(PerformanceTimer)
     For i = 1 To Baneos.count
         If Baneos(i).FechaLiberacion <= Now Then
-            Call SendData(SendTarget.ToAdmins, 0, PrepareMessageLocaleMsg(MSG_SERVIDOR_CONCLUIDO_SENTENCIA_BAN, Baneos(i).name, e_FontTypeNames.FONTTYPE_SERVER)) ' Msg1787=Servidor » Se ha concluido la sentencia de ban para ¬1.
-            Call UnBan(Baneos(i).name)
+            Call SendData(SendTarget.ToAdmins, 0, PrepareMessageLocaleMsg(MSG_SERVIDOR_CONCLUIDO_SENTENCIA_BAN, Baneos(i).Name, e_FontTypeNames.FONTTYPE_SERVER)) ' Msg1787=Servidor » Se ha concluido la sentencia de ban para ¬1.
+            Call UnBan(Baneos(i).Name)
             Call Baneos.Remove(i)
             Call SaveBans
         End If
@@ -1320,13 +1316,13 @@ Private Sub KillLog_Timer()
     On Error GoTo KillLog_Timer_Err
     Dim PerformanceTimer As Long
     Call PerformanceTestStart(PerformanceTimer)
-    If FileExist(App.Path & "\logs\connect.log", vbNormal) Then Kill App.Path & "\logs\connect.log"
-    If FileExist(App.Path & "\logs\haciendo.log", vbNormal) Then Kill App.Path & "\logs\haciendo.log"
-    If FileExist(App.Path & "\logs\stats.log", vbNormal) Then Kill App.Path & "\logs\stats.log"
-    If FileExist(App.Path & "\logs\Asesinatos.log", vbNormal) Then Kill App.Path & "\logs\Asesinatos.log"
-    If FileExist(App.Path & "\logs\HackAttemps.log", vbNormal) Then Kill App.Path & "\logs\HackAttemps.log"
-    If Not FileExist(App.Path & "\logs\nokillwsapi.txt") Then
-        If FileExist(App.Path & "\logs\wsapi.log", vbNormal) Then Kill App.Path & "\logs\wsapi.log"
+    If FileExist(App.path & "\logs\connect.log", vbNormal) Then Kill App.path & "\logs\connect.log"
+    If FileExist(App.path & "\logs\haciendo.log", vbNormal) Then Kill App.path & "\logs\haciendo.log"
+    If FileExist(App.path & "\logs\stats.log", vbNormal) Then Kill App.path & "\logs\stats.log"
+    If FileExist(App.path & "\logs\Asesinatos.log", vbNormal) Then Kill App.path & "\logs\Asesinatos.log"
+    If FileExist(App.path & "\logs\HackAttemps.log", vbNormal) Then Kill App.path & "\logs\HackAttemps.log"
+    If Not FileExist(App.path & "\logs\nokillwsapi.txt") Then
+        If FileExist(App.path & "\logs\wsapi.log", vbNormal) Then Kill App.path & "\logs\wsapi.log"
     End If
     Call PerformTimeLimitCheck(PerformanceTimer, "KillLog_Timer", 100)
     Exit Sub
@@ -1514,7 +1510,7 @@ Private Sub TimerRespawn_Timer()
     Call PerformTimeLimitCheck(PerformanceTimer, "TimerRespawn_Timer")
     Exit Sub
 ErrorHandler:
-    Call TraceError(Err.Number, Err.Description & vbNewLine & "NPC: " & NpcList(NpcIndex).name & " en la posicion: " & NpcList(NpcIndex).pos.Map & "-" & NpcList(NpcIndex).pos.x _
+    Call TraceError(Err.Number, Err.Description & vbNewLine & "NPC: " & NpcList(NpcIndex).Name & " en la posicion: " & NpcList(NpcIndex).pos.Map & "-" & NpcList(NpcIndex).pos.x _
             & "-" & NpcList(NpcIndex).pos.y, "frmMain.TimerRespawn_Timer", Erl)
     Call MuereNpc(NpcIndex, 0)
 End Sub

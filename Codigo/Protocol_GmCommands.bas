@@ -27,6 +27,19 @@ Attribute VB_Name = "Protocol_GmCommands"
 '
 Option Explicit
 
+
+' Habilitar/deshabilitar logging del radar (poner True para diagnostico)
+Private Const RADAR_DEBUG_LOGGING As Boolean = False
+
+Public Sub RadarDebugLog(ByVal msg As String)
+    If Not RADAR_DEBUG_LOGGING Then Exit Sub
+    On Error Resume Next
+    Dim f As Integer
+    f = FreeFile
+    Open "c:\tmp\radar_debug.log" For Append As #f
+    Print #f, Format(Now, "hh:nn:ss") & " " & msg
+    Close #f
+End Sub
 ' Handles the "Online" message.
 Public Sub HandleOnline(ByVal UserIndex As Integer)
     On Error GoTo HandleOnline_Err
@@ -761,6 +774,30 @@ HandleInvisible_Err:
     Call TraceError(Err.Number, Err.Description, "Protocol.HandleInvisible", Erl)
 End Sub
 
+Public Sub HandleNpcRadarToggle(ByVal UserIndex As Integer)
+    On Error GoTo HandleNpcRadarToggle_Err
+    With UserList(UserIndex)
+        If .flags.Privilegios And (e_PlayerType.User Or e_PlayerType.Consejero) Then Exit Sub
+        If Not IsFeatureEnabled("npc_minimap_radar") Then
+            Call WriteConsoleMsg(UserIndex, "El radar de NPCs hostiles está deshabilitado.", e_FontTypeNames.FONTTYPE_INFO)
+            Exit Sub
+        End If
+        If .flags.NpcRadarActive = 2 Then
+            .flags.NpcRadarActive = 0
+            .Counters.NpcRadarTick = 0
+            Call SendRadarClearAll(UserIndex)
+            Call WriteConsoleMsg(UserIndex, "Radar de NPCs hostiles desactivado.", e_FontTypeNames.FONTTYPE_INFO)
+        Else
+            .flags.NpcRadarActive = 2
+            Call ForceNpcRadarUpdate(UserIndex)
+            Call WriteConsoleMsg(UserIndex, "Radar de NPCs hostiles activado.", e_FontTypeNames.FONTTYPE_INFO)
+        End If
+    End With
+    Exit Sub
+HandleNpcRadarToggle_Err:
+    Call TraceError(Err.Number, Err.Description, "Protocol.HandleNpcRadarToggle", Erl)
+End Sub
+
 Public Sub HandleGMPanel(ByVal UserIndex As Integer)
     On Error GoTo HandleGMPanel_Err
     'Author: Juan Martín Sotuyo Dodero (Maraxus)
@@ -1301,6 +1338,36 @@ Public Sub HandleEditChar(ByVal UserIndex As Integer)
             Case e_EditOptions.eo_OlvidaProfesion
                 If (.flags.Privilegios And (e_PlayerType.User Or e_PlayerType.Consejero Or e_PlayerType.SemiDios)) Then Exit Sub
                 Call OlvidarProfesion(tUser.ArrayIndex, CInt(val(Arg1)))
+            Case e_EditOptions.eo_FaccionStatus
+                If (.flags.Privilegios And (e_PlayerType.User Or e_PlayerType.Consejero Or e_PlayerType.SemiDios)) Then Exit Sub
+                tmpLong = val(Arg1)
+                If tmpLong >= 0 And tmpLong <= 5 Then
+                    UserList(tUser.ArrayIndex).Faccion.Status = CByte(tmpLong)
+                    Call RefreshCharStatus(tUser.ArrayIndex)
+                End If
+            Case e_EditOptions.eo_ArmadaReal
+                If (.flags.Privilegios And (e_PlayerType.User Or e_PlayerType.Consejero Or e_PlayerType.SemiDios)) Then Exit Sub
+                UserList(tUser.ArrayIndex).Faccion.ArmadaReal = IIf(val(Arg1) <> 0, 1, 0)
+            Case e_EditOptions.eo_FuerzasCaos
+                If (.flags.Privilegios And (e_PlayerType.User Or e_PlayerType.Consejero Or e_PlayerType.SemiDios)) Then Exit Sub
+                UserList(tUser.ArrayIndex).Faccion.FuerzasCaos = IIf(val(Arg1) <> 0, 1, 0)
+            Case e_EditOptions.eo_RecompensasReal
+                If (.flags.Privilegios And (e_PlayerType.User Or e_PlayerType.Consejero Or e_PlayerType.SemiDios)) Then Exit Sub
+                tmpLong = val(Arg1)
+                If tmpLong < 0 Then tmpLong = 0
+                If tmpLong > MaxRangoFaccion Then tmpLong = MaxRangoFaccion
+                UserList(tUser.ArrayIndex).Faccion.RecompensasReal = tmpLong
+            Case e_EditOptions.eo_RecompensasCaos
+                If (.flags.Privilegios And (e_PlayerType.User Or e_PlayerType.Consejero Or e_PlayerType.SemiDios)) Then Exit Sub
+                tmpLong = val(Arg1)
+                If tmpLong < 0 Then tmpLong = 0
+                If tmpLong > MaxRangoFaccion Then tmpLong = MaxRangoFaccion
+                UserList(tUser.ArrayIndex).Faccion.RecompensasCaos = tmpLong
+            Case e_EditOptions.eo_FactionScore
+                If (.flags.Privilegios And (e_PlayerType.User Or e_PlayerType.Consejero Or e_PlayerType.SemiDios)) Then Exit Sub
+                tmpLong = val(Arg1)
+                If tmpLong < 0 Then tmpLong = 0
+                UserList(tUser.ArrayIndex).Faccion.FactionScore = tmpLong
             Case Else
                 ' Msg546=Comando no permitido.
                 Call WriteLocaleMsg(UserIndex, MSG_NO_COMANDO_PERMITIDO, e_FontTypeNames.FONTTYPE_INFO)
@@ -1366,6 +1433,18 @@ Public Sub HandleEditChar(ByVal UserIndex As Integer)
                 commandString = commandString & "APRENDE_PROF "
             Case e_EditOptions.eo_OlvidaProfesion
                 commandString = commandString & "OLVIDA_PROF "
+            Case e_EditOptions.eo_FaccionStatus
+                commandString = commandString & "FACCION "
+            Case e_EditOptions.eo_ArmadaReal
+                commandString = commandString & "ARMADAREAL "
+            Case e_EditOptions.eo_FuerzasCaos
+                commandString = commandString & "FUERZASCAOS "
+            Case e_EditOptions.eo_RecompensasReal
+                commandString = commandString & "RECOMPREAL "
+            Case e_EditOptions.eo_RecompensasCaos
+                commandString = commandString & "RECOMPCAOS "
+            Case e_EditOptions.eo_FactionScore
+                commandString = commandString & "FACCIONPTS "
             Case Else
                 commandString = commandString & "UNKOWN "
         End Select

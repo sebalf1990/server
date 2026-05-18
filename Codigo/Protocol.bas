@@ -74,6 +74,12 @@ Public Enum e_EditOptions
     eo_Alias
     eo_AprendeProfesion
     eo_OlvidaProfesion
+    eo_FaccionStatus
+    eo_ArmadaReal
+    eo_FuerzasCaos
+    eo_RecompensasReal
+    eo_RecompensasCaos
+    eo_FactionScore
 End Enum
 
 Public Enum e_FontTypeNames
@@ -300,6 +306,9 @@ Public Function HandleIncomingData(ByVal ConnectionID As Long, ByVal Message As 
             Call HandlePickUp(UserIndex)
         Case ClientPacketID.eSafeToggle
             Call HandleSafeToggle(UserIndex)
+        Case ClientPacketID.eNpcRadarToggle
+            Call RadarDebugLog("Dispatch eNpcRadarToggle from user=" & UserList(UserIndex).name)
+            Call HandleNpcRadarToggle(UserIndex)
         Case ClientPacketID.ePartySafeToggle
             Call HandlePartyToggle(UserIndex)
         Case ClientPacketID.eRequestGuildLeaderInfo
@@ -8057,6 +8066,29 @@ Public Sub HandleUseHKeySlot(ByVal UserIndex As Integer)
     With UserList(UserIndex)
         If .HotkeyList(SlotIndex).Index > 0 Then
             If .HotkeyList(SlotIndex).Type = Item Then
+                Dim CurrentItemSlot As Integer
+                CurrentItemSlot = 0
+                If .HotkeyList(SlotIndex).LastKnownSlot > 0 And _
+                   .HotkeyList(SlotIndex).LastKnownSlot <= .CurrentInventorySlots Then
+                    If .invent.Object(.HotkeyList(SlotIndex).LastKnownSlot).ObjIndex = .HotkeyList(SlotIndex).Index And _
+                       .invent.Object(.HotkeyList(SlotIndex).LastKnownSlot).amount > 0 Then
+                        CurrentItemSlot = .HotkeyList(SlotIndex).LastKnownSlot
+                    End If
+                End If
+                If CurrentItemSlot = 0 Then
+                    For i = 1 To .CurrentInventorySlots
+                        If .invent.Object(i).ObjIndex = .HotkeyList(SlotIndex).Index And _
+                           .invent.Object(i).amount > 0 Then
+                            CurrentItemSlot = i
+                            Exit For
+                        End If
+                    Next i
+                End If
+                If CurrentItemSlot > 0 Then
+                    If IsSet(ObjData(.invent.Object(CurrentItemSlot).ObjIndex).ObjFlags, e_ObjFlags.e_Bindable) Then
+                        Call UseInvItem(UserIndex, CurrentItemSlot, 0)
+                    End If
+                End If
             ElseIf .HotkeyList(SlotIndex).Type = Spell Then
                 If .HotkeyList(SlotIndex).LastKnownSlot > 0 And .HotkeyList(SlotIndex).LastKnownSlot < UBound(.Stats.UserHechizos) Then
                     If .Stats.UserHechizos(.HotkeyList(SlotIndex).LastKnownSlot) = .HotkeyList(SlotIndex).Index Then

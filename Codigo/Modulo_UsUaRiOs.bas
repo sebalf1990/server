@@ -649,6 +649,29 @@ Dim tStr                        As String
         If .flags.Privilegios And (e_PlayerType.SemiDios Or e_PlayerType.Dios Or e_PlayerType.Admin) Then
             Call DoAdminInvisible(UserIndex)
         End If
+        ' GM/Admin: radar de NPCs hostiles activado por defecto.
+        ' Para no-GM se manda paquete vacio para garantizar que el minimapa empiece limpio.
+        Call RadarDebugLog("Login user=" & .name & " priv=" & .flags.Privilegios & " featOn=" & IsFeatureEnabled("npc_minimap_radar"))
+        .flags.NpcRadarActive = 0
+        .flags.UserDetectMask = 0
+        If IsFeatureEnabled("npc_minimap_radar") Then
+            If .flags.Privilegios And (e_PlayerType.SemiDios Or e_PlayerType.Dios Or e_PlayerType.Admin) Then
+                .flags.NpcRadarActive = 2
+            Else
+                ' No-GM: limpiar minimapa cliente por si quedo algo de sesion previa
+                Call SendData(SendTarget.ToIndex, UserIndex, PrepareMessageNpcRadarEmpty())
+            End If
+        End If
+        ' QuestNpc siempre activo: forzar envio inmediato al loguear para que
+        ' el minimapa muestre los simbolos de quest desde el primer momento
+        ' (sin esperar al primer tick del radar).
+        If IsFeatureEnabled("npc_minimap_radar") Then
+            .Counters.QuestRadarTick = 0
+            .Counters.NpcRadarHashQuestNpc = 0
+            .Counters.NpcSymbolRadarTick = 0
+            .Counters.NpcRadarHashNpcSymbol = 0
+            .Counters.NpcRadarLastMap = -1
+        End If
         Call WriteUpdateUserStats(UserIndex)
         Call WriteUpdateHungerAndThirst(UserIndex)
         Call WriteUpdateDM(UserIndex)
@@ -2150,6 +2173,10 @@ Sub WarpUserChar(ByVal UserIndex As Integer, ByVal Map As Integer, ByVal x As In
         .pos.x = x
         .pos.y = y
         .pos.Map = Map
+        ' Refresh radar al cambiar de mapa para que la lista quede sincronizada al instante
+        If OldMap <> Map And .flags.NpcRadarActive > 0 Then
+            Call ForceNpcRadarUpdate(UserIndex)
+        End If
         If .Grupo.EnGrupo = True Then
             Call CompartirUbicacion(UserIndex)
         End If

@@ -129,6 +129,8 @@ Private Sub PerseguirUsuarioCercano(ByVal NpcIndex As Integer)
     minDistanciaAtacable = MAX_INTEGER
     With NpcList(NpcIndex)
         npcEraPasivo = .flags.OldHostil = 0
+        Dim targetPrevio As Integer
+        targetPrevio = .TargetUser.ArrayIndex
         If Not IsSet(.flags.StatusMask, eTaunted) Then
             Call SetUserRef(.TargetUser, 0)
             Call ClearNpcRef(.TargetNPC)
@@ -167,7 +169,7 @@ Private Sub PerseguirUsuarioCercano(ByVal NpcIndex As Integer)
             If npcEraPasivo Then
                 ' Significa que alguien le pego, y esta en modo agresivo trantando de darle.
                 ' El unico objetivo que importa aca es el atacante; los demas son ignorados.
-                If EnRangoVision(NpcIndex, agresor.ArrayIndex) Then
+                If EnRangoDesistir(NpcIndex, agresor.ArrayIndex) Then
                     Call SetUserRef(.TargetUser, agresor.ArrayIndex)
                 Else
                     .flags.AttackedBy = vbNullString
@@ -177,6 +179,12 @@ Private Sub PerseguirUsuarioCercano(ByVal NpcIndex As Integer)
                     Call SetUserRef(.TargetUser, enemigoAtacableMasCercano)
                 ElseIf enemigoCercano > 0 Then ' Hay alguien cerca, pero no es atacable
                     Call SetUserRef(.TargetUser, enemigoCercano)
+                End If
+                ' Si no encontro nuevo target pero el anterior sigue en rango de desistir, mantenerlo
+                If Not IsValidUserRef(.TargetUser) And targetPrevio > 0 Then
+                    If EnRangoDesistir(NpcIndex, targetPrevio) And EsEnemigo(NpcIndex, targetPrevio) And UserList(targetPrevio).flags.Muerto = 0 Then
+                        Call SetUserRef(.TargetUser, targetPrevio)
+                    End If
                 End If
             End If
         End If
@@ -375,9 +383,9 @@ Private Sub AI_CaminarSinRumboCercaDeOrigen(ByVal NpcIndex As Integer)
     With NpcList(NpcIndex)
         If Not NPCs.CanMove(.Contadores, .flags) Then
             Call AnimacionIdle(NpcIndex, True)
-        ElseIf Distancia(.pos, .Orig) > 4 Then
+        ElseIf Distancia(.pos, .Orig) > CInt(SvrConfig.GetValue("NPC_RADIO_DEAMBULACION")) Then
             Call AI_CaminarConRumbo(NpcIndex, .Orig)
-        ElseIf RandomNumber(1, 6) = 3 Then
+        ElseIf RandomNumber(1, CInt(SvrConfig.GetValue("NPC_PROB_MOV_DIVISOR"))) = CInt(SvrConfig.GetValue("NPC_PROB_MOV_VALOR")) Then
             Call MoveNPCChar(NpcIndex, CByte(RandomNumber(e_Heading.NORTH, e_Heading.WEST)))
         Else
             Call AnimacionIdle(NpcIndex, True)
@@ -764,7 +772,7 @@ Public Sub AI_GuardiaPersigueNpc(ByVal NpcIndex As Integer)
             If Distancia(.pos, TargetPos) <= 1 Then
                 Call SistemaCombate.NpcAtacaNpc(NpcIndex, .TargetNPC.ArrayIndex, False)
             End If
-            If DistanciaRadial(.Orig, TargetPos) <= (DIAMETRO_VISION_GUARDIAS_NPCS \ 2) Then
+            If DistanciaRadial(.Orig, TargetPos) <= (CInt(SvrConfig.GetValue("NPC_DIAMETRO_GUARDIAS")) \ 2) Then
                 If Not IsValidUserRef(NpcList(.TargetNPC.ArrayIndex).TargetUser) Then
                     Call AI_CaminarConRumbo(NpcIndex, TargetPos)
                 ElseIf UserList(NpcList(.TargetNPC.ArrayIndex).TargetUser.ArrayIndex).flags.NPCAtacado.ArrayIndex <> .TargetNPC.ArrayIndex Then
@@ -993,8 +1001,10 @@ Private Function BuscarNpcEnArea(ByVal NpcIndex As Integer) As Integer
     On Error GoTo BuscarNpcEnArea
     Dim x As Byte, y As Byte
     With NpcList(NpcIndex)
-        For x = (.Orig.x - (DIAMETRO_VISION_GUARDIAS_NPCS \ 2)) To (.Orig.x + (DIAMETRO_VISION_GUARDIAS_NPCS \ 2))
-            For y = (.Orig.y - (DIAMETRO_VISION_GUARDIAS_NPCS \ 2)) To (.Orig.y + (DIAMETRO_VISION_GUARDIAS_NPCS \ 2))
+        Dim nRadioGuardias As Integer
+        nRadioGuardias = CInt(SvrConfig.GetValue("NPC_DIAMETRO_GUARDIAS")) \ 2
+        For x = (.Orig.x - nRadioGuardias) To (.Orig.x + nRadioGuardias)
+            For y = (.Orig.y - nRadioGuardias) To (.Orig.y + nRadioGuardias)
                 If MapData(.Orig.Map, x, y).NpcIndex > 0 And NpcIndex <> MapData(.Orig.Map, x, y).NpcIndex Then
                     Dim foundNpc As Integer
                     foundNpc = MapData(.Orig.Map, x, y).NpcIndex
@@ -1347,14 +1357,33 @@ Private Function EnRangoVision(ByVal NpcIndex As Integer, ByVal UserIndex As Int
     Dim Limite_X As Byte, Limite_Y As Byte
     ' Si alguno es cero, devolve false
     If NpcIndex = 0 Or UserIndex = 0 Then Exit Function
-    Limite_X = IIf(NpcList(NpcIndex).Distancia <> 0, NpcList(NpcIndex).Distancia, RANGO_VISION_X)
-    Limite_Y = IIf(NpcList(NpcIndex).Distancia <> 0, NpcList(NpcIndex).Distancia, RANGO_VISION_Y)
+    Limite_X = IIf(NpcList(NpcIndex).Distancia <> 0, NpcList(NpcIndex).Distancia, CByte(SvrConfig.GetValue("NPC_VISION_RANGE_X")))
+    Limite_Y = IIf(NpcList(NpcIndex).Distancia <> 0, NpcList(NpcIndex).Distancia, CByte(SvrConfig.GetValue("NPC_VISION_RANGE_Y")))
     userPos = UserList(UserIndex).pos
     NpcPos = NpcList(NpcIndex).pos
     EnRangoVision = ((userPos.Map = NpcPos.Map) And (Abs(userPos.x - NpcPos.x) <= Limite_X) And (Abs(userPos.y - NpcPos.y) <= Limite_Y))
     Exit Function
 EnRangoVision_Err:
     Call TraceError(Err.Number, Err.Description, "AI.EnRangoVision", Erl)
+End Function
+
+Private Function EnRangoDesistir(ByVal NpcIndex As Integer, ByVal UserIndex As Integer) As Boolean
+    On Error GoTo EnRangoDesistir_Err
+    If NpcIndex = 0 Or UserIndex = 0 Then Exit Function
+    Dim extra   As Integer
+    Dim baseX   As Integer
+    Dim baseY   As Integer
+    Dim userPos As t_WorldPos
+    Dim NpcPos  As t_WorldPos
+    extra = IIf(NpcList(NpcIndex).DesistirExtra <> 0, NpcList(NpcIndex).DesistirExtra, CInt(SvrConfig.GetValue("NPC_DESISTIR_EXTRA")))
+    baseX = IIf(NpcList(NpcIndex).Distancia <> 0, NpcList(NpcIndex).Distancia, CInt(SvrConfig.GetValue("NPC_VISION_RANGE_X")))
+    baseY = IIf(NpcList(NpcIndex).Distancia <> 0, NpcList(NpcIndex).Distancia, CInt(SvrConfig.GetValue("NPC_VISION_RANGE_Y")))
+    userPos = UserList(UserIndex).pos
+    NpcPos = NpcList(NpcIndex).pos
+    EnRangoDesistir = ((userPos.Map = NpcPos.Map) And (Abs(userPos.x - NpcPos.x) <= baseX + extra) And (Abs(userPos.y - NpcPos.y) <= baseY + extra))
+    Exit Function
+EnRangoDesistir_Err:
+    Call TraceError(Err.Number, Err.Description, "AI.EnRangoDesistir", Erl)
 End Function
 
 Private Function UsuarioAtacableConMagia(ByVal targetUserIndex As Integer) As Boolean
