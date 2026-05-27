@@ -105,13 +105,13 @@ Sub NpcLanzaSpellSobreUser(ByVal NpcIndex As Integer, ByVal UserIndex As Integer
         If Hechizos(Spell).SubeAgilidad = 1 Then
             Damage = RandomNumber(Hechizos(Spell).MinAgilidad, Hechizos(Spell).MaxAgilidad)
             .flags.TomoPocion = True
-            .flags.DuracionEfecto = Hechizos(Spell).Duration
+            Call EffectsOverTime.CreateBuffPotenciado(UserIndex, Hechizos(Spell).Duration)
             .Stats.UserAtributos(e_Atributos.Agilidad) = MinimoInt(.Stats.UserAtributos(e_Atributos.Agilidad) + Damage, .Stats.UserAtributosBackUP(e_Atributos.Agilidad) * 2)
             Call WriteFYA(UserIndex)
         ElseIf Hechizos(Spell).SubeAgilidad = 2 Then
             Damage = RandomNumber(Hechizos(Spell).MinAgilidad, Hechizos(Spell).MaxAgilidad)
             .flags.TomoPocion = True
-            .flags.DuracionEfecto = Hechizos(Spell).Duration
+            Call EffectsOverTime.CreateBuffPotenciado(UserIndex, Hechizos(Spell).Duration)
             .Stats.UserAtributos(e_Atributos.Agilidad) = MaximoInt(MINATRIBUTOS, .Stats.UserAtributos(e_Atributos.Agilidad) - Damage)
             Call WriteFYA(UserIndex)
         End If
@@ -133,13 +133,13 @@ Sub NpcLanzaSpellSobreUser(ByVal NpcIndex As Integer, ByVal UserIndex As Integer
         If Hechizos(Spell).SubeFuerza = 1 Then
             Damage = RandomNumber(Hechizos(Spell).MinFuerza, Hechizos(Spell).MaxFuerza)
             .flags.TomoPocion = True
-            .flags.DuracionEfecto = Hechizos(Spell).Duration
+            Call EffectsOverTime.CreateBuffPotenciado(UserIndex, Hechizos(Spell).Duration)
             .Stats.UserAtributos(e_Atributos.Fuerza) = MinimoInt(.Stats.UserAtributos(e_Atributos.Fuerza) + Damage, .Stats.UserAtributosBackUP(e_Atributos.Fuerza) * 2)
             Call WriteFYA(UserIndex)
         ElseIf Hechizos(Spell).SubeFuerza = 2 Then
             Damage = RandomNumber(Hechizos(Spell).MinFuerza, Hechizos(Spell).MaxFuerza)
             .flags.TomoPocion = True
-            .flags.DuracionEfecto = Hechizos(Spell).Duration
+            Call EffectsOverTime.CreateBuffPotenciado(UserIndex, Hechizos(Spell).Duration)
             .Stats.UserAtributos(e_Atributos.Fuerza) = MaximoInt(MINATRIBUTOS, .Stats.UserAtributos(e_Atributos.Fuerza) - Damage)
             Call WriteFYA(UserIndex)
         End If
@@ -1309,10 +1309,33 @@ Sub LanzarHechizo(ByVal Index As Integer, ByVal UserIndex As Integer)
     Dim SpellCastSuccess As Boolean
     uh = UserList(UserIndex).Stats.UserHechizos(Index)
     If PuedeLanzar(UserIndex, uh, Index) Then
+        ' --- Pifia por Neurotoxina (TOGGLE26 new_poison_system) ---
+        ' Si el caster esta envenenado con Neuro y el hechizo es pifiable,
+        ' hay PoisonNeuroChancePifiaHechizoPct% de chance de pifia.
+        ' Pifia consume mitad del mana, no aplica efecto, ni avanza al Select Case.
+        If IsFeatureEnabled("new_poison_system") Then
+            If UserList(UserIndex).flags.PoisonNeuroActive <> 0 _
+                    And Hechizos(uh).NeuroInpifiable = 0 _
+                    And UserList(UserIndex).flags.PoisonNeuroChancePifiaHechizoPct > 0 Then
+                If RandomNumber(1, 100) <= UserList(UserIndex).flags.PoisonNeuroChancePifiaHechizoPct Then
+                    Dim manaCost As Long
+                    manaCost = GetSpellManaCostModifierByClass(UserIndex, Hechizos(uh), uh) \ 2
+                    UserList(UserIndex).Stats.MinMAN = UserList(UserIndex).Stats.MinMAN - manaCost
+                    If UserList(UserIndex).Stats.MinMAN < 0 Then UserList(UserIndex).Stats.MinMAN = 0
+                    Call WriteUpdateMana(UserIndex)
+                    Call WriteConsoleMsg(UserIndex, "Has pifiado el hechizo por el veneno.", e_FontTypeNames.FONTTYPE_INFOIAO)
+                    Call LogPoisonEvent("pifia_hechizo", "", UserList(UserIndex).name, uh, 3, manaCost, 0, 0, 0)
+                    ' Limpiar targets y salir antes del Select Case (no aplicamos el efecto)
+                    Call ClearUserRef(UserList(UserIndex).flags.TargetUser)
+                    Call ClearNpcRef(UserList(UserIndex).flags.TargetNPC)
+                    Exit Sub
+                End If
+            End If
+        End If
         Select Case Hechizos(uh).Target
             Case e_TargetType.uUsuarios
                 If IsValidUserRef(UserList(UserIndex).flags.TargetUser) Then
-                    If Abs(UserList(UserList(UserIndex).flags.TargetUser.ArrayIndex).pos.y - UserList(UserIndex).pos.y) <= RANGO_VISION_Y Then
+                    If InRangoVisionFullAction(UserIndex, UserList(UserList(UserIndex).flags.TargetUser.ArrayIndex).pos.x, UserList(UserList(UserIndex).flags.TargetUser.ArrayIndex).pos.y) Then
                         Call HandleHechizoUsuario(UserIndex, uh)
                         SpellCastSuccess = True
                     Else
@@ -1324,7 +1347,7 @@ Sub LanzarHechizo(ByVal Index As Integer, ByVal UserIndex As Integer)
                 End If
             Case e_TargetType.uNPC
                 If IsValidNpcRef(UserList(UserIndex).flags.TargetNPC) Then
-                    If Abs(NpcList(UserList(UserIndex).flags.TargetNPC.ArrayIndex).pos.y - UserList(UserIndex).pos.y) <= RANGO_VISION_Y Then
+                    If InRangoVisionFullAction(UserIndex, NpcList(UserList(UserIndex).flags.TargetNPC.ArrayIndex).pos.x, NpcList(UserList(UserIndex).flags.TargetNPC.ArrayIndex).pos.y) Then
                         Call HandleHechizoNPC(UserIndex, uh)
                         SpellCastSuccess = True
                     Else
@@ -1336,14 +1359,14 @@ Sub LanzarHechizo(ByVal Index As Integer, ByVal UserIndex As Integer)
                 End If
             Case e_TargetType.uUsuariosYnpc
                 If IsValidUserRef(UserList(UserIndex).flags.TargetUser) Then
-                    If Abs(UserList(UserList(UserIndex).flags.TargetUser.ArrayIndex).pos.y - UserList(UserIndex).pos.y) <= RANGO_VISION_Y Then
+                    If InRangoVisionFullAction(UserIndex, UserList(UserList(UserIndex).flags.TargetUser.ArrayIndex).pos.x, UserList(UserList(UserIndex).flags.TargetUser.ArrayIndex).pos.y) Then
                         Call HandleHechizoUsuario(UserIndex, uh)
                         SpellCastSuccess = True
                     Else
                         Call WriteLocaleMsg(UserIndex, MSG_SACERDOTE_PUEDE_CURARTE_DEBIDO_DEMASIADO_LEJOS, e_FontTypeNames.FONTTYPE_INFO)
                     End If
                 ElseIf IsValidNpcRef(UserList(UserIndex).flags.TargetNPC) Then
-                    If Abs(NpcList(UserList(UserIndex).flags.TargetNPC.ArrayIndex).pos.y - UserList(UserIndex).pos.y) <= RANGO_VISION_Y Then
+                    If InRangoVisionFullAction(UserIndex, NpcList(UserList(UserIndex).flags.TargetNPC.ArrayIndex).pos.x, NpcList(UserList(UserIndex).flags.TargetNPC.ArrayIndex).pos.y) Then
                         SpellCastSuccess = True
                         Call HandleHechizoNPC(UserIndex, uh)
                     Else
@@ -1586,7 +1609,240 @@ Sub HechizoEstadoUsuario(ByVal UserIndex As Integer, ByRef b As Boolean)
         Call InfoHechizo(UserIndex)
         b = True
     End If
-    If Hechizos(h).Envenena > 0 Then
+    ' --- Sistema venenos nuevo (TOGGLE26): TipoHechizoVeneno=1 unta arma/flechas del target ---
+    If IsFeatureEnabled("new_poison_system") And Hechizos(h).TipoHechizoVeneno = 1 Then
+        ' Target debe ser un usuario valido (self o aliado). No validamos hostilidad: aceptamos cualquier user.
+        ' Si queres castear self con AutoLanzar=1 ya se controla en PuedeLanzar.
+        If Hechizos(h).FamiliaVeneno < 1 Or Hechizos(h).FamiliaVeneno > 3 Or Hechizos(h).CargasQueOtorga <= 0 Then
+            Call WriteConsoleMsg(UserIndex, "El hechizo de veneno no esta configurado correctamente.", e_FontTypeNames.FONTTYPE_INFO)
+            b = False
+            Exit Sub
+        End If
+
+        Dim poisonFamilyName As String
+        Select Case Hechizos(h).FamiliaVeneno
+            Case 1: poisonFamilyName = "Veneno Menor"
+            Case 2: poisonFamilyName = "Hemotoxina"
+            Case 3: poisonFamilyName = "Neurotoxina"
+        End Select
+
+        Dim equipWpn As Integer
+        equipWpn = UserList(targetUserIndex).invent.EquippedWeaponObjIndex
+        If equipWpn <= 0 Then
+            Call WriteConsoleMsg(UserIndex, "El objetivo no tiene arma equipada.", e_FontTypeNames.FONTTYPE_INFO)
+            b = False
+            Exit Sub
+        End If
+
+        If ObjData(equipWpn).Proyectil = 1 And ObjData(equipWpn).Municion > 0 Then
+            Dim equipAmmo As Integer
+            equipAmmo = UserList(targetUserIndex).invent.EquippedMunitionObjIndex
+            If equipAmmo <= 0 Or UserList(targetUserIndex).invent.EquippedMunitionSlot <= 0 Then
+                Call WriteConsoleMsg(UserIndex, "El objetivo necesita flechas equipadas para envenenar su arco.", e_FontTypeNames.FONTTYPE_INFO)
+                b = False
+                Exit Sub
+            End If
+            If ObjData(equipAmmo).OBJType <> e_OBJType.otArrows Then
+                Call WriteConsoleMsg(UserIndex, "El objetivo necesita flechas equipadas para envenenar su arco.", e_FontTypeNames.FONTTYPE_INFO)
+                b = False
+                Exit Sub
+            End If
+            If ObjData(equipAmmo).FlechaVenenoFamilia > 0 Then
+                Call WriteConsoleMsg(UserIndex, "Las flechas del objetivo ya estan envenenadas.", e_FontTypeNames.FONTTYPE_INFO)
+                b = False
+                Exit Sub
+            End If
+            If UserList(targetUserIndex).flags.PoisonedAmmoObjIndex > 0 And UserList(targetUserIndex).flags.PoisonedAmmoCargas > 0 Then
+                Call WriteConsoleMsg(UserIndex, "Las flechas del objetivo ya estan envenenadas.", e_FontTypeNames.FONTTYPE_INFO)
+                b = False
+                Exit Sub
+            End If
+
+            With UserList(targetUserIndex).flags
+                .PoisonedAmmoObjIndex = equipAmmo
+                .PoisonedAmmoFamilia = Hechizos(h).FamiliaVeneno
+                .PoisonedAmmoCargas = Hechizos(h).CargasQueOtorga
+                .PoisonedAmmoAppliedTick = GetTickCountRaw()
+                .PoisonedAmmoDuracionMaxMs = 60000
+                .PoisonedAmmoDuracionEfectoMs = Hechizos(h).DuracionMs
+                .PoisonedAmmoTickIntervaloMs = Hechizos(h).TickIntervaloMs
+                .PoisonedAmmoChanceAplicarPct = Hechizos(h).ChanceAplicarPct
+                .PoisonedAmmoChancePorGolpePct = Hechizos(h).ChancePorGolpePct
+                .PoisonedAmmoDanoModo = Hechizos(h).DanoModo
+                .PoisonedAmmoDanoMin = Hechizos(h).DanoMin
+                .PoisonedAmmoDanoMax = Hechizos(h).DanoMax
+                .PoisonedAmmoFactorPvP = Hechizos(h).FactorPvP
+                .PoisonedAmmoFactorPvE = Hechizos(h).FactorPvE
+                .PoisonedAmmoDanoPorStackModo = Hechizos(h).DanoPorStackModo
+                .PoisonedAmmoDanoPorStackMin = Hechizos(h).DanoPorStackMin
+                .PoisonedAmmoDanoPorStackMax = Hechizos(h).DanoPorStackMax
+                .PoisonedAmmoStacksMax = Hechizos(h).StacksMax
+                .PoisonedAmmoGolpesQueSumanStacks = Hechizos(h).GolpesQueSumanStacks
+                .PoisonedAmmoIntervaloDecayStackMs = Hechizos(h).IntervaloDecayStackMs
+                .PoisonedAmmoRefrescaTimerAlStackear = Hechizos(h).RefrescaTimerAlStackear
+                .PoisonedAmmoPenalidadPunteriaPct = Hechizos(h).PenalidadPunteriaPct
+                .PoisonedAmmoPenalidadEvasionPct = Hechizos(h).PenalidadEvasionPct
+                .PoisonedAmmoPenalidadBloqueoEscudoPct = Hechizos(h).PenalidadBloqueoEscudoPct
+                .PoisonedAmmoChancePifiaHechizoPct = Hechizos(h).ChancePifiaHechizoPct
+                .PoisonedAmmoRegenManaReduccionPct = Hechizos(h).RegenManaReduccionPct
+                .PoisonedAmmoRegenManaReduccionFija = Hechizos(h).RegenManaReduccionFija
+                .PoisonedAmmoBloqueaRegenManaTotal = Hechizos(h).BloqueaRegenManaTotal
+            End With
+
+            Call InfoHechizo(UserIndex)
+            Call LogPoisonEvent("untar_flechas_hechizo", UserList(UserIndex).name, UserList(targetUserIndex).name, equipAmmo, Hechizos(h).FamiliaVeneno, 0, Hechizos(h).CargasQueOtorga, 0, 0)
+            If targetUserIndex <> UserIndex Then
+                Call WriteConsoleMsg(UserIndex, "Envenenaste las flechas de " & UserList(targetUserIndex).name & " con " & poisonFamilyName & ".", e_FontTypeNames.FONTTYPE_INFO)
+            End If
+            Call WriteConsoleMsg(targetUserIndex, "Tus flechas han sido envenenadas con " & poisonFamilyName & " (" & Hechizos(h).CargasQueOtorga & " cargas).", e_FontTypeNames.FONTTYPE_INFO)
+            Call WritePoisonedAmmoIcon(targetUserIndex)
+            b = True
+            Exit Sub
+        End If
+
+        If ObjData(equipWpn).Subtipo <> 11 Then
+            Call WriteConsoleMsg(UserIndex, "El arma del objetivo no se puede envenenar.", e_FontTypeNames.FONTTYPE_INFO)
+            b = False
+            Exit Sub
+        End If
+        ' Compatibilidad de familia (default vacio = acepta todas)
+        If LenB(ObjData(equipWpn).FamiliasCompatibles) > 0 Then
+            Dim famHech As String
+            famHech = CStr(Hechizos(h).FamiliaVeneno)
+            If InStr("," & ObjData(equipWpn).FamiliasCompatibles & ",", "," & famHech & ",") = 0 Then
+                Call WriteConsoleMsg(UserIndex, "El arma del objetivo no acepta esta familia de veneno.", e_FontTypeNames.FONTTYPE_INFO)
+                b = False
+                Exit Sub
+            End If
+        End If
+        ' Si ya esta untada con MISMA arma activa y cargas restantes, rechazar
+        If UserList(targetUserIndex).flags.PoisonedWeaponObjIndex = equipWpn And UserList(targetUserIndex).flags.PoisonedWeaponCargas > 0 Then
+            Call WriteConsoleMsg(UserIndex, "El arma del objetivo ya esta envenenada.", e_FontTypeNames.FONTTYPE_INFO)
+            b = False
+            Exit Sub
+        End If
+        ' Aplicar untado (analogo al vial). Los campos vienen de Hechizos(h).
+        With UserList(targetUserIndex).flags
+            .PoisonedWeaponObjIndex = equipWpn
+            .PoisonedWeaponFamilia = Hechizos(h).FamiliaVeneno
+            .PoisonedWeaponCargas = Hechizos(h).CargasQueOtorga
+            .PoisonedWeaponAppliedTick = GetTickCountRaw()
+            .PoisonedWeaponDuracionMaxMs = 60000  ' default 60s para hechizo. Si queres configurable, agregar campo DuracionMaximaUntadoMs a Hechizos.
+            .PoisonedWeaponChanceAplicarPct = Hechizos(h).ChanceAplicarPct
+            .PoisonedWeaponChancePorGolpePct = Hechizos(h).ChancePorGolpePct
+            .PoisonedWeaponTickIntervaloMs = Hechizos(h).TickIntervaloMs
+            .PoisonedWeaponDuracionEfectoMs = Hechizos(h).DuracionMs
+            .PoisonedWeaponDanoModo = Hechizos(h).DanoModo
+            .PoisonedWeaponDanoMin = Hechizos(h).DanoMin
+            .PoisonedWeaponDanoMax = Hechizos(h).DanoMax
+            .PoisonedWeaponFactorPvP = Hechizos(h).FactorPvP
+            .PoisonedWeaponFactorPvE = Hechizos(h).FactorPvE
+            ' Campos especificos segun familia
+            If Hechizos(h).FamiliaVeneno = 2 Then
+                .PoisonedWeaponDanoPorStackModo = Hechizos(h).DanoPorStackModo
+                .PoisonedWeaponDanoPorStackMin = Hechizos(h).DanoPorStackMin
+                .PoisonedWeaponDanoPorStackMax = Hechizos(h).DanoPorStackMax
+                .PoisonedWeaponStacksMax = Hechizos(h).StacksMax
+                .PoisonedWeaponGolpesQueSumanStacks = Hechizos(h).GolpesQueSumanStacks
+                .PoisonedWeaponIntervaloDecayStackMs = Hechizos(h).IntervaloDecayStackMs
+                .PoisonedWeaponRefrescaTimerAlStackear = Hechizos(h).RefrescaTimerAlStackear
+            ElseIf Hechizos(h).FamiliaVeneno = 3 Then
+                .PoisonedWeaponPenalidadPunteriaPct = Hechizos(h).PenalidadPunteriaPct
+                .PoisonedWeaponPenalidadEvasionPct = Hechizos(h).PenalidadEvasionPct
+                .PoisonedWeaponPenalidadBloqueoEscudoPct = Hechizos(h).PenalidadBloqueoEscudoPct
+                .PoisonedWeaponChancePifiaHechizoPct = Hechizos(h).ChancePifiaHechizoPct
+                .PoisonedWeaponRegenManaReduccionPct = Hechizos(h).RegenManaReduccionPct
+                .PoisonedWeaponRegenManaReduccionFija = Hechizos(h).RegenManaReduccionFija
+                .PoisonedWeaponBloqueaRegenManaTotal = Hechizos(h).BloqueaRegenManaTotal
+            End If
+        End With
+        Call InfoHechizo(UserIndex)
+        Call LogPoisonEvent("untar_arma_hechizo", UserList(UserIndex).name, UserList(targetUserIndex).name, h, Hechizos(h).FamiliaVeneno, 0, Hechizos(h).CargasQueOtorga, 0, 0)
+        Call WriteConsoleMsg(UserIndex, "Has untado el arma con veneno.", e_FontTypeNames.FONTTYPE_INFO)
+        Call WritePoisonedWeaponIcon(targetUserIndex)
+        If targetUserIndex <> UserIndex Then
+            Call WriteConsoleMsg(targetUserIndex, UserList(UserIndex).name & " unto tu arma con veneno.", e_FontTypeNames.FONTTYPE_INFO)
+        End If
+        b = True
+        Exit Sub
+    End If
+    ' --- Sistema venenos nuevo (TOGGLE26): aplicar familia 1/2/3 antes de la rama legacy ---
+    If IsFeatureEnabled("new_poison_system") And Hechizos(h).FamiliaVeneno > 0 Then
+        ' Self-cast: salteamos PuedeAtacar/UsuarioAtacadoPorUsuario porque uno no se ataca a si mismo
+        If UserIndex <> targetUserIndex Then
+            If Not PuedeAtacar(UserIndex, targetUserIndex) Then Exit Sub
+            Call UsuarioAtacadoPorUsuario(UserIndex, targetUserIndex)
+        End If
+        ' Resistencia / inmunidad
+        Dim resistHS As t_PoisonResist
+        resistHS = GetUserPoisonResist(targetUserIndex, Hechizos(h).FamiliaVeneno)
+        If resistHS.Inmune <> 0 Then
+            Call WriteConsoleMsg(UserIndex, "El objetivo es inmune a este veneno.", e_FontTypeNames.FONTTYPE_INFO)
+            Call WriteConsoleMsg(targetUserIndex, "Resististe el veneno.", e_FontTypeNames.FONTTYPE_INFO)
+            b = True
+        Else
+            Dim chFinHS As Long
+            chFinHS = Hechizos(h).ChanceAplicarPct - resistHS.ChancePct
+            If chFinHS <= 0 Or RandomNumber(1, 100) > chFinHS Then
+                Call WriteConsoleMsg(UserIndex, "El veneno no afecto al objetivo.", e_FontTypeNames.FONTTYPE_INFO)
+                Call WriteConsoleMsg(targetUserIndex, "Resististe el veneno.", e_FontTypeNames.FONTTYPE_INFO)
+                b = True
+            Else
+                Select Case Hechizos(h).FamiliaVeneno
+                    Case 1
+                        Call CreatePoisonMinor(UserIndex, eUser, targetUserIndex, eUser, 63, _
+                            Hechizos(h).TickIntervaloMs, Hechizos(h).DuracionMs, _
+                            Hechizos(h).DanoModo, Hechizos(h).DanoMin, Hechizos(h).DanoMax, _
+                            Hechizos(h).FactorPvP, Hechizos(h).FactorPvE)
+                    Case 2
+                        Call CreatePoisonHemo(UserIndex, eUser, targetUserIndex, eUser, 64, _
+                            Hechizos(h).TickIntervaloMs, Hechizos(h).DuracionMs, _
+                            Hechizos(h).DanoModo, Hechizos(h).DanoMin, Hechizos(h).DanoMax, _
+                            Hechizos(h).DanoPorStackModo, Hechizos(h).DanoPorStackMin, Hechizos(h).DanoPorStackMax, _
+                            Hechizos(h).StacksMax, Hechizos(h).GolpesQueSumanStacks, Hechizos(h).IntervaloDecayStackMs, _
+                            Hechizos(h).RefrescaTimerAlStackear, Hechizos(h).FactorPvP, Hechizos(h).FactorPvE, 1)
+                    Case 3
+                        Call CreatePoisonNeuro(UserIndex, eUser, targetUserIndex, eUser, 65, _
+                            Hechizos(h).TickIntervaloMs, Hechizos(h).DuracionMs, _
+                            Hechizos(h).PenalidadPunteriaPct, Hechizos(h).PenalidadEvasionPct, _
+                            Hechizos(h).PenalidadBloqueoEscudoPct, Hechizos(h).ChancePifiaHechizoPct, _
+                            Hechizos(h).RegenManaReduccionPct, Hechizos(h).RegenManaReduccionFija, _
+                            Hechizos(h).BloqueaRegenManaTotal)
+                End Select
+                Call InfoHechizo(UserIndex)
+                b = True
+            End If
+        End If
+        ' Salteamos la rama legacy Envenena (no la queremos doble)
+    ElseIf IsFeatureEnabled("new_poison_system") And Hechizos(h).TipoHechizoVeneno = 2 Then
+        ' --- Purificacion: limpia los 3 venenos nuevos del target ---
+        If Not PuedeAtacar(UserIndex, targetUserIndex) Then
+            ' Permitir purificacion sobre uno mismo o aliado: si PuedeAtacar dice False, sigue valido para self/aliado.
+            ' En realidad PuedeAtacar es para hostil. Para self/aliado lo permitimos siempre.
+        End If
+        Dim algoLimp As Boolean
+        algoLimp = False
+        If UserList(targetUserIndex).flags.PoisonMinorActive <> 0 Then
+            Call RemovePoisonMinor(targetUserIndex, eUser)
+            algoLimp = True
+        End If
+        If UserList(targetUserIndex).flags.PoisonHemoStacks > 0 Then
+            Call RemovePoisonHemo(targetUserIndex, eUser)
+            algoLimp = True
+        End If
+        If UserList(targetUserIndex).flags.PoisonNeuroActive <> 0 Then
+            Call RemovePoisonNeuro(targetUserIndex, eUser)
+            algoLimp = True
+        End If
+        If algoLimp Then
+            Call InfoHechizo(UserIndex)
+            Call WriteConsoleMsg(targetUserIndex, "Has sido purificado.", e_FontTypeNames.FONTTYPE_INFO)
+            b = True
+        Else
+            Call WriteConsoleMsg(UserIndex, "El objetivo no tiene veneno que purificar.", e_FontTypeNames.FONTTYPE_INFO)
+            b = False
+        End If
+    ElseIf Hechizos(h).Envenena > 0 Then
         If Not PuedeAtacar(UserIndex, targetUserIndex) Then Exit Sub
         If UserList(targetUserIndex).flags.Envenenado = 0 Then
             If UserIndex <> targetUserIndex Then
@@ -1674,7 +1930,20 @@ Sub HechizoEstadoUsuario(ByVal UserIndex As Integer, ByRef b As Boolean)
         b = True
         Exit Sub
     End If
-    If IsSet(Hechizos(h).Effects, e_SpellEffects.CurePoison) Then
+    ' --- Granularidad de cura (TOGGLE26): consolidar bits viejo + nuevos ---
+    Dim curaMenor As Boolean, curaHemo As Boolean, curaNeuro As Boolean
+    curaMenor = IsSet(Hechizos(h).Effects, e_SpellEffects.CurePoisonMinor)
+    curaHemo = IsSet(Hechizos(h).Effects, e_SpellEffects.CurePoisonHemo)
+    curaNeuro = IsSet(Hechizos(h).Effects, e_SpellEffects.CurePoisonNeuro)
+    ' Bit viejo CurePoison = atajo para curar las 3 familias
+    Dim tieneBitViejo As Boolean
+    tieneBitViejo = IsSet(Hechizos(h).Effects, e_SpellEffects.CurePoison)
+    If tieneBitViejo Then
+        curaMenor = True
+        curaHemo = True
+        curaNeuro = True
+    End If
+    If curaMenor Or curaHemo Or curaNeuro Then
         'Verificamos que el usuario no este muerto
         If UserList(targetUserIndex).flags.Muerto = 1 Then
             'Msg77=¡¡Estás muerto!!.
@@ -1682,8 +1951,15 @@ Sub HechizoEstadoUsuario(ByVal UserIndex As Integer, ByRef b As Boolean)
             b = False
             Exit Sub
         End If
-        ' Si no esta envenenado, no hay nada mas que hacer
-        If UserList(targetUserIndex).flags.Envenenado = 0 Then
+        ' Si no esta envenenado con NADA que este hechizo cure, mensaje y salir
+        Dim hayVenenoNuevo As Boolean
+        hayVenenoNuevo = False
+        If IsFeatureEnabled("new_poison_system") Then
+            If curaMenor And UserList(targetUserIndex).flags.PoisonMinorActive <> 0 Then hayVenenoNuevo = True
+            If curaHemo And UserList(targetUserIndex).flags.PoisonHemoStacks > 0 Then hayVenenoNuevo = True
+            If curaNeuro And UserList(targetUserIndex).flags.PoisonNeuroActive <> 0 Then hayVenenoNuevo = True
+        End If
+        If UserList(targetUserIndex).flags.Envenenado = 0 And Not hayVenenoNuevo Then
             Call WriteLocaleMsg(UserIndex, MSG_NO_ENVENENADO_HECHIZO_TIENE_EFECTO, e_FontTypeNames.FONTTYPE_INFOIAO, UserList(targetUserIndex).name) ' Msg1871=¬1 no está envenenado, el hechizo no tiene efecto.
             b = False
             Exit Sub
@@ -1709,8 +1985,17 @@ Sub HechizoEstadoUsuario(ByVal UserIndex As Integer, ByRef b As Boolean)
                 Exit Sub
             End If
         End If
-        UserList(targetUserIndex).flags.Envenenado = 0
-        UserList(targetUserIndex).Counters.Veneno = 0
+        ' Limpiar SOLO las familias que el hechizo cura.
+        ' Para compat con sistema viejo (flags.Envenenado), si curaMenor esta seteado por bit viejo, limpiar flag legacy.
+        If tieneBitViejo Then
+            UserList(targetUserIndex).flags.Envenenado = 0
+            UserList(targetUserIndex).Counters.Veneno = 0
+        End If
+        If IsFeatureEnabled("new_poison_system") Then
+            If curaMenor Then Call RemovePoisonMinor(targetUserIndex, eUser)
+            If curaHemo Then Call RemovePoisonHemo(targetUserIndex, eUser)
+            If curaNeuro Then Call RemovePoisonNeuro(targetUserIndex, eUser)
+        End If
         Call InfoHechizo(UserIndex)
         b = True
     End If
@@ -2162,6 +2447,56 @@ Sub HechizoEstadoNPC(ByVal NpcIndex As Integer, ByVal hIndex As Integer, ByRef b
         Call InfoHechizo(UserIndex)
         NpcList(NpcIndex).flags.invisible = 1
         b = True
+    End If
+    ' --- Sistema venenos nuevo (TOGGLE26): aplicar familia 1/2/3 antes del legacy Envenena ---
+    If IsFeatureEnabled("new_poison_system") And Hechizos(hIndex).FamiliaVeneno > 0 Then
+        UserAttackInteractionResult = UserCanAttackNpc(UserIndex, NpcIndex)
+        Call SendAttackInteractionMessage(UserIndex, UserAttackInteractionResult.Result)
+        If Not UserAttackInteractionResult.CanAttack Then
+            b = False
+            Exit Sub
+        End If
+        If UserAttackInteractionResult.TurnPK Then Call VolverCriminal(UserIndex)
+        Call NPCAtacado(NpcIndex, UserIndex)
+        ' Resistencia / inmunidad del NPC
+        Dim resistN As t_PoisonResist
+        resistN = GetNpcPoisonResist(NpcIndex, Hechizos(hIndex).FamiliaVeneno)
+        If resistN.Inmune <> 0 Then
+            Call WriteConsoleMsg(UserIndex, "El objetivo es inmune a este veneno.", e_FontTypeNames.FONTTYPE_INFO)
+            b = True
+        Else
+            Dim chFinNpcHech As Long
+            chFinNpcHech = Hechizos(hIndex).ChanceAplicarPct - resistN.ChancePct
+            If chFinNpcHech <= 0 Or RandomNumber(1, 100) > chFinNpcHech Then
+                Call WriteConsoleMsg(UserIndex, "El veneno no afecto al objetivo.", e_FontTypeNames.FONTTYPE_INFO)
+                b = True
+            Else
+                Select Case Hechizos(hIndex).FamiliaVeneno
+                    Case 1
+                        Call CreatePoisonMinor(UserIndex, eUser, NpcIndex, eNpc, 63, _
+                            Hechizos(hIndex).TickIntervaloMs, Hechizos(hIndex).DuracionMs, _
+                            Hechizos(hIndex).DanoModo, Hechizos(hIndex).DanoMin, Hechizos(hIndex).DanoMax, _
+                            Hechizos(hIndex).FactorPvP, Hechizos(hIndex).FactorPvE)
+                    Case 2
+                        Call CreatePoisonHemo(UserIndex, eUser, NpcIndex, eNpc, 64, _
+                            Hechizos(hIndex).TickIntervaloMs, Hechizos(hIndex).DuracionMs, _
+                            Hechizos(hIndex).DanoModo, Hechizos(hIndex).DanoMin, Hechizos(hIndex).DanoMax, _
+                            Hechizos(hIndex).DanoPorStackModo, Hechizos(hIndex).DanoPorStackMin, Hechizos(hIndex).DanoPorStackMax, _
+                            Hechizos(hIndex).StacksMax, Hechizos(hIndex).GolpesQueSumanStacks, Hechizos(hIndex).IntervaloDecayStackMs, _
+                            Hechizos(hIndex).RefrescaTimerAlStackear, Hechizos(hIndex).FactorPvP, Hechizos(hIndex).FactorPvE, 1)
+                    Case 3
+                        Call CreatePoisonNeuro(UserIndex, eUser, NpcIndex, eNpc, 65, _
+                            Hechizos(hIndex).TickIntervaloMs, Hechizos(hIndex).DuracionMs, _
+                            Hechizos(hIndex).PenalidadPunteriaPct, Hechizos(hIndex).PenalidadEvasionPct, _
+                            Hechizos(hIndex).PenalidadBloqueoEscudoPct, Hechizos(hIndex).ChancePifiaHechizoPct, _
+                            Hechizos(hIndex).RegenManaReduccionPct, Hechizos(hIndex).RegenManaReduccionFija, _
+                            Hechizos(hIndex).BloqueaRegenManaTotal)
+                End Select
+                Call InfoHechizo(UserIndex)
+                b = True
+            End If
+        End If
+        Exit Sub
     End If
     If Hechizos(hIndex).Envenena > 0 Then
         UserAttackInteractionResult = UserCanAttackNpc(UserIndex, NpcIndex)
@@ -2906,7 +3241,7 @@ Sub HechizoPropUsuario(ByVal UserIndex As Integer, ByRef b As Boolean, ByRef IsA
         End If
         Call InfoHechizo(UserIndex)
         Damage = RandomNumber(Hechizos(h).MinAgilidad, Hechizos(h).MaxAgilidad)
-        UserList(tempChr).flags.DuracionEfecto = Hechizos(h).Duration
+        Call EffectsOverTime.CreateBuffPotenciado(tempChr, Hechizos(h).Duration)
         UserList(tempChr).Stats.UserAtributos(e_Atributos.Agilidad) = MinimoInt(UserList(tempChr).Stats.UserAtributos(e_Atributos.Agilidad) + Damage, UserList( _
                 tempChr).Stats.UserAtributosBackUP(e_Atributos.Agilidad) * 2)
         UserList(tempChr).flags.TomoPocion = True
@@ -2925,7 +3260,7 @@ Sub HechizoPropUsuario(ByVal UserIndex As Integer, ByRef b As Boolean, ByRef IsA
         Call InfoHechizo(UserIndex)
         UserList(tempChr).flags.TomoPocion = True
         Damage = RandomNumber(Hechizos(h).MinAgilidad, Hechizos(h).MaxAgilidad)
-        UserList(tempChr).flags.DuracionEfecto = Hechizos(h).Duration
+        Call EffectsOverTime.CreateBuffPotenciado(tempChr, Hechizos(h).Duration)
         If UserList(tempChr).Stats.UserAtributos(e_Atributos.Agilidad) - Damage < MINATRIBUTOS Then
             UserList(tempChr).Stats.UserAtributos(e_Atributos.Agilidad) = MINATRIBUTOS
         Else
@@ -2988,7 +3323,7 @@ Sub HechizoPropUsuario(ByVal UserIndex As Integer, ByRef b As Boolean, ByRef IsA
             End Select
         End If
         Damage = RandomNumber(Hechizos(h).MinFuerza, Hechizos(h).MaxFuerza)
-        UserList(tempChr).flags.DuracionEfecto = Hechizos(h).Duration
+        Call EffectsOverTime.CreateBuffPotenciado(tempChr, Hechizos(h).Duration)
         UserList(tempChr).Stats.UserAtributos(e_Atributos.Fuerza) = MinimoInt(UserList(tempChr).Stats.UserAtributos(e_Atributos.Fuerza) + Damage, UserList( _
                 tempChr).Stats.UserAtributosBackUP(e_Atributos.Fuerza) * 2)
         UserList(tempChr).flags.TomoPocion = True
@@ -3008,7 +3343,7 @@ Sub HechizoPropUsuario(ByVal UserIndex As Integer, ByRef b As Boolean, ByRef IsA
         End If
         UserList(tempChr).flags.TomoPocion = True
         Damage = RandomNumber(Hechizos(h).MinFuerza, Hechizos(h).MaxFuerza)
-        UserList(tempChr).flags.DuracionEfecto = Hechizos(h).Duration
+        Call EffectsOverTime.CreateBuffPotenciado(tempChr, Hechizos(h).Duration)
         If UserList(tempChr).Stats.UserAtributos(e_Atributos.Fuerza) - Damage < MINATRIBUTOS Then
             UserList(tempChr).Stats.UserAtributos(e_Atributos.Fuerza) = MINATRIBUTOS
         Else
@@ -3214,7 +3549,7 @@ Sub HechizoCombinados(ByVal UserIndex As Integer, ByRef b As Boolean, ByRef IsAl
         End If
         enviarInfoHechizo = True
         Damage = RandomNumber(Hechizos(h).MinAgilidad, Hechizos(h).MaxAgilidad)
-        UserList(targetUserIndex).flags.DuracionEfecto = Hechizos(h).Duration
+        Call EffectsOverTime.CreateBuffPotenciado(targetUserIndex, Hechizos(h).Duration)
         UserList(targetUserIndex).Stats.UserAtributos(e_Atributos.Agilidad) = MinimoInt(UserList(targetUserIndex).Stats.UserAtributos(e_Atributos.Agilidad) + Damage, UserList( _
                 targetUserIndex).Stats.UserAtributosBackUP(e_Atributos.Agilidad) * 2)
         UserList(targetUserIndex).flags.TomoPocion = True
@@ -3228,7 +3563,7 @@ Sub HechizoCombinados(ByVal UserIndex As Integer, ByRef b As Boolean, ByRef IsAl
         enviarInfoHechizo = True
         UserList(targetUserIndex).flags.TomoPocion = True
         Damage = RandomNumber(Hechizos(h).MinAgilidad, Hechizos(h).MaxAgilidad)
-        UserList(targetUserIndex).flags.DuracionEfecto = Hechizos(h).Duration
+        Call EffectsOverTime.CreateBuffPotenciado(targetUserIndex, Hechizos(h).Duration)
         If UserList(targetUserIndex).Stats.UserAtributos(e_Atributos.Agilidad) - Damage < 6 Then
             UserList(targetUserIndex).Stats.UserAtributos(e_Atributos.Agilidad) = MINATRIBUTOS
         Else
@@ -3255,7 +3590,7 @@ Sub HechizoCombinados(ByVal UserIndex As Integer, ByRef b As Boolean, ByRef IsAl
             End If
         End If
         Damage = RandomNumber(Hechizos(h).MinFuerza, Hechizos(h).MaxFuerza)
-        UserList(targetUserIndex).flags.DuracionEfecto = Hechizos(h).Duration
+        Call EffectsOverTime.CreateBuffPotenciado(targetUserIndex, Hechizos(h).Duration)
         UserList(targetUserIndex).Stats.UserAtributos(e_Atributos.Fuerza) = MinimoInt(UserList(targetUserIndex).Stats.UserAtributos(e_Atributos.Fuerza) + Damage, UserList( _
                 targetUserIndex).Stats.UserAtributosBackUP(e_Atributos.Fuerza) * 2)
         UserList(targetUserIndex).flags.TomoPocion = True
@@ -3269,7 +3604,7 @@ Sub HechizoCombinados(ByVal UserIndex As Integer, ByRef b As Boolean, ByRef IsAl
         End If
         UserList(targetUserIndex).flags.TomoPocion = True
         Damage = RandomNumber(Hechizos(h).MinFuerza, Hechizos(h).MaxFuerza)
-        UserList(targetUserIndex).flags.DuracionEfecto = Hechizos(h).Duration
+        Call EffectsOverTime.CreateBuffPotenciado(targetUserIndex, Hechizos(h).Duration)
         If UserList(targetUserIndex).Stats.UserAtributos(e_Atributos.Fuerza) - Damage < 6 Then
             UserList(targetUserIndex).Stats.UserAtributos(e_Atributos.Fuerza) = MINATRIBUTOS
         Else

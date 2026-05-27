@@ -559,6 +559,7 @@ Sub Main()
     Call CargarHechizos
     frmCargando.Label1(2).Caption = "Cargando EffectsOverTime.Dat"
     Call LoadEffectOverTime
+    Call LoadPoisonProfiles
     frmCargando.Label1(2).Caption = "Cargando Objetos de Herrería"
     Call LoadArmasHerreria
     Call LoadArmadurasHerreria

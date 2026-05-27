@@ -30,6 +30,11 @@ Option Explicit
 ' AI Default values
 Public Const DEFAULT_NPC_VISION_RANGE_X             As Integer = 15
 Public Const DEFAULT_NPC_VISION_RANGE_Y             As Integer = 13
+Public Const FULL_VIEW_HALF_X                       As Byte = 18
+Public Const FULL_VIEW_HALF_Y                       As Byte = 14
+Public Const FULL_ACTION_LEFT_X                     As Byte = 15
+Public Const FULL_ACTION_RIGHT_X                    As Byte = 14
+Public Const FULL_ACTION_HALF_Y                     As Byte = 10
 Public Const DEFAULT_NPC_SPELL_RANGE_X              As Integer = 11
 Public Const DEFAULT_NPC_SPELL_RANGE_Y              As Integer = 9
 Public Const DEFAULT_NPC_MAX_VISION_RANGE           As Integer = 100

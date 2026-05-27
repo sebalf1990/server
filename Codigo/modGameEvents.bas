@@ -61,6 +61,8 @@ Public Sub MaybeRunGameEvents()
                         Call EfectoFrio(iUserIndex)
                         If .flags.Envenenado <> 0 Then Call EfectoVeneno(iUserIndex)
                         If .flags.Incinerado <> 0 Then Call EfectoIncineramiento(iUserIndex)
+                        ' Sistema venenos (TOGGLE26): timer/expiracion del untado de arma
+                        If .flags.PoisonedWeaponObjIndex > 0 Then Call CheckPoisonedWeaponTick(iUserIndex)
                     End If
                     If .flags.Meditando Then Call DoMeditar(iUserIndex)
                     If .flags.Mimetizado <> 0 Then Call EfectoMimetismo(iUserIndex)

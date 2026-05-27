@@ -1323,6 +1323,11 @@ Sub ResetUserSlot(ByVal UserIndex As Integer)
         Call SetUserRef(.Grupo.Miembros(4), 0)
         Call SetUserRef(.Grupo.Miembros(5), 0)
         Call ClearEffectList(.EffectOverTime)
+        ' Sistema venenos (TOGGLE26): limpiar untados temporales al desconectar (no persisten)
+        If IsFeatureEnabled("new_poison_system") Then
+            Call ClearPoisonedWeapon(UserIndex)
+            Call ClearPoisonedAmmo(UserIndex, "", "desconexion")
+        End If
         Call ClearModifiers(.Modifiers)
     End With
     Call ResetQuestStats(UserIndex)
@@ -1392,6 +1397,11 @@ Sub ClearAndSaveUser(ByVal UserIndex As Integer)
             .flags.Mimetizado = e_EstadoMimetismo.Desactivado
         End If
         Call ClearEffectList(.EffectOverTime, e_EffectType.eAny, False)
+        ' Sistema venenos (TOGGLE26): limpiar untados temporales al desconectar (no persisten)
+        If IsFeatureEnabled("new_poison_system") Then
+            Call ClearPoisonedWeapon(UserIndex)
+            Call ClearPoisonedAmmo(UserIndex, "", "desconexion")
+        End If
         errordesc = "ERROR AL LIMPIAR INVENTARIO DE CRAFTEO"
         If .flags.Crafteando <> 0 Then
             Call ReturnCraftingItems(UserIndex)

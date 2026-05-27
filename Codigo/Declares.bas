@@ -76,6 +76,8 @@ Public Enum e_PotionType
     SuicidePotion = 21
     'ResetCharacter = 22
     AppliesEffectOverTime = 23
+    AppliesPoisonToWeapon = 24
+    CuresPoison = 25
 End Enum
 
 Public Enum e_AccionBarra
@@ -1718,6 +1720,11 @@ Public Enum e_SpellEffects
     AdjustStatsWithCaster = 1048576
     ToggleDivineBlood = 2097152
     CancelActiveEffect = 4194304
+    ' Granularidad de curacion de veneno por familia (TOGGLE26)
+    ' El bit viejo CurePoison sigue funcionando como atajo (cura las 3 familias).
+    CurePoisonMinor = 8388608
+    CurePoisonHemo = 16777216
+    CurePoisonNeuro = 33554432
 End Enum
 
 Public Enum e_TargetEffectType
@@ -1807,6 +1814,44 @@ Public Type t_Hechizo
     MaxLevelCasteable As Byte
     IsElementalTagsOnly As Boolean
     UserDetectMask As Byte
+    ' --- Sistema de venenos (TOGGLE26 new_poison_system) ---
+    FamiliaVeneno As Byte               ' 0=ninguna, 1=Menor, 2=Hemo, 3=Neuro
+    ChanceAplicarPct As Long
+    PermiteResistencia As Byte
+    TickIntervaloMs As Long
+    DuracionMs As Long
+    DanoModo As Byte
+    DanoMin As Long
+    DanoMax As Long
+    FactorPvP As Single
+    FactorPvE As Single
+    DanoPorStackModo As Byte
+    DanoPorStackMin As Long
+    DanoPorStackMax As Long
+    StacksMax As Integer
+    GolpesQueSumanStacks As Integer
+    IntervaloDecayStackMs As Long
+    RefrescaTimerAlStackear As Byte
+    PenalidadPunteriaPct As Long
+    PenalidadEvasionPct As Long
+    PenalidadBloqueoEscudoPct As Long
+    ChancePifiaHechizoPct As Long
+    RegenManaReduccionPct As Long
+    RegenManaReduccionFija As Long
+    BloqueaRegenManaTotal As Byte
+    ' Hechizo Envenenar Arma
+    TipoHechizoVeneno As Byte           ' 0=ninguno, 1=untar_arma, 2=purificacion
+    NeuroInpifiable As Byte             ' 1=hechizo inmune a pifia Neuro, 0=puede pifiar (default 0)
+    TargetEsObjetoEquipado As Byte
+    CargasQueOtorga As Integer
+    ChancePorGolpePct As Long
+    ' Hechizos curativos
+    CuraMenor As Byte
+    CuraMenorValor As Integer
+    CuraHemo As Byte
+    CuraHemoValor As Integer
+    CuraNeuro As Byte
+    CuraNeuroValor As Integer
 End Type
 
 Public Type t_ActiveModifiers
@@ -2397,6 +2442,70 @@ Public Type t_ObjData
     ArrowCategory As Byte
     RepairTo As Integer ' ObjIndex of the item granted when this object is repaired.
     ProfesionId As Integer ' id de profesion que este manual/pocion afecta (0 = no aplica)
+    FlechaVenenoFamilia As Byte        ' Solo flechas: 0=normal, 1=Menor, 2=Hemo, 3=Neuro
+    ' --- Sistema de venenos (TOGGLE26 new_poison_system) ---
+    ' Comun a armas (Subtipo=10/11), viales (TipoPocion=24) y pociones curativas (TipoPocion=25)
+    FamiliaVeneno As Byte               ' 0=ninguna, 1=Menor, 2=Hemo, 3=Neuro
+    FamiliasCompatibles As String       ' CSV para armas envenenables Subtipo=11 (ej "1,2,3")
+    ChanceAplicarPct As Long
+    TickIntervaloMs As Long
+    DuracionMs As Long
+    DanoModo As Byte                    ' 0=fijo, 1=rango, 2=pct_hp, 3=pct_hp_rango
+    DanoMin As Long
+    DanoMax As Long
+    FactorPvP As Single
+    FactorPvE As Single
+    ' Hemo (familia=2)
+    DanoPorStackModo As Byte
+    DanoPorStackMin As Long
+    DanoPorStackMax As Long
+    StacksMax As Integer
+    GolpesQueSumanStacks As Integer
+    IntervaloDecayStackMs As Long
+    RefrescaTimerAlStackear As Byte
+    ' Neuro (familia=3)
+    PenalidadPunteriaPct As Long
+    PenalidadEvasionPct As Long
+    PenalidadBloqueoEscudoPct As Long
+    ChancePifiaHechizoPct As Long
+    RegenManaReduccionPct As Long
+    RegenManaReduccionFija As Long
+    BloqueaRegenManaTotal As Byte
+    ' Vial Subtipo TipoPocion=24
+    CargasQueOtorga As Integer
+    ChancePorGolpePct As Long
+    DuracionMaximaUntadoMs As Long
+    TiempoCasteoAplicacionMs As Long
+    ' Pociones curativas TipoPocion=25 (matriz)
+    CuraMenor As Byte                   ' 0=no afecta, 1=eliminar, 2=reducir N stacks
+    CuraMenorValor As Integer
+    CuraHemo As Byte
+    CuraHemoValor As Integer
+    CuraNeuro As Byte
+    CuraNeuroValor As Integer
+    PoisonCooldownMs As Long
+    ' Resistencias en items equipables (aditivas)
+    ' Chance unica por familia (aplica vs arma/hechizo/NPC sin distincion)
+    ResistChanceVenenoMenorPct As Long
+    ResistChanceHemoPct As Long
+    ResistChanceNeuroPct As Long
+    ' Dano: cascada flat -> %. Min/Max random por tick. Si min=max es fijo.
+    ResistDanoVenenoMenorMinFlat As Long
+    ResistDanoVenenoMenorMaxFlat As Long
+    ResistDanoVenenoMenorMinPct As Long
+    ResistDanoVenenoMenorMaxPct As Long
+    ResistDanoHemoMinFlat As Long
+    ResistDanoHemoMaxFlat As Long
+    ResistDanoHemoMinPct As Long
+    ResistDanoHemoMaxPct As Long
+    ResistDanoNeuroMinFlat As Long
+    ResistDanoNeuroMaxFlat As Long
+    ResistDanoNeuroMinPct As Long
+    ResistDanoNeuroMaxPct As Long
+    ' Inmunidad total: bloqueo absoluto desde cualquier fuente
+    InmunidadVenenoMenor As Byte
+    InmunidadHemo As Byte
+    InmunidadNeuro As Byte
 End Type
 
 '[Pablo ToxicWaste]
@@ -2623,6 +2732,81 @@ Public Type t_UserFlags
     TimerLanzarSpell As Long
     PuedeTrabajar As Byte
     Envenenado As Byte
+    ' --- Sistema de venenos nuevo (TOGGLE26) ---
+    PoisonMinorActive As Byte
+    PoisonHemoStacks As Integer
+    PoisonNeuroActive As Byte
+    ' Penalidades activas de Neuro (cacheadas para no consultar EOT en cada calculo)
+    PoisonNeuroPenalidadPunteriaPct As Long
+    PoisonNeuroPenalidadEvasionPct As Long
+    PoisonNeuroPenalidadBloqueoEscudoPct As Long
+    PoisonNeuroChancePifiaHechizoPct As Long
+    PoisonNeuroRegenManaReduccionPct As Long
+    PoisonNeuroRegenManaReduccionFija As Long
+    PoisonNeuroBloqueaRegenManaTotal As Byte
+    ' Untado de arma (TOGGLE26): estado del vial aplicado al arma envenenable equipada.
+    ' No se persiste (se pierde al desconectar y al desequipar, decision cerrada del plan).
+    PoisonedWeaponObjIndex As Integer
+    PoisonedWeaponFamilia As Byte
+    PoisonedWeaponCargas As Integer
+    PoisonedWeaponAppliedTick As Long
+    PoisonedWeaponDuracionMaxMs As Long
+    PoisonedWeaponChanceAplicarPct As Long
+    PoisonedWeaponChancePorGolpePct As Long
+    PoisonedWeaponTickIntervaloMs As Long
+    PoisonedWeaponDuracionEfectoMs As Long
+    PoisonedWeaponDanoModo As Byte
+    PoisonedWeaponDanoMin As Long
+    PoisonedWeaponDanoMax As Long
+    PoisonedWeaponFactorPvP As Single
+    PoisonedWeaponFactorPvE As Single
+    ' Hemo-specifico (familia=2): cuando vial es de Hemo
+    PoisonedWeaponDanoPorStackModo As Byte
+    PoisonedWeaponDanoPorStackMin As Long
+    PoisonedWeaponDanoPorStackMax As Long
+    PoisonedWeaponStacksMax As Integer
+    PoisonedWeaponGolpesQueSumanStacks As Integer
+    PoisonedWeaponIntervaloDecayStackMs As Long
+    PoisonedWeaponRefrescaTimerAlStackear As Byte
+    ' Neuro-specifico (familia=3): cuando vial es de Neuro
+    PoisonedWeaponPenalidadPunteriaPct As Long
+    PoisonedWeaponPenalidadEvasionPct As Long
+    PoisonedWeaponPenalidadBloqueoEscudoPct As Long
+    PoisonedWeaponChancePifiaHechizoPct As Long
+    PoisonedWeaponRegenManaReduccionPct As Long
+    PoisonedWeaponRegenManaReduccionFija As Long
+    PoisonedWeaponBloqueaRegenManaTotal As Byte
+    ' Untado de municion (TOGGLE26): cache independiente para el stack de flechas equipado.
+    PoisonedAmmoObjIndex As Integer
+    PoisonedAmmoFamilia As Byte
+    PoisonedAmmoCargas As Integer
+    PoisonedAmmoAppliedTick As Long
+    PoisonedAmmoDuracionMaxMs As Long
+    PoisonedAmmoDuracionEfectoMs As Long
+    PoisonedAmmoTickIntervaloMs As Long
+    PoisonedAmmoChanceAplicarPct As Long
+    PoisonedAmmoChancePorGolpePct As Long
+    PoisonedAmmoDanoModo As Byte
+    PoisonedAmmoDanoMin As Long
+    PoisonedAmmoDanoMax As Long
+    PoisonedAmmoFactorPvP As Single
+    PoisonedAmmoFactorPvE As Single
+    ' Hemo-specifico (familia=2): cuando el stack de flechas esta untado con Hemo
+    PoisonedAmmoDanoPorStackModo As Byte
+    PoisonedAmmoDanoPorStackMin As Long
+    PoisonedAmmoDanoPorStackMax As Long
+    PoisonedAmmoStacksMax As Integer
+    PoisonedAmmoGolpesQueSumanStacks As Integer
+    PoisonedAmmoIntervaloDecayStackMs As Long
+    PoisonedAmmoRefrescaTimerAlStackear As Byte
+    ' Neuro-specifico (familia=3): cuando el stack de flechas esta untado con Neuro
+    PoisonedAmmoPenalidadPunteriaPct As Long
+    PoisonedAmmoPenalidadEvasionPct As Long
+    PoisonedAmmoPenalidadBloqueoEscudoPct As Long
+    PoisonedAmmoChancePifiaHechizoPct As Long
+    PoisonedAmmoRegenManaReduccionPct As Long
+    PoisonedAmmoRegenManaReduccionFija As Long
+    PoisonedAmmoBloqueaRegenManaTotal As Byte
     Paralizado As Byte
     Estupidez As Byte
     Ceguera As Byte
@@ -2792,6 +2976,10 @@ Public Type t_UserCounters
     Ocultando As Long   ' Unico trabajo no revisado por el centinela
     goHome As Long
     LastSave As Long
+    ' Sistema venenos (TOGGLE26): cooldown global de pociones curativas + cooldown Hemo parcial
+    LastPoisonCurePotion As Long
+    LastPoisonHemoPartialPotion As Long
+    PoisonedWeaponTimerTick As Integer
     CuentaRegresiva As Integer
     TimerBarra As Integer
     LastResetTick As Long
@@ -2953,7 +3141,7 @@ Public Type t_ConnectionInfo
     OnConnectTimestamp As Long
 End Type
 
-Public Const HotKeyCount As Integer = 10
+Public Const HotKeyCount As Integer = 20
 
 'Tipo de los Usuarios
 Public Type t_User
@@ -3314,6 +3502,26 @@ Public Type t_NpcInfoCache
     Caminata() As t_NpcCaminataCache
     EsMaestroProfesion As Byte
     ProfesionEnsenada As Integer
+    ' --- Sistema de venenos (TOGGLE26 new_poison_system) ---
+    PerfilVenenoAplica As String        ' nombre de perfil en PerfilesVenenoNPC.dat, vacio=no aplica
+    ChanceAplicarPct As Long
+    ResistChanceVenenoMenorPct As Long
+    ResistDanoVenenoMenorPct As Long
+    ResistDanoVenenoMenorFlat As Long
+    ResistChanceHemoPct As Long
+    ResistDanoHemoPct As Long
+    ResistDanoHemoFlat As Long
+    ResistChanceNeuroPct As Long
+    ResistDanoNeuroPct As Long
+    ResistDanoNeuroFlat As Long
+    InmunidadVenenoMenor As Byte
+    InmunidadHemo As Byte
+    InmunidadNeuro As Byte
+    ' Resistencia generica (afecta cualquier familia, se suma a la especifica)
+    InmunidadVenenoGenerica As Byte
+    ResistChanceVenenoGenericoPct As Long
+    ResistDanoVenenoGenericoFlat As Long
+    ResistDanoVenenoGenericoPct As Long
 End Type
 
 Public Enum e_TipoAI
@@ -3730,8 +3938,43 @@ Public Enum e_EffectOverTimeType
     eBonusDamage = 17
     eMinimapRadar = 18
     eMinimapUserDetect = 19
+    ePoisonMinor = 20
+    ePoisonHemo = 21
+    ePoisonNeuro = 22
+    eBuffPotenciado = 23
     [EffectTypeCount]
 End Enum
+
+' === Sistema de venenos: perfiles intermedios para NPCs (TOGGLE26) ===
+Public Type t_PoisonProfile
+    nombre As String
+    FamiliaVeneno As Byte
+    ChanceAplicarPct As Long
+    TickIntervaloMs As Long
+    DuracionMs As Long
+    DanoModo As Byte
+    DanoMin As Long
+    DanoMax As Long
+    FactorPvP As Single
+    FactorPvE As Single
+    DanoPorStackModo As Byte
+    DanoPorStackMin As Long
+    DanoPorStackMax As Long
+    StacksMax As Integer
+    GolpesQueSumanStacks As Integer
+    IntervaloDecayStackMs As Long
+    RefrescaTimerAlStackear As Byte
+    PenalidadPunteriaPct As Long
+    PenalidadEvasionPct As Long
+    PenalidadBloqueoEscudoPct As Long
+    ChancePifiaHechizoPct As Long
+    RegenManaReduccionPct As Long
+    RegenManaReduccionFija As Long
+    BloqueaRegenManaTotal As Byte
+End Type
+
+Public PoisonProfiles() As t_PoisonProfile
+Public PoisonProfileCount As Integer
 
 Public Enum e_RadarCategory
     eRadarHostile = 0

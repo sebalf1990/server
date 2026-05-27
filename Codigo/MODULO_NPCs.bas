@@ -760,8 +760,27 @@ errh:
     LogError ("Error en move npc " & NpcIndex & ". Error: " & Err.Number & " - " & Err.Description)
 End Function
 
-Sub NpcEnvenenarUser(ByVal UserIndex As Integer, ByVal VenenoNivel As Byte)
+Sub NpcEnvenenarUser(ByVal UserIndex As Integer, ByVal VenenoNivel As Byte, Optional ByVal NpcIndex As Integer = 0)
     On Error GoTo NpcEnvenenarUser_Err
+    ' --- Sistema venenos nuevo (TOGGLE26): si el NPC tiene perfil asignado, usar EOT nuevo ---
+    If IsFeatureEnabled("new_poison_system") And NpcIndex > 0 Then
+        Dim npcType As Integer
+        npcType = NpcList(NpcIndex).Numero
+        If LenB(NpcInfoCache(npcType).PerfilVenenoAplica) > 0 Then
+            Dim pidx As Integer
+            pidx = FindPoisonProfile(NpcInfoCache(npcType).PerfilVenenoAplica)
+            If pidx > 0 Then
+                Dim chNpc As Long
+                chNpc = NpcInfoCache(npcType).ChanceAplicarPct
+                If chNpc <= 0 Then chNpc = 30  ' fallback al chance legacy si NPC no declara
+                If RandomNumber(1, 100) <= chNpc Then
+                    Call ApplyPoisonProfileToUser(NpcIndex, UserIndex, pidx)
+                End If
+                Exit Sub  ' nueva ruta, no caemos al legacy
+            End If
+        End If
+    End If
+    ' --- Rama legacy ---
     Dim n As Integer
     n = RandomNumber(1, 100)
     If n < 30 Then
@@ -1017,6 +1036,26 @@ Private Sub LoadNpcInfoIntoCache(ByVal NpcNumber As Integer)
         .DesistirExtra = Val(LeerNPCs.GetValue(SectionName, "DesistirExtra"))
         .GiveEXPClan = Val(LeerNPCs.GetValue(SectionName, "GiveEXPClan"))
         .Veneno = Val(LeerNPCs.GetValue(SectionName, "Veneno"))
+        ' --- Sistema venenos nuevo (TOGGLE26) ---
+        .PerfilVenenoAplica = LeerNPCs.GetValue(SectionName, "PerfilVenenoAplica")
+        .ChanceAplicarPct = Val(LeerNPCs.GetValue(SectionName, "ChanceAplicarPct"))
+        .ResistChanceVenenoMenorPct = Val(LeerNPCs.GetValue(SectionName, "ResistChanceVenenoMenorPct"))
+        .ResistDanoVenenoMenorPct = Val(LeerNPCs.GetValue(SectionName, "ResistDanoVenenoMenorPct"))
+        .ResistDanoVenenoMenorFlat = Val(LeerNPCs.GetValue(SectionName, "ResistDanoVenenoMenorFlat"))
+        .ResistChanceHemoPct = Val(LeerNPCs.GetValue(SectionName, "ResistChanceHemoPct"))
+        .ResistDanoHemoPct = Val(LeerNPCs.GetValue(SectionName, "ResistDanoHemoPct"))
+        .ResistDanoHemoFlat = Val(LeerNPCs.GetValue(SectionName, "ResistDanoHemoFlat"))
+        .ResistChanceNeuroPct = Val(LeerNPCs.GetValue(SectionName, "ResistChanceNeuroPct"))
+        .ResistDanoNeuroPct = Val(LeerNPCs.GetValue(SectionName, "ResistDanoNeuroPct"))
+        .ResistDanoNeuroFlat = Val(LeerNPCs.GetValue(SectionName, "ResistDanoNeuroFlat"))
+        .InmunidadVenenoMenor = Val(LeerNPCs.GetValue(SectionName, "InmunidadVenenoMenor"))
+        .InmunidadHemo = Val(LeerNPCs.GetValue(SectionName, "InmunidadHemo"))
+        .InmunidadNeuro = Val(LeerNPCs.GetValue(SectionName, "InmunidadNeuro"))
+        ' Resistencia generica (independiente de familia)
+        .InmunidadVenenoGenerica = Val(LeerNPCs.GetValue(SectionName, "InmunidadVenenoGenerica"))
+        .ResistChanceVenenoGenericoPct = Val(LeerNPCs.GetValue(SectionName, "ResistChanceVenenoGenericoPct"))
+        .ResistDanoVenenoGenericoFlat = Val(LeerNPCs.GetValue(SectionName, "ResistDanoVenenoGenericoFlat"))
+        .ResistDanoVenenoGenericoPct = Val(LeerNPCs.GetValue(SectionName, "ResistDanoVenenoGenericoPct"))
         .Domable = Val(LeerNPCs.GetValue(SectionName, "Domable"))
         .AttackableByEveryone = Val(LeerNPCs.GetValue(SectionName, "AttackableByEveryone", 0))
         .MapEntryPrice = Val(LeerNPCs.GetValue(SectionName, "MapEntryPrice", 0))

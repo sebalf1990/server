@@ -442,16 +442,35 @@ End Sub
 
 Function InRangoVision(ByVal UserIndex As Integer, ByVal x As Integer, ByVal y As Integer) As Boolean
     On Error GoTo InRangoVision_Err
-    If x > UserList(UserIndex).pos.x - MinXBorder And x < UserList(UserIndex).pos.x + MinXBorder Then
-        If y > UserList(UserIndex).pos.y - MinYBorder And y < UserList(UserIndex).pos.y + MinYBorder Then
-            InRangoVision = True
-            Exit Function
-        End If
-    End If
-    InRangoVision = False
+    InRangoVision = InRangoVisionFull(UserIndex, x, y)
     Exit Function
 InRangoVision_Err:
     Call TraceError(Err.Number, Err.Description, "Extra.InRangoVision", Erl)
+End Function
+
+Function InRangoVisionFull(ByVal UserIndex As Integer, ByVal x As Integer, ByVal y As Integer) As Boolean
+    On Error GoTo InRangoVisionFull_Err
+    If Abs(UserList(UserIndex).pos.x - x) > FULL_VIEW_HALF_X Then Exit Function
+    If Abs(UserList(UserIndex).pos.y - y) > FULL_VIEW_HALF_Y Then Exit Function
+    InRangoVisionFull = True
+    Exit Function
+InRangoVisionFull_Err:
+    Call TraceError(Err.Number, Err.Description, "Extra.InRangoVisionFull", Erl)
+End Function
+
+Function InRangoVisionFullAction(ByVal UserIndex As Integer, ByVal x As Integer, ByVal y As Integer) As Boolean
+    On Error GoTo InRangoVisionFullAction_Err
+    Dim dx As Integer
+    Dim dy As Integer
+    dx = x - UserList(UserIndex).pos.x
+    dy = y - UserList(UserIndex).pos.y
+    If dx < -FULL_ACTION_LEFT_X Then Exit Function
+    If dx > FULL_ACTION_RIGHT_X Then Exit Function
+    If Abs(dy) > FULL_ACTION_HALF_Y Then Exit Function
+    InRangoVisionFullAction = True
+    Exit Function
+InRangoVisionFullAction_Err:
+    Call TraceError(Err.Number, Err.Description, "Extra.InRangoVisionFullAction", Erl)
 End Function
 
 Function InRangoVisionNPC(ByVal NpcIndex As Integer, ByVal x As Integer, ByVal y As Integer) As Boolean
@@ -981,7 +1000,7 @@ Sub LookatTile(ByVal UserIndex As Integer, ByVal Map As Integer, ByVal x As Inte
     Dim Statuses        As Long
     Dim FactionStatuses As Long
     '¿Rango Visión? (ToxicWaste)
-    If (Abs(UserList(UserIndex).pos.y - y) > RANGO_VISION_Y) Or (Abs(UserList(UserIndex).pos.x - x) > RANGO_VISION_X) Then
+    If Not InRangoVisionFull(UserIndex, x, y) Then
         Exit Sub
     End If
     '¿Posicion valida?

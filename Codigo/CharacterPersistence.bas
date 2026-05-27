@@ -329,6 +329,11 @@ Private Sub SetupUserFlags(ByRef User As t_User, ByRef RS As ADODB.Recordset)
     With User.flags
         .Desnudo = RS!is_naked
         .Envenenado = RS!is_poisoned
+        ' --- Sistema de venenos nuevo (TOGGLE26) ---
+        .PoisonMinorActive = SanitizeNullValue(RS!poison_minor_active, 0)
+        .PoisonHemoStacks = SanitizeNullValue(RS!poison_hemo_stacks, 0)
+        .PoisonNeuroActive = SanitizeNullValue(RS!poison_neuro_active, 0)
+        ' --- Fin sistema de venenos nuevo ---
         .Incinerado = RS!is_incinerated
         .Escondido = False
         .Ban = RS!is_banned
@@ -584,7 +589,7 @@ End Sub
 Private Sub SaveCharacterMainDB(ByRef U As t_User, ByRef QueryBreakdown As String)
     Dim QueryTimer As Long
     Dim Params() As Variant
-    ReDim Params(62)
+    ReDim Params(65)
     Dim i As Integer
     Params(post_increment(i)) = U.Stats.ELV
     Params(post_increment(i)) = U.Stats.Exp
@@ -648,6 +653,11 @@ Private Sub SaveCharacterMainDB(ByRef U As t_User, ByRef QueryBreakdown As Strin
     Params(post_increment(i)) = U.Stats.JineteLevel
     Params(post_increment(i)) = U.Char.BackpackAnim
     Params(post_increment(i)) = U.ProfessionForgotCount
+    ' --- Sistema de venenos nuevo (TOGGLE26) ---
+    Params(post_increment(i)) = U.flags.PoisonMinorActive
+    Params(post_increment(i)) = U.flags.PoisonHemoStacks
+    Params(post_increment(i)) = U.flags.PoisonNeuroActive
+    ' --- Fin sistema de venenos nuevo ---
     ' WHERE block
     Params(post_increment(i)) = U.Id
     Debug.Assert i = UBound(Params) + 1

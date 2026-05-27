@@ -1,0 +1,3 @@
+ALTER TABLE user ADD poison_minor_active INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE user ADD poison_hemo_stacks INTEGER NOT NULL DEFAULT 0;
+ALTER TABLE user ADD poison_neuro_active INTEGER NOT NULL DEFAULT 0;

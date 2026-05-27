@@ -244,7 +244,7 @@ Public Sub AceptarComercioUsu(ByVal UserIndex As Integer)
             Call TirarItemAlPiso(UserList(UserIndex).pos, UserList(OtroUserIndex).ComUsu.itemsAenviar(i))
         End If
         Call QuitarObjetos(UserList(OtroUserIndex).ComUsu.itemsAenviar(i).ObjIndex, UserList(OtroUserIndex).ComUsu.itemsAenviar(i).amount, OtroUserIndex, UserList( _
-                OtroUserIndex).ComUsu.itemsAenviar(i).ElementalTags)
+                OtroUserIndex).ComUsu.itemsAenviar(i).ElementalTags, "trade")
     Next i
     Dim j As Long
     For j = 1 To UBound(UserList(UserIndex).ComUsu.itemsAenviar)
@@ -252,7 +252,7 @@ Public Sub AceptarComercioUsu(ByVal UserIndex As Integer)
             Call TirarItemAlPiso(UserList(OtroUserIndex).pos, UserList(UserIndex).ComUsu.itemsAenviar(j))
         End If
         Call QuitarObjetos(UserList(UserIndex).ComUsu.itemsAenviar(j).ObjIndex, UserList(UserIndex).ComUsu.itemsAenviar(j).amount, UserIndex, UserList( _
-                UserIndex).ComUsu.itemsAenviar(j).ElementalTags)
+                UserIndex).ComUsu.itemsAenviar(j).ElementalTags, "trade")
     Next j
     Call UpdateUserInv(True, UserIndex, 0)
     Call UpdateUserInv(True, OtroUserIndex, 0)

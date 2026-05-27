@@ -1900,7 +1900,7 @@ Public Sub WriteFYA(ByVal UserIndex As Integer)
     Call Writer.WriteInt16(ServerPacketID.eFYA)
     Call Writer.WriteInt8(UserList(UserIndex).Stats.UserAtributos(1))
     Call Writer.WriteInt8(UserList(UserIndex).Stats.UserAtributos(2))
-    Call Writer.WriteInt16(UserList(UserIndex).flags.DuracionEfecto)
+    Call Writer.WriteInt16(0) ' Plan 25.003: DuracionEfecto se sirve via eSendSkillCdUpdate (Effect49 Potenciado)
     Call modSendData.SendData(ToIndex, UserIndex)
     Exit Sub
 WriteFYA_Err:
@@ -1922,7 +1922,7 @@ Public Sub WriteContadores(ByVal UserIndex As Integer)
     On Error GoTo WriteContadores_Err
     Call Writer.WriteInt16(ServerPacketID.eContadores)
     Call Writer.WriteInt16(UserList(UserIndex).Counters.Invisibilidad)
-    Call Writer.WriteInt16(UserList(UserIndex).flags.DuracionEfecto)
+    Call Writer.WriteInt16(0) ' Plan 25.003: DuracionEfecto se sirve via eSendSkillCdUpdate
     Call modSendData.SendData(ToIndex, UserIndex)
     Exit Sub
 WriteContadores_Err:
@@ -4412,6 +4412,22 @@ Public Sub WriteSendSkillCdUpdate(ByVal UserIndex As Integer, _
 WriteSendSkillCdUpdate_Err:
     Call Writer.Clear
     Call TraceError(Err.Number, Err.Description + " UI: " + UserIndex, "Argentum20Server.Protocol_Writes.writeUpdateShopClienteCredits", Erl)
+End Sub
+
+' === Sistema venenos (TOGGLE26): contador de stacks para Hemo ===
+' Se envia solo al UserIndex envenenado (visibilidad solo al dueno).
+' Stacks=0 indica apagar contador / efecto removido.
+Public Sub WriteUpdatePoisonStacks(ByVal UserIndex As Integer, ByVal UniqueId As Long, ByVal Stacks As Integer)
+    On Error GoTo WriteUpdatePoisonStacks_Err
+    If UserIndex <= 0 Then Exit Sub
+    Call Writer.WriteInt16(ServerPacketID.eUpdatePoisonStacks)
+    Call Writer.WriteInt32(UniqueId)
+    Call Writer.WriteInt16(Stacks)
+    Call modSendData.SendData(ToIndex, UserIndex)
+    Exit Sub
+WriteUpdatePoisonStacks_Err:
+    Call Writer.Clear
+    Call TraceError(Err.Number, Err.Description, "Argentum20Server.Protocol_Writes.WriteUpdatePoisonStacks", Erl)
 End Sub
 
 Public Sub WriteObjQuestSend(ByVal UserIndex As Integer, ByVal QuestIndex As Integer, ByVal Slot As Byte)

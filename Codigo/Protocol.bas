@@ -2577,7 +2577,7 @@ Private Sub HandleWorkLeftClick(ByVal UserIndex As Integer)
                 'Validate target
                 If IsValidUserRef(.flags.TargetUser) Then
                     'Only allow to atack if the other one can retaliate (can see us)
-                    If Abs(UserList(tU).pos.y - .pos.y) > RANGO_VISION_Y Then
+                    If Not InRangoVisionFullAction(UserIndex, UserList(tU).pos.x, UserList(tU).pos.y) Then
                         ' Msg8=Estas demasiado lejos.
                         Call WriteLocaleMsg(UserIndex, MSG_SACERDOTE_PUEDE_CURARTE_DEBIDO_DEMASIADO_LEJOS, e_FontTypeNames.FONTTYPE_INFO)
                         Call WriteWorkRequestTarget(UserIndex, 0)
@@ -2629,7 +2629,7 @@ Private Sub HandleWorkLeftClick(ByVal UserIndex As Integer)
                     consumirMunicion = True
                 ElseIf tN > 0 Then
                     'Only allow to atack if the other one can retaliate (can see us)
-                    If Abs(NpcList(tN).pos.y - .pos.y) > RANGO_VISION_Y And Abs(NpcList(tN).pos.x - .pos.x) > RANGO_VISION_X Then
+                    If Not InRangoVisionFullAction(UserIndex, NpcList(tN).pos.x, NpcList(tN).pos.y) Then
                         ' Msg8=Estas demasiado lejos.
                         Call WriteLocaleMsg(UserIndex, MSG_SACERDOTE_PUEDE_CURARTE_DEBIDO_DEMASIADO_LEJOS, e_FontTypeNames.FONTTYPE_INFO)
                         Call WriteWorkRequestTarget(UserIndex, 0)
@@ -2666,8 +2666,12 @@ Private Sub HandleWorkLeftClick(ByVal UserIndex As Integer)
                         End If
                         If DummyInt <> 0 Then
                             'Take 1 arrow away - we do it AFTER hitting, since if Ammo Slot is 0 it gives a rt9 and kicks players
+                            If consumirMunicion Then
+                                Call OnPoisonedAmmoSwing(UserIndex, .Object(DummyInt).ObjIndex)
+                            End If
                             If consumirMunicion And Not IsConsumableFreeZone(UserIndex) Then
-                                Call QuitarUserInvItem(UserIndex, DummyInt, 1)
+                                Call QuitarUserInvItem(UserIndex, DummyInt, 1, True, "stack_agotado", _
+                                    "Te quedaste sin flechas envenenadas (el stack se agoto).")
                             End If
                             If .Object(DummyInt).amount > 0 Then
                                 'QuitarUserInvItem unequipps the ammo, so we equip it again
@@ -2689,7 +2693,7 @@ Private Sub HandleWorkLeftClick(ByVal UserIndex As Integer)
                 'Target whatever is in that tile
                 Call LookatTile(UserIndex, .pos.Map, x, y)
                 'If it's outside range log it and exit
-                If Abs(.pos.x - x) > RANGO_VISION_X Or Abs(.pos.y - y) > RANGO_VISION_Y Then
+                If Not InRangoVisionFull(UserIndex, x, y) Then
                     Call LogSecurity("Ataque fuera de rango de " & GetUserRealName(UserIndex) & "(" & .pos.Map & "/" & .pos.x & "/" & .pos.y & ") ip: " & .ConnectionDetails.IP & " a la posicion (" & _
                             .pos.Map & "/" & x & "/" & y & ")")
                     Exit Sub
@@ -6127,6 +6131,12 @@ Private Sub HandleMoveItem(ByVal UserIndex As Integer)
         
         If SlotViejo > getMaxInventorySlots(UserIndex) Or SlotNuevo > getMaxInventorySlots(UserIndex) Or SlotViejo <= 0 Or SlotNuevo <= 0 Then Exit Sub
         
+        If IsFeatureEnabled("new_poison_system") Then
+            If .invent.EquippedMunitionSlot = SlotViejo Or .invent.EquippedMunitionSlot = SlotNuevo Then
+                Call ClearPoisonedAmmo(UserIndex, "Ya no tenes flechas envenenadas equipadas.", "mover_inventario")
+            End If
+        End If
+
         'Reparacion de caña de pescar con hilo
         If TryRepairFishingRod(UserIndex, SlotViejo, SlotNuevo) Then Exit Sub
         

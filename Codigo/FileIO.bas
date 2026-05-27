@@ -568,6 +568,10 @@ Public Sub CargarHechizos()
         If val(Leer.GetValue("Hechizo" & Hechizo, "RemoverEstupidez")) > 0 Then Call SetMask(Hechizos(Hechizo).Effects, e_SpellEffects.RemoveDumb)
         If val(Leer.GetValue("Hechizo" & Hechizo, "RemueveInvisibilidadParcial")) > 0 Then Call SetMask(Hechizos(Hechizo).Effects, e_SpellEffects.RemoveInvisibility)
         If val(Leer.GetValue("Hechizo" & Hechizo, "CuraVeneno")) > 0 Then Call SetMask(Hechizos(Hechizo).Effects, e_SpellEffects.CurePoison)
+        ' --- Granularidad de cura por familia (TOGGLE26) ---
+        If val(Leer.GetValue("Hechizo" & Hechizo, "CuraVenenoMenor")) > 0 Then Call SetMask(Hechizos(Hechizo).Effects, e_SpellEffects.CurePoisonMinor)
+        If val(Leer.GetValue("Hechizo" & Hechizo, "CuraHemotoxina")) > 0 Then Call SetMask(Hechizos(Hechizo).Effects, e_SpellEffects.CurePoisonHemo)
+        If val(Leer.GetValue("Hechizo" & Hechizo, "CuraNeurotoxina")) > 0 Then Call SetMask(Hechizos(Hechizo).Effects, e_SpellEffects.CurePoisonNeuro)
         Hechizos(Hechizo).Envenena = val(Leer.GetValue("Hechizo" & Hechizo, "Envenena"))
         If val(Leer.GetValue("Hechizo" & Hechizo, "Maldicion")) > 0 Then Call SetMask(Hechizos(Hechizo).Effects, e_SpellEffects.Curse)
         If val(Leer.GetValue("Hechizo" & Hechizo, "RemoverMaldicion")) > 0 Then Call SetMask(Hechizos(Hechizo).Effects, e_SpellEffects.RemoveCurse)
@@ -596,6 +600,41 @@ Public Sub CargarHechizos()
         Hechizos(Hechizo).RequiereInstrumento = val(Leer.GetValue("Hechizo" & Hechizo, "RequiereInstrumento"))
         Hechizos(Hechizo).StaffAffected = CBool(val(Leer.GetValue("Hechizo" & Hechizo, "StaffAffected")))
         Hechizos(Hechizo).EotId = val(Leer.GetValue("Hechizo" & Hechizo, "EOTID"))
+        ' --- Sistema venenos nuevo (TOGGLE26) ---
+        Hechizos(Hechizo).FamiliaVeneno = val(Leer.GetValue("Hechizo" & Hechizo, "FamiliaVeneno"))
+        Hechizos(Hechizo).ChanceAplicarPct = val(Leer.GetValue("Hechizo" & Hechizo, "ChanceAplicarPct"))
+        Hechizos(Hechizo).TickIntervaloMs = val(Leer.GetValue("Hechizo" & Hechizo, "TickIntervaloMs"))
+        Hechizos(Hechizo).DuracionMs = val(Leer.GetValue("Hechizo" & Hechizo, "DuracionMs"))
+        Hechizos(Hechizo).DanoModo = val(Leer.GetValue("Hechizo" & Hechizo, "DanoModo"))
+        Hechizos(Hechizo).DanoMin = val(Leer.GetValue("Hechizo" & Hechizo, "DanoMin"))
+        Hechizos(Hechizo).DanoMax = val(Leer.GetValue("Hechizo" & Hechizo, "DanoMax"))
+        Hechizos(Hechizo).FactorPvP = val(Leer.GetValue("Hechizo" & Hechizo, "FactorPvP"))
+        Hechizos(Hechizo).FactorPvE = val(Leer.GetValue("Hechizo" & Hechizo, "FactorPvE"))
+        If Hechizos(Hechizo).FactorPvP <= 0 Then Hechizos(Hechizo).FactorPvP = 1
+        If Hechizos(Hechizo).FactorPvE <= 0 Then Hechizos(Hechizo).FactorPvE = 1
+        ' Hemo
+        Hechizos(Hechizo).DanoPorStackModo = val(Leer.GetValue("Hechizo" & Hechizo, "DanoPorStackModo"))
+        Hechizos(Hechizo).DanoPorStackMin = val(Leer.GetValue("Hechizo" & Hechizo, "DanoPorStackMin"))
+        Hechizos(Hechizo).DanoPorStackMax = val(Leer.GetValue("Hechizo" & Hechizo, "DanoPorStackMax"))
+        Hechizos(Hechizo).StacksMax = val(Leer.GetValue("Hechizo" & Hechizo, "StacksMax"))
+        Hechizos(Hechizo).GolpesQueSumanStacks = val(Leer.GetValue("Hechizo" & Hechizo, "GolpesQueSumanStacks"))
+        Hechizos(Hechizo).IntervaloDecayStackMs = val(Leer.GetValue("Hechizo" & Hechizo, "IntervaloDecayStackMs"))
+        Hechizos(Hechizo).RefrescaTimerAlStackear = val(Leer.GetValue("Hechizo" & Hechizo, "RefrescaTimerAlStackear"))
+        ' Neuro
+        Hechizos(Hechizo).PenalidadPunteriaPct = val(Leer.GetValue("Hechizo" & Hechizo, "PenalidadPunteriaPct"))
+        Hechizos(Hechizo).PenalidadEvasionPct = val(Leer.GetValue("Hechizo" & Hechizo, "PenalidadEvasionPct"))
+        Hechizos(Hechizo).PenalidadBloqueoEscudoPct = val(Leer.GetValue("Hechizo" & Hechizo, "PenalidadBloqueoEscudoPct"))
+        Hechizos(Hechizo).ChancePifiaHechizoPct = val(Leer.GetValue("Hechizo" & Hechizo, "ChancePifiaHechizoPct"))
+        Hechizos(Hechizo).RegenManaReduccionPct = val(Leer.GetValue("Hechizo" & Hechizo, "RegenManaReduccionPct"))
+        Hechizos(Hechizo).RegenManaReduccionFija = val(Leer.GetValue("Hechizo" & Hechizo, "RegenManaReduccionFija"))
+        Hechizos(Hechizo).BloqueaRegenManaTotal = val(Leer.GetValue("Hechizo" & Hechizo, "BloqueaRegenManaTotal"))
+        ' TipoHechizoVeneno: 0=ninguno, 1=untar_arma, 2=purificacion
+        Hechizos(Hechizo).TipoHechizoVeneno = val(Leer.GetValue("Hechizo" & Hechizo, "TipoHechizoVeneno"))
+        ' Campos para TipoHechizoVeneno=1 (untar arma)
+        Hechizos(Hechizo).CargasQueOtorga = val(Leer.GetValue("Hechizo" & Hechizo, "CargasQueOtorga"))
+        Hechizos(Hechizo).ChancePorGolpePct = val(Leer.GetValue("Hechizo" & Hechizo, "ChancePorGolpePct"))
+        ' NeuroInpifiable: por default 0 (todo hechizo puede pifiar). 1 lo hace inmune.
+        Hechizos(Hechizo).NeuroInpifiable = val(Leer.GetValue("Hechizo" & Hechizo, "NeuroInpifiable"))
         Hechizos(Hechizo).MaxLevelCasteable = val(Leer.GetValue("Hechizo" & Hechizo, "MaxLevelCasteable"))
         If val(Leer.GetValue("Hechizo" & Hechizo, "RequireArmor")) > 0 Then Call SetMask(Hechizos(Hechizo).SpellRequirementMask, e_SpellRequirementMask.eArmor)
         If val(Leer.GetValue("Hechizo" & Hechizo, "RequireShip")) > 0 Then Call SetMask(Hechizos(Hechizo).SpellRequirementMask, e_SpellRequirementMask.eShip)
@@ -735,6 +774,57 @@ Public Sub LoadEffectOverTime()
     Exit Sub
 ErrHandler:
     MsgBox "Error cargando EffectsOverTime.dat " & Err.Number & ": " & Err.Description
+End Sub
+
+' === Sistema de venenos nuevo (TOGGLE26 new_poison_system) ===
+' Carga PerfilesVenenoNPC.dat. Si el archivo no existe (deploy escalonado),
+' deja PoisonProfileCount=0 y no falla. Gateado por toggle: si esta off, no carga.
+Public Sub LoadPoisonProfiles()
+    On Error GoTo ErrHandler
+    PoisonProfileCount = 0
+    ReDim PoisonProfiles(0 To 0)
+    If Not IsFeatureEnabled("new_poison_system") Then Exit Sub
+    Dim fname As String
+    fname = DatPath & "PerfilesVenenoNPC.dat"
+    If LenB(dir(fname)) = 0 Then Exit Sub
+    Dim Leer As New clsIniManager
+    Call Leer.Initialize(fname)
+    PoisonProfileCount = val(Leer.GetValue("INIT", "ProfileCount"))
+    If PoisonProfileCount <= 0 Then Exit Sub
+    ReDim PoisonProfiles(1 To PoisonProfileCount)
+    Dim i As Integer
+    Dim sect As String
+    For i = 1 To PoisonProfileCount
+        sect = "PROFILE" & i
+        PoisonProfiles(i).nombre = Leer.GetValue(sect, "Name")
+        PoisonProfiles(i).FamiliaVeneno = val(Leer.GetValue(sect, "FamiliaVeneno"))
+        PoisonProfiles(i).ChanceAplicarPct = val(Leer.GetValue(sect, "ChanceAplicarPct"))
+        PoisonProfiles(i).TickIntervaloMs = val(Leer.GetValue(sect, "TickIntervaloMs"))
+        PoisonProfiles(i).DuracionMs = val(Leer.GetValue(sect, "DuracionMs"))
+        PoisonProfiles(i).DanoModo = val(Leer.GetValue(sect, "DanoModo"))
+        PoisonProfiles(i).DanoMin = val(Leer.GetValue(sect, "DanoMin"))
+        PoisonProfiles(i).DanoMax = val(Leer.GetValue(sect, "DanoMax"))
+        PoisonProfiles(i).FactorPvP = val(Leer.GetValue(sect, "FactorPvP"))
+        PoisonProfiles(i).FactorPvE = val(Leer.GetValue(sect, "FactorPvE"))
+        PoisonProfiles(i).DanoPorStackModo = val(Leer.GetValue(sect, "DanoPorStackModo"))
+        PoisonProfiles(i).DanoPorStackMin = val(Leer.GetValue(sect, "DanoPorStackMin"))
+        PoisonProfiles(i).DanoPorStackMax = val(Leer.GetValue(sect, "DanoPorStackMax"))
+        PoisonProfiles(i).StacksMax = val(Leer.GetValue(sect, "StacksMax"))
+        PoisonProfiles(i).GolpesQueSumanStacks = val(Leer.GetValue(sect, "GolpesQueSumanStacks"))
+        PoisonProfiles(i).IntervaloDecayStackMs = val(Leer.GetValue(sect, "IntervaloDecayStackMs"))
+        PoisonProfiles(i).RefrescaTimerAlStackear = val(Leer.GetValue(sect, "RefrescaTimerAlStackear"))
+        PoisonProfiles(i).PenalidadPunteriaPct = val(Leer.GetValue(sect, "PenalidadPunteriaPct"))
+        PoisonProfiles(i).PenalidadEvasionPct = val(Leer.GetValue(sect, "PenalidadEvasionPct"))
+        PoisonProfiles(i).PenalidadBloqueoEscudoPct = val(Leer.GetValue(sect, "PenalidadBloqueoEscudoPct"))
+        PoisonProfiles(i).ChancePifiaHechizoPct = val(Leer.GetValue(sect, "ChancePifiaHechizoPct"))
+        PoisonProfiles(i).RegenManaReduccionPct = val(Leer.GetValue(sect, "RegenManaReduccionPct"))
+        PoisonProfiles(i).RegenManaReduccionFija = val(Leer.GetValue(sect, "RegenManaReduccionFija"))
+        PoisonProfiles(i).BloqueaRegenManaTotal = val(Leer.GetValue(sect, "BloqueaRegenManaTotal"))
+    Next i
+    Set Leer = Nothing
+    Exit Sub
+ErrHandler:
+    MsgBox "Error cargando PerfilesVenenoNPC.dat " & Err.Number & ": " & Err.Description
 End Sub
 
 Sub LoadMotd()
@@ -1057,6 +1147,67 @@ Sub LoadOBJData()
             .ArrowCategory = val(Leer.GetValue(ObjKey, "ArrowCategory"))
             .RepairTo = val(Leer.GetValue(ObjKey, "RepairTo"))
             .ProfesionId = val(Leer.GetValue(ObjKey, "ProfesionId"))
+            ' --- Sistema de venenos nuevo (TOGGLE26 new_poison_system) ---
+            .FamiliaVeneno = val(Leer.GetValue(ObjKey, "FamiliaVeneno"))
+            .FamiliasCompatibles = Leer.GetValue(ObjKey, "FamiliasCompatibles")
+            .ChanceAplicarPct = val(Leer.GetValue(ObjKey, "ChanceAplicarPct"))
+            .TickIntervaloMs = val(Leer.GetValue(ObjKey, "TickIntervaloMs"))
+            .DuracionMs = val(Leer.GetValue(ObjKey, "DuracionMs"))
+            .DanoModo = val(Leer.GetValue(ObjKey, "DanoModo"))
+            .DanoMin = val(Leer.GetValue(ObjKey, "DanoMin"))
+            .DanoMax = val(Leer.GetValue(ObjKey, "DanoMax"))
+            .FactorPvP = val(Leer.GetValue(ObjKey, "FactorPvP"))
+            .FactorPvE = val(Leer.GetValue(ObjKey, "FactorPvE"))
+            If .FactorPvP <= 0 Then .FactorPvP = 1
+            If .FactorPvE <= 0 Then .FactorPvE = 1
+            ' Hemo
+            .DanoPorStackModo = val(Leer.GetValue(ObjKey, "DanoPorStackModo"))
+            .DanoPorStackMin = val(Leer.GetValue(ObjKey, "DanoPorStackMin"))
+            .DanoPorStackMax = val(Leer.GetValue(ObjKey, "DanoPorStackMax"))
+            .StacksMax = val(Leer.GetValue(ObjKey, "StacksMax"))
+            .GolpesQueSumanStacks = val(Leer.GetValue(ObjKey, "GolpesQueSumanStacks"))
+            .IntervaloDecayStackMs = val(Leer.GetValue(ObjKey, "IntervaloDecayStackMs"))
+            .RefrescaTimerAlStackear = val(Leer.GetValue(ObjKey, "RefrescaTimerAlStackear"))
+            ' Neuro
+            .PenalidadPunteriaPct = val(Leer.GetValue(ObjKey, "PenalidadPunteriaPct"))
+            .PenalidadEvasionPct = val(Leer.GetValue(ObjKey, "PenalidadEvasionPct"))
+            .PenalidadBloqueoEscudoPct = val(Leer.GetValue(ObjKey, "PenalidadBloqueoEscudoPct"))
+            .ChancePifiaHechizoPct = val(Leer.GetValue(ObjKey, "ChancePifiaHechizoPct"))
+            .RegenManaReduccionPct = val(Leer.GetValue(ObjKey, "RegenManaReduccionPct"))
+            .RegenManaReduccionFija = val(Leer.GetValue(ObjKey, "RegenManaReduccionFija"))
+            .BloqueaRegenManaTotal = val(Leer.GetValue(ObjKey, "BloqueaRegenManaTotal"))
+            ' Vial (TipoPocion=24)
+            .CargasQueOtorga = val(Leer.GetValue(ObjKey, "CargasQueOtorga"))
+            .ChancePorGolpePct = val(Leer.GetValue(ObjKey, "ChancePorGolpePct"))
+            .DuracionMaximaUntadoMs = val(Leer.GetValue(ObjKey, "DuracionMaximaUntadoMs"))
+            .TiempoCasteoAplicacionMs = val(Leer.GetValue(ObjKey, "TiempoCasteoAplicacionMs"))
+            ' Pociones curativas (TipoPocion=25)
+            .CuraMenor = val(Leer.GetValue(ObjKey, "CuraMenor"))
+            .CuraMenorValor = val(Leer.GetValue(ObjKey, "CuraMenorValor"))
+            .CuraHemo = val(Leer.GetValue(ObjKey, "CuraHemo"))
+            .CuraHemoValor = val(Leer.GetValue(ObjKey, "CuraHemoValor"))
+            .CuraNeuro = val(Leer.GetValue(ObjKey, "CuraNeuro"))
+            .CuraNeuroValor = val(Leer.GetValue(ObjKey, "CuraNeuroValor"))
+            .PoisonCooldownMs = val(Leer.GetValue(ObjKey, "PoisonCooldownMs"))
+            ' Resistencias en equipo (chance unica + dano flat/pct con min-max por familia)
+            .ResistChanceVenenoMenorPct = val(Leer.GetValue(ObjKey, "ResistChanceVenenoMenorPct"))
+            .ResistChanceHemoPct = val(Leer.GetValue(ObjKey, "ResistChanceHemoPct"))
+            .ResistChanceNeuroPct = val(Leer.GetValue(ObjKey, "ResistChanceNeuroPct"))
+            .ResistDanoVenenoMenorMinFlat = val(Leer.GetValue(ObjKey, "ResistDanoVenenoMenorMinFlat"))
+            .ResistDanoVenenoMenorMaxFlat = val(Leer.GetValue(ObjKey, "ResistDanoVenenoMenorMaxFlat"))
+            .ResistDanoVenenoMenorMinPct = val(Leer.GetValue(ObjKey, "ResistDanoVenenoMenorMinPct"))
+            .ResistDanoVenenoMenorMaxPct = val(Leer.GetValue(ObjKey, "ResistDanoVenenoMenorMaxPct"))
+            .ResistDanoHemoMinFlat = val(Leer.GetValue(ObjKey, "ResistDanoHemoMinFlat"))
+            .ResistDanoHemoMaxFlat = val(Leer.GetValue(ObjKey, "ResistDanoHemoMaxFlat"))
+            .ResistDanoHemoMinPct = val(Leer.GetValue(ObjKey, "ResistDanoHemoMinPct"))
+            .ResistDanoHemoMaxPct = val(Leer.GetValue(ObjKey, "ResistDanoHemoMaxPct"))
+            .ResistDanoNeuroMinFlat = val(Leer.GetValue(ObjKey, "ResistDanoNeuroMinFlat"))
+            .ResistDanoNeuroMaxFlat = val(Leer.GetValue(ObjKey, "ResistDanoNeuroMaxFlat"))
+            .ResistDanoNeuroMinPct = val(Leer.GetValue(ObjKey, "ResistDanoNeuroMinPct"))
+            .ResistDanoNeuroMaxPct = val(Leer.GetValue(ObjKey, "ResistDanoNeuroMaxPct"))
+            .InmunidadVenenoMenor = val(Leer.GetValue(ObjKey, "InmunidadVenenoMenor"))
+            .InmunidadHemo = val(Leer.GetValue(ObjKey, "InmunidadHemo"))
+            .InmunidadNeuro = val(Leer.GetValue(ObjKey, "InmunidadNeuro"))
             If val(Leer.GetValue(ObjKey, "Bindable")) > 0 Then Call SetMask(.ObjFlags, e_ObjFlags.e_Bindable)
             If val(Leer.GetValue(ObjKey, "UseOnSafeAreaOnly")) > 0 Then Call SetMask(.ObjFlags, e_ObjFlags.e_UseOnSafeAreaOnly)
             Dim i As Integer
@@ -1175,6 +1326,7 @@ Sub LoadOBJData()
                     .Estupidiza = val(Leer.GetValue(ObjKey, "Estupidiza"))
                     .incinera = val(Leer.GetValue(ObjKey, "Incinera"))
                     .EfectoMagico = val(Leer.GetValue(ObjKey, "efectomagico"))
+                    .FlechaVenenoFamilia = val(Leer.GetValue(ObjKey, "FlechaVenenoFamilia"))
                     .Snd1 = val(Leer.GetValue(ObjKey, "SND1"))
                     .Snd2 = val(Leer.GetValue(ObjKey, "SND2"))
                     'Pasajes Ladder 05-05-08
@@ -1424,6 +1576,7 @@ Sub LoadOBJData()
                 ObjShop(UBound(ObjShop)).ObjDonador = 1
                 ReDim Preserve ObjShop(1 To (UBound(ObjShop) + 1)) As t_ObjData
             End If
+            Call ValidatePoisonArrowData(Object, Leer, ObjKey)
             frmCargando.cargar.value = frmCargando.cargar.value + 1
         End With
         '  Cada 10 objetos revivo la interfaz
@@ -1435,7 +1588,131 @@ Sub LoadOBJData()
     Call InitRegalo
     Exit Sub
 ErrHandler:
-    MsgBox "error cargando objetos " & Err.Number & ": " & Err.Description & ". Error producido al cargar el objeto: " & Object
+    Dim errNum As Long
+    Dim errDesc As String
+    Dim errMsg As String
+    errNum = Err.Number
+    errDesc = Err.Description
+    errMsg = "error cargando objetos " & errNum & ": " & errDesc & ". Error producido al cargar el objeto: " & Object
+    Call LogError(errMsg)
+    MsgBox errMsg
+    Err.Raise errNum, "FileIO.LoadOBJData", errDesc
+End Sub
+
+Private Sub ValidatePoisonArrowData(ByVal ObjIndex As Integer, ByRef Leer As clsIniManager, ByVal ObjKey As String)
+    On Error GoTo ValidatePoisonArrowData_Err
+    If ObjData(ObjIndex).OBJType <> e_OBJType.otArrows Then Exit Sub
+
+    Dim familia As Byte
+    familia = ObjData(ObjIndex).FlechaVenenoFamilia
+    If familia = 0 Then Exit Sub
+
+    If familia > 3 Then
+        Call RaiseObjDatLoadError("[ERROR] OBJ" & ObjIndex & ": FlechaVenenoFamilia=" & familia & " invalida")
+    End If
+
+    Call RequireObjDatKey(Leer, ObjKey, "FlechaVenenoFamilia", ObjIndex, "flecha envenenada")
+    Call RequireObjDatKey(Leer, ObjKey, "ChanceAplicarPct", ObjIndex, "flecha envenenada")
+    Call RequireObjDatKey(Leer, ObjKey, "TickIntervaloMs", ObjIndex, "flecha envenenada")
+    Call RequireObjDatKey(Leer, ObjKey, "DuracionMs", ObjIndex, "flecha envenenada")
+    Call RequireObjDatKey(Leer, ObjKey, "DanoModo", ObjIndex, "flecha envenenada")
+    Call RequireObjDatKey(Leer, ObjKey, "FactorPvP", ObjIndex, "flecha envenenada")
+    Call RequireObjDatKey(Leer, ObjKey, "FactorPvE", ObjIndex, "flecha envenenada")
+
+    If ObjData(ObjIndex).ChanceAplicarPct < 0 Or ObjData(ObjIndex).ChanceAplicarPct > 100 Then
+        Call RaiseObjDatLoadError("[ERROR] OBJ" & ObjIndex & ": ChanceAplicarPct fuera de rango 0-100")
+    End If
+    If ObjData(ObjIndex).TickIntervaloMs <= 0 Then
+        Call RaiseObjDatLoadError("[ERROR] OBJ" & ObjIndex & ": TickIntervaloMs requerido para flecha envenenada")
+    End If
+    If ObjData(ObjIndex).DuracionMs <= 0 Then
+        Call RaiseObjDatLoadError("[ERROR] OBJ" & ObjIndex & ": DuracionMs requerido para flecha envenenada")
+    End If
+    If ObjData(ObjIndex).DanoModo > 3 Then
+        Call RaiseObjDatLoadError("[ERROR] OBJ" & ObjIndex & ": DanoModo invalido")
+    End If
+    If ObjData(ObjIndex).FactorPvP <= 0 Or ObjData(ObjIndex).FactorPvE <= 0 Then
+        Call RaiseObjDatLoadError("[ERROR] OBJ" & ObjIndex & ": FactorPvP/FactorPvE deben ser mayores a 0")
+    End If
+
+    Select Case familia
+        Case 1
+            Call RequireObjDatKey(Leer, ObjKey, "DanoMin", ObjIndex, "flecha Menor")
+            Call RequireObjDatKey(Leer, ObjKey, "DanoMax", ObjIndex, "flecha Menor")
+            If ObjData(ObjIndex).DanoMin > ObjData(ObjIndex).DanoMax Then
+                Call RaiseObjDatLoadError("[ERROR] OBJ" & ObjIndex & ": DanoMin no puede ser mayor a DanoMax")
+            End If
+        Case 2
+            Call RequireObjDatKey(Leer, ObjKey, "DanoMin", ObjIndex, "flecha Hemo")
+            Call RequireObjDatKey(Leer, ObjKey, "DanoMax", ObjIndex, "flecha Hemo")
+            Call RequireObjDatKey(Leer, ObjKey, "DanoPorStackModo", ObjIndex, "flecha Hemo")
+            Call RequireObjDatKey(Leer, ObjKey, "DanoPorStackMin", ObjIndex, "flecha Hemo")
+            Call RequireObjDatKey(Leer, ObjKey, "DanoPorStackMax", ObjIndex, "flecha Hemo")
+            Call RequireObjDatKey(Leer, ObjKey, "StacksMax", ObjIndex, "flecha Hemo")
+            Call RequireObjDatKey(Leer, ObjKey, "GolpesQueSumanStacks", ObjIndex, "flecha Hemo")
+            Call RequireObjDatKey(Leer, ObjKey, "IntervaloDecayStackMs", ObjIndex, "flecha Hemo")
+            If ObjData(ObjIndex).DanoMin > ObjData(ObjIndex).DanoMax Then
+                Call RaiseObjDatLoadError("[ERROR] OBJ" & ObjIndex & ": DanoMin no puede ser mayor a DanoMax")
+            End If
+            If ObjData(ObjIndex).DanoPorStackMin > ObjData(ObjIndex).DanoPorStackMax Then
+                Call RaiseObjDatLoadError("[ERROR] OBJ" & ObjIndex & ": DanoPorStackMin no puede ser mayor a DanoPorStackMax")
+            End If
+            If ObjData(ObjIndex).StacksMax <= 0 Then
+                Call RaiseObjDatLoadError("[ERROR] OBJ" & ObjIndex & ": flecha Hemo requiere StacksMax > 0")
+            End If
+            If ObjData(ObjIndex).GolpesQueSumanStacks <= 0 Then
+                Call RaiseObjDatLoadError("[ERROR] OBJ" & ObjIndex & ": flecha Hemo requiere GolpesQueSumanStacks > 0")
+            End If
+            If ObjData(ObjIndex).IntervaloDecayStackMs <= 0 Then
+                Call RaiseObjDatLoadError("[ERROR] OBJ" & ObjIndex & ": flecha Hemo requiere IntervaloDecayStackMs > 0")
+            End If
+        Case 3
+            Call RequireObjDatKey(Leer, ObjKey, "PenalidadPunteriaPct", ObjIndex, "flecha Neuro")
+            Call RequireObjDatKey(Leer, ObjKey, "PenalidadEvasionPct", ObjIndex, "flecha Neuro")
+            Call RequireObjDatKey(Leer, ObjKey, "PenalidadBloqueoEscudoPct", ObjIndex, "flecha Neuro")
+            Call RequireObjDatKey(Leer, ObjKey, "ChancePifiaHechizoPct", ObjIndex, "flecha Neuro")
+            Call RequireObjDatKey(Leer, ObjKey, "RegenManaReduccionPct", ObjIndex, "flecha Neuro")
+            Call RequireObjDatKey(Leer, ObjKey, "RegenManaReduccionFija", ObjIndex, "flecha Neuro")
+            Call RequireObjDatKey(Leer, ObjKey, "BloqueaRegenManaTotal", ObjIndex, "flecha Neuro")
+            If ObjData(ObjIndex).PenalidadPunteriaPct < 0 Or ObjData(ObjIndex).PenalidadPunteriaPct > 100 Then
+                Call RaiseObjDatLoadError("[ERROR] OBJ" & ObjIndex & ": PenalidadPunteriaPct fuera de rango 0-100")
+            End If
+            If ObjData(ObjIndex).PenalidadEvasionPct < 0 Or ObjData(ObjIndex).PenalidadEvasionPct > 100 Then
+                Call RaiseObjDatLoadError("[ERROR] OBJ" & ObjIndex & ": PenalidadEvasionPct fuera de rango 0-100")
+            End If
+            If ObjData(ObjIndex).PenalidadBloqueoEscudoPct < 0 Or ObjData(ObjIndex).PenalidadBloqueoEscudoPct > 100 Then
+                Call RaiseObjDatLoadError("[ERROR] OBJ" & ObjIndex & ": PenalidadBloqueoEscudoPct fuera de rango 0-100")
+            End If
+            If ObjData(ObjIndex).ChancePifiaHechizoPct < 0 Or ObjData(ObjIndex).ChancePifiaHechizoPct > 100 Then
+                Call RaiseObjDatLoadError("[ERROR] OBJ" & ObjIndex & ": ChancePifiaHechizoPct fuera de rango 0-100")
+            End If
+            If ObjData(ObjIndex).RegenManaReduccionPct < 0 Or ObjData(ObjIndex).RegenManaReduccionPct > 100 Then
+                Call RaiseObjDatLoadError("[ERROR] OBJ" & ObjIndex & ": RegenManaReduccionPct fuera de rango 0-100")
+            End If
+    End Select
+
+    If ObjData(ObjIndex).Envenena <> 0 Then
+        Call WarnObjDatLoad("[WARN] OBJ" & ObjIndex & ": flecha tiene Envenena legacy + FlechaVenenoFamilia")
+    End If
+    Exit Sub
+ValidatePoisonArrowData_Err:
+    Err.Raise Err.Number, "FileIO.ValidatePoisonArrowData", Err.Description
+End Sub
+
+Private Sub RequireObjDatKey(ByRef Leer As clsIniManager, ByVal ObjKey As String, ByVal KeyName As String, ByVal ObjIndex As Integer, ByVal Contexto As String)
+    If LenB(Trim$(Leer.GetValue(ObjKey, KeyName))) = 0 Then
+        Call RaiseObjDatLoadError("[ERROR] OBJ" & ObjIndex & ": " & Contexto & " requiere " & KeyName)
+    End If
+End Sub
+
+Private Sub RaiseObjDatLoadError(ByVal msg As String)
+    Call LogError(msg)
+    Err.Raise vbObjectError + 25002, "FileIO.LoadOBJData", msg
+End Sub
+
+Private Sub WarnObjDatLoad(ByVal msg As String)
+    Call LogError(msg)
+    Debug.Print msg
 End Sub
 
 Function GetVar(ByVal File As String, ByVal Main As String, ByVal Var As String, Optional EmptySpaces As Long = 1024) As String

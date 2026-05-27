@@ -129,7 +129,10 @@ Private Sub ConstruirQuery_CargarPersonaje()
     QueryBuilder.Append "is_locked_in_mao,"
     QueryBuilder.Append "jinete_level,"
     QueryBuilder.Append "backpack_id,"
-    QueryBuilder.Append "profession_forgot_count"
+    QueryBuilder.Append "profession_forgot_count,"
+    QueryBuilder.Append "poison_minor_active,"
+    QueryBuilder.Append "poison_hemo_stacks,"
+    QueryBuilder.Append "poison_neuro_active"
     QueryBuilder.Append " FROM user WHERE id= ?"
     ' Guardo la query ensamblada
     QUERY_LOAD_MAINPJ = QueryBuilder.ToString
@@ -304,7 +307,10 @@ Private Sub ConstruirQuery_GuardarPersonaje()
     QueryBuilder.Append "return_y = ?, "
     QueryBuilder.Append "jinete_level = ?, "
     QueryBuilder.Append "backpack_id = ?, "
-    QueryBuilder.Append "profession_forgot_count = ? "
+    QueryBuilder.Append "profession_forgot_count = ?, "
+    QueryBuilder.Append "poison_minor_active = ?, "
+    QueryBuilder.Append "poison_hemo_stacks = ?, "
+    QueryBuilder.Append "poison_neuro_active = ? "
     QueryBuilder.Append "WHERE id = ?"
     ' Guardo la query ensamblada
     QUERY_UPDATE_MAINPJ = QueryBuilder.ToString

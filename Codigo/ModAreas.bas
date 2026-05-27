@@ -52,6 +52,8 @@ End Type
 
 Public Const USER_NUEVO               As Byte = 255
 Private Const AREA_DIM                As Byte = 12
+Private Const AREA_RADIUS             As Byte = 2
+Private Const AREA_SIDE               As Byte = 5
 'Cuidado:
 ' ¡¡¡LAS AREAS ESTÁN HARDCODEADAS!!!
 Private CurDay                        As Byte
@@ -67,7 +69,12 @@ Public Sub InitAreas()
     Dim LoopX As Long
     ' Setup areas...
     For LoopC = 0 To 9
-        AreasRecive(LoopC) = (2 ^ LoopC) Or IIf(LoopC <> 0, 2 ^ (LoopC - 1), 0) Or IIf(LoopC <> AREA_DIM, 2 ^ (LoopC + 1), 0)
+        AreasRecive(LoopC) = 0
+        For LoopX = LoopC - AREA_RADIUS To LoopC + AREA_RADIUS
+            If LoopX >= 0 And LoopX <= 9 Then
+                AreasRecive(LoopC) = AreasRecive(LoopC) Or (2 ^ LoopX)
+            End If
+        Next LoopX
     Next LoopC
     For LoopC = 1 To 100
         For LoopX = 1 To 100
@@ -130,38 +137,38 @@ Public Sub CheckUpdateNeededUser(ByVal UserIndex As Integer, ByVal head As Byte,
         If head = e_Heading.NORTH Then
             MaxY = MinY - 1
             MinY = MinY - AREA_DIM
-            MaxX = MinX + AREA_DIM * 3 - 1 '+ 26
+            MaxX = MinX + AREA_DIM * AREA_SIDE - 1 '+ 26
             .AreasInfo.MinX = CInt(MinX)
             .AreasInfo.MinY = CInt(MinY)
         ElseIf head = e_Heading.SOUTH Then
-            MaxY = MinY + 4 * AREA_DIM - 1 ' + 35
-            MinY = MinY + AREA_DIM * 3 '+ 27
-            MaxX = MinX + AREA_DIM * 3 - 1 '+ 26
+            MaxY = MinY + (AREA_SIDE + 1) * AREA_DIM - 1 ' + 35
+            MinY = MinY + AREA_DIM * AREA_SIDE '+ 27
+            MaxX = MinX + AREA_DIM * AREA_SIDE - 1 '+ 26
             .AreasInfo.MinX = CInt(MinX)
-            .AreasInfo.MinY = CInt(MinY - AREA_DIM * 2) '- 18)
+            .AreasInfo.MinY = CInt(MinY - AREA_DIM * (AREA_SIDE - 1)) '- 18)
         ElseIf head = e_Heading.WEST Then
             MaxX = MinX - 1
             MinX = MinX - AREA_DIM
-            MaxY = MinY + AREA_DIM * 3 - 1 '+ 26
+            MaxY = MinY + AREA_DIM * AREA_SIDE - 1 '+ 26
             .AreasInfo.MinX = CInt(MinX)
             .AreasInfo.MinY = CInt(MinY)
         ElseIf head = e_Heading.EAST Then
-            MaxX = MinX + 4 * AREA_DIM - 1 ' + 35
-            MinX = MinX + AREA_DIM * 3 '+ 27
-            MaxY = MinY + AREA_DIM * 3 - 1 '+ 26
-            .AreasInfo.MinX = CInt(MinX - AREA_DIM * 2) '- 18)
+            MaxX = MinX + (AREA_SIDE + 1) * AREA_DIM - 1 ' + 35
+            MinX = MinX + AREA_DIM * AREA_SIDE '+ 27
+            MaxY = MinY + AREA_DIM * AREA_SIDE - 1 '+ 26
+            .AreasInfo.MinX = CInt(MinX - AREA_DIM * (AREA_SIDE - 1)) '- 18)
             .AreasInfo.MinY = CInt(MinY)
         ElseIf head = USER_NUEVO Then
             'Esto pasa por cuando cambiamos de mapa o logeamos...
-            MinY = ((.pos.y \ AREA_DIM) - 1) * AREA_DIM
-            MaxY = MinY + AREA_DIM * 3 - 1 '+ 26
-            MinX = ((.pos.x \ AREA_DIM) - 1) * AREA_DIM
-            MaxX = MinX + AREA_DIM * 3 - 1 '+ 26
+            MinY = ((.pos.y \ AREA_DIM) - AREA_RADIUS) * AREA_DIM
+            MaxY = MinY + AREA_DIM * AREA_SIDE - 1 '+ 26
+            MinX = ((.pos.x \ AREA_DIM) - AREA_RADIUS) * AREA_DIM
+            MaxX = MinX + AREA_DIM * AREA_SIDE - 1 '+ 26
             .AreasInfo.MinX = CInt(MinX)
             .AreasInfo.MinY = CInt(MinY)
         ElseIf head = 5 Then
-            MaxX = MinX + AREA_DIM * 3 - 1
-            MaxY = MinY + AREA_DIM * 3 - 1
+            MaxX = MinX + AREA_DIM * AREA_SIDE - 1
+            MaxY = MinY + AREA_DIM * AREA_SIDE - 1
         End If
         If MinY < 1 Then MinY = 1
         If MinX < 1 Then MinX = 1
@@ -258,33 +265,33 @@ Public Sub CheckUpdateNeededNpc(ByVal NpcIndex As Integer, ByVal head As Byte)
         If head = e_Heading.NORTH Then
             MaxY = MinY - 1
             MinY = MinY - AREA_DIM
-            MaxX = MinX + AREA_DIM * 3 - 1 '+ 26
+            MaxX = MinX + AREA_DIM * AREA_SIDE - 1 '+ 26
             .AreasInfo.MinX = CInt(MinX)
             .AreasInfo.MinY = CInt(MinY)
         ElseIf head = e_Heading.SOUTH Then
-            MaxY = MinY + 4 * AREA_DIM - 1 ' + 35
-            MinY = MinY + AREA_DIM * 3 '+ 27
-            MaxX = MinX + AREA_DIM * 3 - 1 '+ 26
+            MaxY = MinY + (AREA_SIDE + 1) * AREA_DIM - 1 ' + 35
+            MinY = MinY + AREA_DIM * AREA_SIDE '+ 27
+            MaxX = MinX + AREA_DIM * AREA_SIDE - 1 '+ 26
             .AreasInfo.MinX = CInt(MinX)
-            .AreasInfo.MinY = CInt(MinY - AREA_DIM * 2) '- 18)
+            .AreasInfo.MinY = CInt(MinY - AREA_DIM * (AREA_SIDE - 1)) '- 18)
         ElseIf head = e_Heading.WEST Then
             MaxX = MinX - 1
             MinX = MinX - AREA_DIM
-            MaxY = MinY + AREA_DIM * 3 - 1 '+ 26
+            MaxY = MinY + AREA_DIM * AREA_SIDE - 1 '+ 26
             .AreasInfo.MinX = CInt(MinX)
             .AreasInfo.MinY = CInt(MinY)
         ElseIf head = e_Heading.EAST Then
-            MaxX = MinX + 4 * AREA_DIM - 1 ' + 35
-            MinX = MinX + AREA_DIM * 3 '+ 27
-            MaxY = MinY + AREA_DIM * 3 - 1 '+ 26
-            .AreasInfo.MinX = CInt(MinX - AREA_DIM * 2) '- 18)
+            MaxX = MinX + (AREA_SIDE + 1) * AREA_DIM - 1 ' + 35
+            MinX = MinX + AREA_DIM * AREA_SIDE '+ 27
+            MaxY = MinY + AREA_DIM * AREA_SIDE - 1 '+ 26
+            .AreasInfo.MinX = CInt(MinX - AREA_DIM * (AREA_SIDE - 1)) '- 18)
             .AreasInfo.MinY = CInt(MinY)
         ElseIf head = USER_NUEVO Then
             'Esto pasa por cuando cambiamos de mapa o logeamos...
-            MinY = ((.pos.y \ AREA_DIM) - 1) * AREA_DIM
-            MaxY = MinY + AREA_DIM * 3 - 1 '+ 26
-            MinX = ((.pos.x \ AREA_DIM) - 1) * AREA_DIM
-            MaxX = MinX + AREA_DIM * 3 - 1 '+ 26
+            MinY = ((.pos.y \ AREA_DIM) - AREA_RADIUS) * AREA_DIM
+            MaxY = MinY + AREA_DIM * AREA_SIDE - 1 '+ 26
+            MinX = ((.pos.x \ AREA_DIM) - AREA_RADIUS) * AREA_DIM
+            MaxX = MinX + AREA_DIM * AREA_SIDE - 1 '+ 26
             .AreasInfo.MinX = CInt(MinX)
             .AreasInfo.MinY = CInt(MinY)
             appear = 0

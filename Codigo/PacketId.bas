@@ -239,6 +239,7 @@ Public Enum ServerPacketID
     eNpcRadarUserCaos
     eNpcRadarPartyMember
     eNpcRadarClanMember
+    eUpdatePoisonStacks ' Sistema venenos TOGGLE26: contador stacks de Hemo (solo al dueno)
     eMaxPacket
     [PacketCount]
 End Enum

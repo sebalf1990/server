@@ -344,12 +344,22 @@ TieneObjetos_Err:
     Call TraceError(Err.Number, Err.Description, "Trabajo.TieneObjetos", Erl)
 End Function
 
-Function QuitarObjetos(ByVal ItemIndex As Integer, ByVal cant As Integer, ByVal UserIndex As Integer, Optional ByVal ElementalTags As Long = e_ElementalTags.Normal) As Boolean
+Function QuitarObjetos(ByVal ItemIndex As Integer, ByVal cant As Integer, ByVal UserIndex As Integer, _
+                       Optional ByVal ElementalTags As Long = e_ElementalTags.Normal, _
+                       Optional ByVal PoisonedAmmoMotivo As String = "inventario_modificado", _
+                       Optional ByVal PoisonedAmmoMsg As String = "Ya no tenes flechas envenenadas equipadas.") As Boolean
     On Error GoTo QuitarObjetos_Err
     With UserList(UserIndex)
         Dim i As Long
         For i = 1 To .CurrentInventorySlots
             If .invent.Object(i).ObjIndex = ItemIndex And .invent.Object(i).ElementalTags = ElementalTags Then
+                If IsFeatureEnabled("new_poison_system") Then
+                    If .invent.EquippedMunitionSlot = i Then
+                        If .flags.PoisonedAmmoObjIndex = .invent.Object(i).ObjIndex And .flags.PoisonedAmmoObjIndex > 0 Then
+                            Call ClearPoisonedAmmo(UserIndex, PoisonedAmmoMsg, PoisonedAmmoMotivo)
+                        End If
+                    End If
+                End If
                 .invent.Object(i).amount = .invent.Object(i).amount - cant
                 If .invent.Object(i).amount <= 0 Then
                     If .invent.Object(i).Equipped Then
@@ -1526,6 +1536,29 @@ Public Sub DoMeditar(ByVal UserIndex As Integer)
                 Mana = Porcentaje(.Stats.MaxMAN, Porcentaje(PorcentajeRecuperoMana, RecoveryMana + .Stats.UserSkills(e_Skill.Meditar) * MultiplierManaxSkills))
             End If
             If Mana <= 0 Then Mana = 1
+            ' --- Penalidad Neuro al regen mana (TOGGLE26 new_poison_system) ---
+            If IsFeatureEnabled("new_poison_system") And .flags.PoisonNeuroActive <> 0 Then
+                If .flags.PoisonNeuroBloqueaRegenManaTotal <> 0 Then
+                    Mana = 0
+                Else
+                    If .flags.PoisonNeuroRegenManaReduccionFija > 0 Then
+                        Mana = Mana - .flags.PoisonNeuroRegenManaReduccionFija
+                        If Mana < 0 Then Mana = 0
+                    End If
+                    If .flags.PoisonNeuroRegenManaReduccionPct > 0 Then
+                        If .flags.PoisonNeuroRegenManaReduccionPct >= 100 Then
+                            Mana = 0
+                        Else
+                            Mana = (Mana * (100 - .flags.PoisonNeuroRegenManaReduccionPct)) \ 100
+                        End If
+                    End If
+                End If
+            End If
+            If Mana <= 0 Then
+                ' Neuro impidio recuperar mana este tick. Skip update.
+                .Counters.TimerMeditar = 0
+                Exit Sub
+            End If
             If .Stats.MinMAN + Mana >= .Stats.MaxMAN Then
                 .Stats.MinMAN = .Stats.MaxMAN
                 .flags.Meditando = False
@@ -1886,7 +1919,7 @@ Sub ThrowNetToTarget(ByVal UserIndex As Integer)
         If ObjData(.invent.EquippedWorkingToolObjIndex).OBJType <> e_OBJType.otWorkingTools Then Exit Sub
         If ObjData(.invent.EquippedWorkingToolObjIndex).Subtipo <> e_WorkingToolSubType.FishingNet Then Exit Sub
         'If it's outside range log it and exit
-        If Abs(.pos.x - .Trabajo.Target_X) > RANGO_VISION_X Or Abs(.pos.y - .Trabajo.Target_Y) > RANGO_VISION_Y Then
+        If Not InRangoVisionFull(UserIndex, .Trabajo.Target_X, .Trabajo.Target_Y) Then
             Call LogSecurity("Ataque fuera de rango de " & .name & "(" & .pos.Map & "/" & .pos.x & "/" & .pos.y & ") ip: " & .ConnectionDetails.IP & " a la posicion (" & _
                     .pos.Map & "/" & .Trabajo.Target_X & "/" & .Trabajo.Target_Y & ")")
             Exit Sub

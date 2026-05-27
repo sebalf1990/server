@@ -682,6 +682,33 @@ Dim tStr                        As String
         .flags.UserLogged = True
         Call ResetUserAutomatedActions(UserIndex)
         .Counters.LastSave = GetTickCountRaw()
+        ' --- Sistema de venenos nuevo (TOGGLE26): recrear EOTs persistidos ---
+        If IsFeatureEnabled("new_poison_system") Then
+            If .flags.PoisonMinorActive = 1 Then
+                Call CreatePoisonMinor(0, e_ReferenceType.eNone, UserIndex, eUser, 63, _
+                    EffectOverTime(63).TickTime, EffectOverTime(63).TickTime * EffectOverTime(63).Ticks, _
+                    0, EffectOverTime(63).TickPowerMin, EffectOverTime(63).TickPowerMax, _
+                    1!, 1!)
+            End If
+            If .flags.PoisonHemoStacks > 0 Then
+                ' Recrea Hemo desde persistencia. Solo se preservan stacks; numeros default.
+                ' Defaults: tick 2s, duracion 20s, dano base 0, dano/stack 3, cap=stacks persistidos, decay 4s.
+                Call CreatePoisonHemo(0, e_ReferenceType.eNone, UserIndex, eUser, 64, _
+                    2000, 20000, _
+                    0, 0, 0, _
+                    0, 3, 3, _
+                    .flags.PoisonHemoStacks, 1, 4000, 0, _
+                    1!, 1!, .flags.PoisonHemoStacks)
+            End If
+            If .flags.PoisonNeuroActive = 1 Then
+                ' Recrea Neuro desde persistencia. Las penalidades NO se persisten a DB (solo el flag),
+                ' por simetria con Menor/Hemo: defaults hardcoded coherentes con la daga test.
+                Call CreatePoisonNeuro(0, e_ReferenceType.eNone, UserIndex, eUser, 65, _
+                    2000, 20000, _
+                    100, 100, 0, _
+                    85, 100, 0, 0)
+            End If
+        End If
         MapInfo(.pos.Map).NumUsers = MapInfo(.pos.Map).NumUsers + 1
         If .Stats.SkillPts > 0 Then
             Call WriteSendSkills(UserIndex)
@@ -1752,6 +1779,7 @@ Sub UserDie(ByVal UserIndex As Integer)
         .flags.Estupidiza = 0
         .flags.DivineBlood = 0
         Call ClearEffectList(.EffectOverTime, e_EffectType.eAny, True)
+        If IsFeatureEnabled("new_poison_system") Then Call ClearPoisonedAmmo(UserIndex, "", "muerte")
         Call ClearModifiers(.Modifiers)
         .flags.Muerto = 1
         Call WriteUpdateHP(UserIndex)

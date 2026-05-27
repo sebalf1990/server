@@ -480,6 +480,10 @@ Private Sub UserDamageNpc(ByVal UserIndex As Integer, ByVal NpcIndex As Integer,
                     End With
                 End If
             End If
+            ' --- Sistema venenos nuevo (TOGGLE26): armas Subtipo=10/11 envenenan NPC ---
+            If IsFeatureEnabled("new_poison_system") And ObjInd > 0 Then
+                Call TryPoisonNpcWithWeapon(UserIndex, NpcIndex, ObjInd)
+            End If
         End If
     End With
     Exit Sub
@@ -611,7 +615,12 @@ Public Function NpcAtacaUser(ByVal NpcIndex As Integer, ByVal UserIndex As Integ
     If NpcImpacto(NpcIndex, UserIndex) Then
         danio = NpcDamage(NpcIndex, UserIndex)
         '¿Puede envenenar?
-        If NpcList(NpcIndex).Veneno > 0 Then Call NpcEnvenenarUser(UserIndex, NpcList(NpcIndex).Veneno)
+        ' Sistema venenos nuevo (TOGGLE26): tambien dispara si el NPC tiene perfil asignado en su template
+        If NpcList(NpcIndex).Veneno > 0 Then
+            Call NpcEnvenenarUser(UserIndex, NpcList(NpcIndex).Veneno, NpcIndex)
+        ElseIf IsFeatureEnabled("new_poison_system") And LenB(NpcInfoCache(NpcList(NpcIndex).Numero).PerfilVenenoAplica) > 0 Then
+            Call NpcEnvenenarUser(UserIndex, 0, NpcIndex)
+        End If
     End If
     Call SendData(SendTarget.ToNPCAliveArea, NpcIndex, PrepareMessageCharAtaca(NpcList(NpcIndex).Char.charindex, UserList(UserIndex).Char.charindex, danio))
     If NpcList(NpcIndex).Char.WeaponAnim > 0 Then
@@ -910,6 +919,9 @@ Public Sub UsuarioAtaca(ByVal UserIndex As Integer)
             Exit Sub
         End If
         Call QuitarSta(UserIndex, RandomNumber(1, 10))
+        ' Sistema venenos (TOGGLE26): decremento de cargas + expiracion al swing, acierte o no.
+        ' Va aca para incluir swings al aire (sin target).
+        Call OnPoisonedWeaponSwing(UserIndex)
         If .Counters.Trabajando Then
             Call WriteMacroTrabajoToggle(UserIndex, False)
         End If
@@ -976,8 +988,32 @@ Private Function UsuarioImpacto(ByVal AtacanteIndex As Integer, ByVal VictimaInd
         Case Else
             PoderAtaque = PoderAtaqueWrestling(AtacanteIndex)
     End Select
+    ' --- Penalidad Neuro al atacante (TOGGLE26 new_poison_system) ---
+    If IsFeatureEnabled("new_poison_system") And UserList(AtacanteIndex).flags.PoisonNeuroActive <> 0 Then
+        Dim neuroAtkPct As Long
+        neuroAtkPct = UserList(AtacanteIndex).flags.PoisonNeuroPenalidadPunteriaPct
+        If neuroAtkPct > 0 Then
+            If neuroAtkPct >= 100 Then
+                PoderAtaque = 0
+            Else
+                PoderAtaque = (PoderAtaque * (100 - neuroAtkPct)) \ 100
+            End If
+        End If
+    End If
     'Calculamos el poder de evasion...
     UserPoderEvasion = PoderEvasion(VictimaIndex)
+    ' --- Penalidad Neuro a la victima (reduce su evasion) ---
+    If IsFeatureEnabled("new_poison_system") And UserList(VictimaIndex).flags.PoisonNeuroActive <> 0 Then
+        Dim neuroEvaPct As Long
+        neuroEvaPct = UserList(VictimaIndex).flags.PoisonNeuroPenalidadEvasionPct
+        If neuroEvaPct > 0 Then
+            If neuroEvaPct >= 100 Then
+                UserPoderEvasion = 0
+            Else
+                UserPoderEvasion = (UserPoderEvasion * (100 - neuroEvaPct)) \ 100
+            End If
+        End If
+    End If
     If UserList(VictimaIndex).invent.EquippedShieldObjIndex > 0 Then
         ShieldChancePercentage = ObjData(UserList(VictimaIndex).invent.EquippedShieldObjIndex).Porcentaje
         If ShieldChancePercentage > 0 Then
@@ -992,6 +1028,18 @@ Private Function UsuarioImpacto(ByVal AtacanteIndex As Integer, ByVal VictimaInd
         End If
     Else
         ProbRechazo = 0
+    End If
+    ' --- Penalidad Neuro a la victima (reduce bloqueo de escudo) ---
+    If IsFeatureEnabled("new_poison_system") And UserList(VictimaIndex).flags.PoisonNeuroActive <> 0 Then
+        Dim neuroShieldPct As Long
+        neuroShieldPct = UserList(VictimaIndex).flags.PoisonNeuroPenalidadBloqueoEscudoPct
+        If neuroShieldPct > 0 Then
+            If neuroShieldPct >= 100 Then
+                ProbRechazo = 0
+            Else
+                ProbRechazo = (ProbRechazo * (100 - neuroShieldPct)) \ 100
+            End If
+        End If
     End If
     Dim WeaponHitModifier As Integer
     WeaponHitModifier = 0
@@ -1819,6 +1867,142 @@ Public Function PeleaSegura(ByVal Source As Integer, ByVal dest As Integer) As B
     End If
 End Function
 
+Private Function TryApplyArrowFixedPoisonToUser(ByVal AtacanteIndex As Integer, ByVal VictimaIndex As Integer, ByVal ArrowObjInd As Integer) As Boolean
+    On Error GoTo TryApplyArrowFixedPoisonToUser_Err
+    If ArrowObjInd <= 0 Then Exit Function
+    If ObjData(ArrowObjInd).OBJType <> e_OBJType.otArrows Then Exit Function
+
+    Dim familia As Byte
+    familia = ObjData(ArrowObjInd).FlechaVenenoFamilia
+    If familia < 1 Or familia > 3 Then Exit Function
+
+    TryApplyArrowFixedPoisonToUser = True
+
+    Dim resistArrow As t_PoisonResist
+    resistArrow = GetUserPoisonResist(VictimaIndex, familia)
+    If resistArrow.Inmune <> 0 Then
+        Call WriteCombatConsoleMsg(VictimaIndex, "Resististe el veneno.")
+        Exit Function
+    End If
+
+    Dim chanceFinalArrow As Long
+    chanceFinalArrow = ObjData(ArrowObjInd).ChanceAplicarPct - resistArrow.ChancePct
+    If chanceFinalArrow <= 0 Then
+        Call WriteCombatConsoleMsg(VictimaIndex, "Resististe el veneno.")
+        Exit Function
+    End If
+
+    If RandomNumber(1, 100) > chanceFinalArrow Then
+        Call WriteCombatConsoleMsg(VictimaIndex, "Resististe el veneno.")
+        Exit Function
+    End If
+
+    Select Case familia
+        Case 1
+            Call CreatePoisonMinor(AtacanteIndex, eUser, VictimaIndex, eUser, 63, _
+                ObjData(ArrowObjInd).TickIntervaloMs, ObjData(ArrowObjInd).DuracionMs, _
+                ObjData(ArrowObjInd).DanoModo, ObjData(ArrowObjInd).DanoMin, ObjData(ArrowObjInd).DanoMax, _
+                ObjData(ArrowObjInd).FactorPvP, ObjData(ArrowObjInd).FactorPvE)
+        Case 2
+            Call CreatePoisonHemo(AtacanteIndex, eUser, VictimaIndex, eUser, 64, _
+                ObjData(ArrowObjInd).TickIntervaloMs, ObjData(ArrowObjInd).DuracionMs, _
+                ObjData(ArrowObjInd).DanoModo, ObjData(ArrowObjInd).DanoMin, ObjData(ArrowObjInd).DanoMax, _
+                ObjData(ArrowObjInd).DanoPorStackModo, ObjData(ArrowObjInd).DanoPorStackMin, ObjData(ArrowObjInd).DanoPorStackMax, _
+                ObjData(ArrowObjInd).StacksMax, ObjData(ArrowObjInd).GolpesQueSumanStacks, ObjData(ArrowObjInd).IntervaloDecayStackMs, _
+                ObjData(ArrowObjInd).RefrescaTimerAlStackear, ObjData(ArrowObjInd).FactorPvP, ObjData(ArrowObjInd).FactorPvE, 1)
+        Case 3
+            Call CreatePoisonNeuro(AtacanteIndex, eUser, VictimaIndex, eUser, 65, _
+                ObjData(ArrowObjInd).TickIntervaloMs, ObjData(ArrowObjInd).DuracionMs, _
+                ObjData(ArrowObjInd).PenalidadPunteriaPct, ObjData(ArrowObjInd).PenalidadEvasionPct, _
+                ObjData(ArrowObjInd).PenalidadBloqueoEscudoPct, ObjData(ArrowObjInd).ChancePifiaHechizoPct, _
+                ObjData(ArrowObjInd).RegenManaReduccionPct, ObjData(ArrowObjInd).RegenManaReduccionFija, _
+                ObjData(ArrowObjInd).BloqueaRegenManaTotal)
+    End Select
+
+    Call WriteCombatConsoleMsg(VictimaIndex, "¡" & UserList(AtacanteIndex).name & " te ha envenenado con sus flechas!")
+    Call WriteCombatConsoleMsg(AtacanteIndex, "Has envenenado a " & UserList(VictimaIndex).name & " con tus flechas!")
+    Call LogPoisonEvent("apply_arrow_fixed_user", UserList(AtacanteIndex).name, UserList(VictimaIndex).name, ArrowObjInd, familia, 0, 0, 0, 0)
+    Exit Function
+TryApplyArrowFixedPoisonToUser_Err:
+    Call TraceError(Err.Number, Err.Description, "SistemaCombate.TryApplyArrowFixedPoisonToUser", Erl)
+End Function
+
+Private Function TryApplyArrowAmmoPoisonToUser(ByVal AtacanteIndex As Integer, ByVal VictimaIndex As Integer, ByVal ArrowObjInd As Integer) As Boolean
+    On Error GoTo TryApplyArrowAmmoPoisonToUser_Err
+    If ArrowObjInd <= 0 Then Exit Function
+    If ObjData(ArrowObjInd).OBJType <> e_OBJType.otArrows Then Exit Function
+    If ObjData(ArrowObjInd).FlechaVenenoFamilia > 0 Then Exit Function
+
+    With UserList(AtacanteIndex).flags
+        If .PoisonedAmmoObjIndex <> ArrowObjInd Then Exit Function
+        If .PoisonedAmmoCargas <= 0 Then Exit Function
+        If .PoisonedAmmoFamilia < 1 Or .PoisonedAmmoFamilia > 3 Then Exit Function
+        If .PoisonedAmmoDuracionMaxMs > 0 Then
+            If (GetTickCountRaw() - .PoisonedAmmoAppliedTick) > .PoisonedAmmoDuracionMaxMs Then
+                Call ClearPoisonedAmmo(AtacanteIndex, "El veneno de tus flechas se ha disipado.", "duracion_expirada")
+                Exit Function
+            End If
+        End If
+    End With
+
+    TryApplyArrowAmmoPoisonToUser = True
+
+    If UserList(AtacanteIndex).flags.PoisonedAmmoChancePorGolpePct > 0 Then
+        If RandomNumber(1, 100) > UserList(AtacanteIndex).flags.PoisonedAmmoChancePorGolpePct Then Exit Function
+    End If
+
+    Dim familia As Byte
+    familia = UserList(AtacanteIndex).flags.PoisonedAmmoFamilia
+
+    Dim resistArrow As t_PoisonResist
+    resistArrow = GetUserPoisonResist(VictimaIndex, familia)
+    If resistArrow.Inmune <> 0 Then
+        Call WriteCombatConsoleMsg(VictimaIndex, "Resististe el veneno.")
+        Exit Function
+    End If
+
+    Dim chanceFinalArrow As Long
+    chanceFinalArrow = UserList(AtacanteIndex).flags.PoisonedAmmoChanceAplicarPct - resistArrow.ChancePct
+    If chanceFinalArrow <= 0 Then
+        Call WriteCombatConsoleMsg(VictimaIndex, "Resististe el veneno.")
+        Exit Function
+    End If
+
+    If RandomNumber(1, 100) > chanceFinalArrow Then
+        Call WriteCombatConsoleMsg(VictimaIndex, "Resististe el veneno.")
+        Exit Function
+    End If
+
+    Select Case familia
+        Case 1
+            Call CreatePoisonMinor(AtacanteIndex, eUser, VictimaIndex, eUser, 63, _
+                UserList(AtacanteIndex).flags.PoisonedAmmoTickIntervaloMs, UserList(AtacanteIndex).flags.PoisonedAmmoDuracionEfectoMs, _
+                UserList(AtacanteIndex).flags.PoisonedAmmoDanoModo, UserList(AtacanteIndex).flags.PoisonedAmmoDanoMin, UserList(AtacanteIndex).flags.PoisonedAmmoDanoMax, _
+                UserList(AtacanteIndex).flags.PoisonedAmmoFactorPvP, UserList(AtacanteIndex).flags.PoisonedAmmoFactorPvE)
+        Case 2
+            Call CreatePoisonHemo(AtacanteIndex, eUser, VictimaIndex, eUser, 64, _
+                UserList(AtacanteIndex).flags.PoisonedAmmoTickIntervaloMs, UserList(AtacanteIndex).flags.PoisonedAmmoDuracionEfectoMs, _
+                UserList(AtacanteIndex).flags.PoisonedAmmoDanoModo, UserList(AtacanteIndex).flags.PoisonedAmmoDanoMin, UserList(AtacanteIndex).flags.PoisonedAmmoDanoMax, _
+                UserList(AtacanteIndex).flags.PoisonedAmmoDanoPorStackModo, UserList(AtacanteIndex).flags.PoisonedAmmoDanoPorStackMin, UserList(AtacanteIndex).flags.PoisonedAmmoDanoPorStackMax, _
+                UserList(AtacanteIndex).flags.PoisonedAmmoStacksMax, UserList(AtacanteIndex).flags.PoisonedAmmoGolpesQueSumanStacks, UserList(AtacanteIndex).flags.PoisonedAmmoIntervaloDecayStackMs, _
+                UserList(AtacanteIndex).flags.PoisonedAmmoRefrescaTimerAlStackear, UserList(AtacanteIndex).flags.PoisonedAmmoFactorPvP, UserList(AtacanteIndex).flags.PoisonedAmmoFactorPvE, 1)
+        Case 3
+            Call CreatePoisonNeuro(AtacanteIndex, eUser, VictimaIndex, eUser, 65, _
+                UserList(AtacanteIndex).flags.PoisonedAmmoTickIntervaloMs, UserList(AtacanteIndex).flags.PoisonedAmmoDuracionEfectoMs, _
+                UserList(AtacanteIndex).flags.PoisonedAmmoPenalidadPunteriaPct, UserList(AtacanteIndex).flags.PoisonedAmmoPenalidadEvasionPct, _
+                UserList(AtacanteIndex).flags.PoisonedAmmoPenalidadBloqueoEscudoPct, UserList(AtacanteIndex).flags.PoisonedAmmoChancePifiaHechizoPct, _
+                UserList(AtacanteIndex).flags.PoisonedAmmoRegenManaReduccionPct, UserList(AtacanteIndex).flags.PoisonedAmmoRegenManaReduccionFija, _
+                UserList(AtacanteIndex).flags.PoisonedAmmoBloqueaRegenManaTotal)
+    End Select
+
+    Call WriteCombatConsoleMsg(VictimaIndex, "¡" & UserList(AtacanteIndex).name & " te ha envenenado con sus flechas!")
+    Call WriteCombatConsoleMsg(AtacanteIndex, "Has envenenado a " & UserList(VictimaIndex).name & " con tus flechas!")
+    Call LogPoisonEvent("apply_arrow_vial_user", UserList(AtacanteIndex).name, UserList(VictimaIndex).name, ArrowObjInd, familia, 0, 0, 0, 0)
+    Exit Function
+TryApplyArrowAmmoPoisonToUser_Err:
+    Call TraceError(Err.Number, Err.Description, "SistemaCombate.TryApplyArrowAmmoPoisonToUser", Erl)
+End Function
+
 Private Sub UserDañoEspecial(ByVal AtacanteIndex As Integer, ByVal VictimaIndex As Integer, ByVal aType As AttackType)
     On Error GoTo UserDañoEspecial_Err
     Dim ArmaObjInd As Integer, ObjInd As Integer
@@ -1843,6 +2027,160 @@ Private Sub UserDañoEspecial(ByVal AtacanteIndex As Integer, ByVal VictimaIndex
         rangeStun = ObjData(ObjInd).Subtipo = 2 And aType = Ranged
         stunChance = ObjData(ObjInd).Porcentaje
     End If
+    ' --- Sistema de venenos nuevo (TOGGLE26 new_poison_system) ---
+    If IsFeatureEnabled("new_poison_system") And ObjInd > 0 Then
+        If aType = Ranged And ObjData(ObjInd).OBJType = e_OBJType.otArrows Then
+            If TryApplyArrowFixedPoisonToUser(AtacanteIndex, VictimaIndex, ObjInd) Then Exit Sub
+            If TryApplyArrowAmmoPoisonToUser(AtacanteIndex, VictimaIndex, ObjInd) Then Exit Sub
+        End If
+        If ObjData(ObjInd).Subtipo = 10 And ObjData(ObjInd).FamiliaVeneno = 1 Then
+            Dim resistV As t_PoisonResist
+            resistV = GetUserPoisonResist(VictimaIndex, 1)
+            If resistV.Inmune <> 0 Then
+                Call WriteCombatConsoleMsg(VictimaIndex, "Resististe el veneno.")
+                Exit Sub
+            End If
+            Dim chanceFinal As Long
+            chanceFinal = ObjData(ObjInd).ChanceAplicarPct - resistV.ChancePct
+            If chanceFinal <= 0 Then
+                Call WriteCombatConsoleMsg(VictimaIndex, "Resististe el veneno.")
+                Exit Sub
+            End If
+            If RandomNumber(1, 100) <= chanceFinal Then
+                Call CreatePoisonMinor(AtacanteIndex, eUser, VictimaIndex, eUser, 63, _
+                    ObjData(ObjInd).TickIntervaloMs, ObjData(ObjInd).DuracionMs, _
+                    ObjData(ObjInd).DanoModo, ObjData(ObjInd).DanoMin, ObjData(ObjInd).DanoMax, _
+                    ObjData(ObjInd).FactorPvP, ObjData(ObjInd).FactorPvE)
+                Call WriteCombatConsoleMsg(VictimaIndex, "¡" & UserList(AtacanteIndex).name & " te ha envenenado!")
+                Call WriteCombatConsoleMsg(AtacanteIndex, "¡Has envenenado a " & UserList(VictimaIndex).name & "!")
+            Else
+                Call WriteCombatConsoleMsg(VictimaIndex, "Resististe el veneno.")
+            End If
+            Exit Sub
+        End If
+        ' --- Hemotoxina (familia 2) ---
+        If ObjData(ObjInd).Subtipo = 10 And ObjData(ObjInd).FamiliaVeneno = 2 Then
+            Dim resistVH As t_PoisonResist
+            resistVH = GetUserPoisonResist(VictimaIndex, 2)
+            If resistVH.Inmune <> 0 Then
+                Call WriteCombatConsoleMsg(VictimaIndex, "Resististe el veneno.")
+                Exit Sub
+            End If
+            Dim chanceFinalH As Long
+            chanceFinalH = ObjData(ObjInd).ChanceAplicarPct - resistVH.ChancePct
+            If chanceFinalH <= 0 Then
+                Call WriteCombatConsoleMsg(VictimaIndex, "Resististe el veneno.")
+                Exit Sub
+            End If
+            If RandomNumber(1, 100) <= chanceFinalH Then
+                Call CreatePoisonHemo(AtacanteIndex, eUser, VictimaIndex, eUser, 64, _
+                    ObjData(ObjInd).TickIntervaloMs, ObjData(ObjInd).DuracionMs, _
+                    ObjData(ObjInd).DanoModo, ObjData(ObjInd).DanoMin, ObjData(ObjInd).DanoMax, _
+                    ObjData(ObjInd).DanoPorStackModo, ObjData(ObjInd).DanoPorStackMin, ObjData(ObjInd).DanoPorStackMax, _
+                    ObjData(ObjInd).StacksMax, ObjData(ObjInd).GolpesQueSumanStacks, ObjData(ObjInd).IntervaloDecayStackMs, _
+                    ObjData(ObjInd).RefrescaTimerAlStackear, ObjData(ObjInd).FactorPvP, ObjData(ObjInd).FactorPvE, 1)
+                Call WriteCombatConsoleMsg(VictimaIndex, "¡" & UserList(AtacanteIndex).name & " te ha envenenado!")
+                Call WriteCombatConsoleMsg(AtacanteIndex, "¡Has envenenado a " & UserList(VictimaIndex).name & "!")
+            Else
+                Call WriteCombatConsoleMsg(VictimaIndex, "Resististe el veneno.")
+            End If
+            Exit Sub
+        End If
+        ' --- Neurotoxina (familia 3) ---
+        If ObjData(ObjInd).Subtipo = 10 And ObjData(ObjInd).FamiliaVeneno = 3 Then
+            Dim resistVN As t_PoisonResist
+            resistVN = GetUserPoisonResist(VictimaIndex, 3)
+            If resistVN.Inmune <> 0 Then
+                Call WriteCombatConsoleMsg(VictimaIndex, "Resististe el veneno.")
+                Exit Sub
+            End If
+            Dim chanceFinalN As Long
+            chanceFinalN = ObjData(ObjInd).ChanceAplicarPct - resistVN.ChancePct
+            If chanceFinalN <= 0 Then
+                Call WriteCombatConsoleMsg(VictimaIndex, "Resististe el veneno.")
+                Exit Sub
+            End If
+            If RandomNumber(1, 100) <= chanceFinalN Then
+                Call CreatePoisonNeuro(AtacanteIndex, eUser, VictimaIndex, eUser, 65, _
+                    ObjData(ObjInd).TickIntervaloMs, ObjData(ObjInd).DuracionMs, _
+                    ObjData(ObjInd).PenalidadPunteriaPct, ObjData(ObjInd).PenalidadEvasionPct, _
+                    ObjData(ObjInd).PenalidadBloqueoEscudoPct, ObjData(ObjInd).ChancePifiaHechizoPct, _
+                    ObjData(ObjInd).RegenManaReduccionPct, ObjData(ObjInd).RegenManaReduccionFija, _
+                    ObjData(ObjInd).BloqueaRegenManaTotal)
+                Call WriteCombatConsoleMsg(VictimaIndex, "¡" & UserList(AtacanteIndex).name & " te ha envenenado!")
+                Call WriteCombatConsoleMsg(AtacanteIndex, "¡Has envenenado a " & UserList(VictimaIndex).name & "!")
+            Else
+                Call WriteCombatConsoleMsg(VictimaIndex, "Resististe el veneno.")
+            End If
+            Exit Sub
+        End If
+        ' --- Arma envenenable (Subtipo=11) con vial aplicado ---
+        ' El decremento de cargas + chequeo de expiracion se hace en OnPoisonedWeaponSwing
+        ' antes del check de impacto (cargas se gastan acerte o no). Aqui solo aplicamos el veneno
+        ' si el golpe acerto Y el untado sigue activo.
+        If ObjData(ObjInd).Subtipo = 11 Then
+            If UserList(AtacanteIndex).flags.PoisonedWeaponObjIndex = ObjInd And UserList(AtacanteIndex).flags.PoisonedWeaponCargas >= 0 Then
+                Dim untadoFam As Byte
+                untadoFam = UserList(AtacanteIndex).flags.PoisonedWeaponFamilia
+                ' Chance por golpe
+                If RandomNumber(1, 100) <= UserList(AtacanteIndex).flags.PoisonedWeaponChancePorGolpePct Then
+                    ' Resistencia/inmunidad de la victima
+                    Dim rPW As t_PoisonResist
+                    rPW = GetUserPoisonResist(VictimaIndex, untadoFam)
+                    If rPW.Inmune = 0 Then
+                        Dim chFinPW As Long
+                        chFinPW = UserList(AtacanteIndex).flags.PoisonedWeaponChanceAplicarPct - rPW.ChancePct
+                        If chFinPW > 0 And RandomNumber(1, 100) <= chFinPW Then
+                            ' Aplicar segun familia
+                            Select Case untadoFam
+                                Case 1
+                                    Call CreatePoisonMinor(AtacanteIndex, eUser, VictimaIndex, eUser, 63, _
+                                        UserList(AtacanteIndex).flags.PoisonedWeaponTickIntervaloMs, _
+                                        UserList(AtacanteIndex).flags.PoisonedWeaponDuracionEfectoMs, _
+                                        UserList(AtacanteIndex).flags.PoisonedWeaponDanoModo, _
+                                        UserList(AtacanteIndex).flags.PoisonedWeaponDanoMin, _
+                                        UserList(AtacanteIndex).flags.PoisonedWeaponDanoMax, _
+                                        UserList(AtacanteIndex).flags.PoisonedWeaponFactorPvP, _
+                                        UserList(AtacanteIndex).flags.PoisonedWeaponFactorPvE)
+                                    Call WriteCombatConsoleMsg(VictimaIndex, "¡" & UserList(AtacanteIndex).name & " te ha envenenado!")
+                                Case 2
+                                    Call CreatePoisonHemo(AtacanteIndex, eUser, VictimaIndex, eUser, 64, _
+                                        UserList(AtacanteIndex).flags.PoisonedWeaponTickIntervaloMs, _
+                                        UserList(AtacanteIndex).flags.PoisonedWeaponDuracionEfectoMs, _
+                                        UserList(AtacanteIndex).flags.PoisonedWeaponDanoModo, _
+                                        UserList(AtacanteIndex).flags.PoisonedWeaponDanoMin, _
+                                        UserList(AtacanteIndex).flags.PoisonedWeaponDanoMax, _
+                                        UserList(AtacanteIndex).flags.PoisonedWeaponDanoPorStackModo, _
+                                        UserList(AtacanteIndex).flags.PoisonedWeaponDanoPorStackMin, _
+                                        UserList(AtacanteIndex).flags.PoisonedWeaponDanoPorStackMax, _
+                                        UserList(AtacanteIndex).flags.PoisonedWeaponStacksMax, _
+                                        UserList(AtacanteIndex).flags.PoisonedWeaponGolpesQueSumanStacks, _
+                                        UserList(AtacanteIndex).flags.PoisonedWeaponIntervaloDecayStackMs, _
+                                        UserList(AtacanteIndex).flags.PoisonedWeaponRefrescaTimerAlStackear, _
+                                        UserList(AtacanteIndex).flags.PoisonedWeaponFactorPvP, _
+                                        UserList(AtacanteIndex).flags.PoisonedWeaponFactorPvE, 1)
+                                    Call WriteCombatConsoleMsg(VictimaIndex, "¡" & UserList(AtacanteIndex).name & " te ha envenenado!")
+                                Case 3
+                                    Call CreatePoisonNeuro(AtacanteIndex, eUser, VictimaIndex, eUser, 65, _
+                                        UserList(AtacanteIndex).flags.PoisonedWeaponTickIntervaloMs, _
+                                        UserList(AtacanteIndex).flags.PoisonedWeaponDuracionEfectoMs, _
+                                        UserList(AtacanteIndex).flags.PoisonedWeaponPenalidadPunteriaPct, _
+                                        UserList(AtacanteIndex).flags.PoisonedWeaponPenalidadEvasionPct, _
+                                        UserList(AtacanteIndex).flags.PoisonedWeaponPenalidadBloqueoEscudoPct, _
+                                        UserList(AtacanteIndex).flags.PoisonedWeaponChancePifiaHechizoPct, _
+                                        UserList(AtacanteIndex).flags.PoisonedWeaponRegenManaReduccionPct, _
+                                        UserList(AtacanteIndex).flags.PoisonedWeaponRegenManaReduccionFija, _
+                                        UserList(AtacanteIndex).flags.PoisonedWeaponBloqueaRegenManaTotal)
+                                    Call WriteCombatConsoleMsg(VictimaIndex, "¡" & UserList(AtacanteIndex).name & " te ha envenenado!")
+                            End Select
+                        End If
+                    End If
+                End If
+                Exit Sub
+            End If
+        End If
+    End If
+    ' --- Rama legacy: sistema viejo intacto ---
     If puedeEnvenenar And (UserList(VictimaIndex).flags.Envenenado = 0) Then
         If RandomNumber(1, 100) < 30 Then
             UserList(VictimaIndex).flags.Envenenado = ObjData(ObjInd).Envenena
@@ -2286,7 +2624,8 @@ Public Sub ConsumeAmunition(ByVal UserIndex As Integer)
         Dim AmunitionSlot As Integer
         AmunitionSlot = .EquippedMunitionSlot
         If AmunitionSlot > 0 Then
-            Call QuitarUserInvItem(UserIndex, AmunitionSlot, 1)
+            Call QuitarUserInvItem(UserIndex, AmunitionSlot, 1, True, "stack_agotado", _
+                "Te quedaste sin flechas envenenadas (el stack se agoto).")
             If .Object(AmunitionSlot).amount > 0 Then
                 'QuitarUserInvItem unequipps the ammo, so we equip it again
                 .EquippedMunitionSlot = AmunitionSlot

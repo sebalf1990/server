@@ -357,16 +357,28 @@ ErrHandler:
     Call TraceError(Err.Number, Err.Description, "InvUsuario.TirarOro", Erl())
 End Sub
 
-Public Sub QuitarUserInvItem(ByVal UserIndex As Integer, ByVal Slot As Byte, ByVal Cantidad As Integer)
+Public Sub QuitarUserInvItem(ByVal UserIndex As Integer, ByVal Slot As Byte, ByVal Cantidad As Integer, _
+                              Optional ByVal PreservePoisonedAmmo As Boolean = False, _
+                              Optional ByVal PoisonedAmmoMotivo As String = "inventario_modificado", _
+                              Optional ByVal PoisonedAmmoMsg As String = "Ya no tenes flechas envenenadas equipadas.")
     On Error GoTo QuitarUserInvItem_Err
     If Slot < 1 Or Slot > UserList(UserIndex).CurrentInventorySlots Then Exit Sub
     With UserList(UserIndex).invent.Object(Slot)
+        If IsFeatureEnabled("new_poison_system") Then
+            If UserList(UserIndex).invent.EquippedMunitionSlot = Slot Then
+                If UserList(UserIndex).flags.PoisonedAmmoObjIndex = .ObjIndex And UserList(UserIndex).flags.PoisonedAmmoObjIndex > 0 Then
+                    If (Not PreservePoisonedAmmo) Or .amount <= Cantidad Then
+                        Call ClearPoisonedAmmo(UserIndex, PoisonedAmmoMsg, PoisonedAmmoMotivo)
+                    End If
+                End If
+            End If
+        End If
         If .amount <= Cantidad And .Equipped = 1 Then
             Call Desequipar(UserIndex, Slot)
         End If
         'Quita un objeto
         .amount = .amount - Cantidad
-        '¿Quedan mas?
+        '?Quedan mas?
         If .amount <= 0 Then
             UserList(UserIndex).invent.NroItems = UserList(UserIndex).invent.NroItems - 1
             .ObjIndex = 0
@@ -415,6 +427,7 @@ End Sub
 Sub DropObj(ByVal UserIndex As Integer, ByVal Slot As Byte, ByVal num As Integer, ByVal Map As Integer, ByVal x As Integer, ByVal y As Integer)
     On Error GoTo DropObj_Err
     Dim obj As t_Obj
+    Dim ammoClearMotivo As String
     If num > 0 Then
         With UserList(UserIndex)
             If num > .invent.Object(Slot).amount Then
@@ -441,7 +454,13 @@ Sub DropObj(ByVal UserIndex As Integer, ByVal Slot As Byte, ByVal num As Integer
                         Call MakeObj(obj, Map, x, y)
                     End If
                     Call CustomScenarios.UserDropItem(UserIndex, Slot, Map, x, y)
-                    Call QuitarUserInvItem(UserIndex, Slot, num)
+                    If num >= .invent.Object(Slot).amount Then
+                        ammoClearMotivo = "drop_total"
+                    Else
+                        ammoClearMotivo = "split_o_drop_parcial"
+                    End If
+                    Call QuitarUserInvItem(UserIndex, Slot, num, False, ammoClearMotivo, _
+                        "Ya no tenes flechas envenenadas equipadas.")
                     Call UpdateUserInv(False, UserIndex, Slot)
                     If .flags.jugando_captura = 1 Then
                         If Not InstanciaCaptura Is Nothing Then
@@ -457,7 +476,13 @@ Sub DropObj(ByVal UserIndex As Integer, ByVal Slot As Byte, ByVal num As Integer
                     Call WriteLocaleMsg(UserIndex, MSG_NO_SPACE_ON_GROUND, e_FontTypeNames.FONTTYPE_INFO)
                 End If
             Else
-                Call QuitarUserInvItem(UserIndex, Slot, num)
+                If num >= .invent.Object(Slot).amount Then
+                    ammoClearMotivo = "drop_total"
+                Else
+                    ammoClearMotivo = "split_o_drop_parcial"
+                End If
+                Call QuitarUserInvItem(UserIndex, Slot, num, False, ammoClearMotivo, _
+                    "Ya no tenes flechas envenenadas equipadas.")
                 Call UpdateUserInv(False, UserIndex, Slot)
             End If
         End With
@@ -699,6 +724,10 @@ Dim obj                         As t_ObjData
                     .invent.Object(Slot).Equipped = 0
                     .invent.EquippedWeaponObjIndex = 0
                     .invent.EquippedWeaponSlot = 0
+                    ' Sistema venenos (TOGGLE26): si el arma estaba untada, limpiar el estado
+                    If IsFeatureEnabled("new_poison_system") And .flags.PoisonedWeaponObjIndex > 0 Then
+                        Call ClearPoisonedWeapon(UserIndex, "El veneno del arma se ha perdido al desequiparla.")
+                    End If
                     .Char.Arma_Aura = ""
                     Call SendData(SendTarget.ToPCAliveArea, UserIndex, PrepareMessageAuraToChar(.Char.charindex, 0, True, 1))
                     .Char.WeaponAnim = NingunArma
@@ -709,6 +738,11 @@ Dim obj                         As t_ObjData
                         Call WriteUpdateDM(UserIndex)
                     End If
                 Case e_OBJType.otArrows
+                    If IsFeatureEnabled("new_poison_system") Then
+                        If .invent.EquippedMunitionSlot = Slot Then
+                            Call ClearPoisonedAmmo(UserIndex, "Ya no tenes flechas envenenadas equipadas.", "desequipar_manual")
+                        End If
+                    End If
                     .invent.Object(Slot).Equipped = 0
                     .invent.EquippedMunitionObjIndex = 0
                     .invent.EquippedMunitionSlot = 0
@@ -1912,7 +1946,7 @@ Sub UseInvItem(ByVal UserIndex As Integer, ByVal Slot As Byte, ByVal ByClick As 
                 Dim CabezaActual  As Integer
                 Select Case .flags.TipoPocion
                     Case e_PotionType.ModifiesAgility    'Modif la agilidad
-                        .flags.DuracionEfecto = obj.DuracionEfecto
+                        Call EffectsOverTime.CreateBuffPotenciado(UserIndex, obj.DuracionEfecto)
                         'Usa el item
                         .Stats.UserAtributos(e_Atributos.Agilidad) = MinimoInt(.Stats.UserAtributos(e_Atributos.Agilidad) + RandomNumber(obj.MinModificador, obj.MaxModificador), .Stats.UserAtributosBackUP(e_Atributos.Agilidad) * 2)
                         Call WriteFYA(UserIndex)
@@ -1927,7 +1961,7 @@ Sub UseInvItem(ByVal UserIndex As Integer, ByVal Slot As Byte, ByVal ByClick As 
                             Call SendData(SendTarget.ToPCAliveArea, UserIndex, PrepareMessagePlayWave(SND_BEBER, .pos.x, .pos.y))
                         End If
                     Case e_PotionType.ModifiesStrength    'Modif la fuerza
-                        .flags.DuracionEfecto = obj.DuracionEfecto
+                        Call EffectsOverTime.CreateBuffPotenciado(UserIndex, obj.DuracionEfecto)
                         'Usa el item
                         .Stats.UserAtributos(e_Atributos.Fuerza) = MinimoInt(.Stats.UserAtributos(e_Atributos.Fuerza) + RandomNumber(obj.MinModificador, obj.MaxModificador), .Stats.UserAtributosBackUP(e_Atributos.Fuerza) * 2)
                         ' Consumir pocion solo si el usuario no esta en zona de uso libre
@@ -1982,8 +2016,21 @@ Sub UseInvItem(ByVal UserIndex As Integer, ByVal Slot As Byte, ByVal ByClick As 
                             Call SendData(SendTarget.ToPCAliveArea, UserIndex, PrepareMessagePlayWave(SND_BEBER, .pos.x, .pos.y))
                         End If
                     Case e_PotionType.HealsPoison     ' Pocion violeta
-                        If .flags.Envenenado > 0 Then
+                        ' --- Sistema nuevo (TOGGLE26): limpia tambien los 3 venenos nuevos ---
+                        Dim hayVenenoNew As Boolean
+                        hayVenenoNew = False
+                        If IsFeatureEnabled("new_poison_system") Then
+                            hayVenenoNew = (.flags.PoisonMinorActive <> 0) Or _
+                                            (.flags.PoisonHemoStacks > 0) Or _
+                                            (.flags.PoisonNeuroActive <> 0)
+                        End If
+                        If .flags.Envenenado > 0 Or hayVenenoNew Then
                             .flags.Envenenado = 0
+                            If IsFeatureEnabled("new_poison_system") Then
+                                Call RemovePoisonMinor(UserIndex, eUser)
+                                Call RemovePoisonHemo(UserIndex, eUser)
+                                Call RemovePoisonNeuro(UserIndex, eUser)
+                            End If
                             ' Msg682=Te has curado del envenenamiento.
                             Call WriteLocaleMsg(UserIndex, MSG_CURADO_ENVENENAMIENTO, e_FontTypeNames.FONTTYPE_INFO)
                             'Quitamos del inv el item
@@ -2156,9 +2203,219 @@ Sub UseInvItem(ByVal UserIndex As Integer, ByVal Slot As Byte, ByVal ByClick As 
                             Exit Sub
                         End If
                         ' Poción que limpia todo
+                    Case e_PotionType.AppliesPoisonToWeapon
+                        ' --- Sistema venenos (TOGGLE26): vial contextual arma/flechas ---
+                        If Not IsFeatureEnabled("new_poison_system") Then Exit Sub
+                        If obj.FamiliaVeneno < 1 Or obj.FamiliaVeneno > 3 Or obj.CargasQueOtorga <= 0 Then
+                            Call WriteConsoleMsg(UserIndex, "El vial de veneno no esta configurado correctamente.", e_FontTypeNames.FONTTYPE_INFO)
+                            Exit Sub
+                        End If
+
+                        Dim equipWpn As Integer
+                        equipWpn = .invent.EquippedWeaponObjIndex
+                        If equipWpn <= 0 Then
+                            Call WriteConsoleMsg(UserIndex, "No tienes un arma equipada para envenenar.", e_FontTypeNames.FONTTYPE_INFO)
+                            Exit Sub
+                        End If
+
+                        Dim poisonFamilyName As String
+                        Select Case obj.FamiliaVeneno
+                            Case 1: poisonFamilyName = "Veneno Menor"
+                            Case 2: poisonFamilyName = "Hemotoxina"
+                            Case 3: poisonFamilyName = "Neurotoxina"
+                        End Select
+
+                        If ObjData(equipWpn).Proyectil = 1 And ObjData(equipWpn).Municion > 0 Then
+                            Dim equipAmmo As Integer
+                            equipAmmo = .invent.EquippedMunitionObjIndex
+                            If equipAmmo <= 0 Or .invent.EquippedMunitionSlot <= 0 Then
+                                Call WriteConsoleMsg(UserIndex, "Equipa flechas para envenenar tu arco.", e_FontTypeNames.FONTTYPE_INFO)
+                                Exit Sub
+                            End If
+                            If ObjData(equipAmmo).OBJType <> e_OBJType.otArrows Then
+                                Call WriteConsoleMsg(UserIndex, "Equipa flechas para envenenar tu arco.", e_FontTypeNames.FONTTYPE_INFO)
+                                Exit Sub
+                            End If
+                            If ObjData(equipAmmo).FlechaVenenoFamilia > 0 Then
+                                Call WriteConsoleMsg(UserIndex, "Esta flecha ya esta envenenada.", e_FontTypeNames.FONTTYPE_INFO)
+                                Exit Sub
+                            End If
+                            If .flags.PoisonedAmmoObjIndex > 0 And .flags.PoisonedAmmoCargas > 0 Then
+                                Call WriteConsoleMsg(UserIndex, "Tus flechas ya estan untadas con veneno.", e_FontTypeNames.FONTTYPE_INFO)
+                                Exit Sub
+                            End If
+
+                            .flags.PoisonedAmmoObjIndex = equipAmmo
+                            .flags.PoisonedAmmoFamilia = obj.FamiliaVeneno
+                            .flags.PoisonedAmmoCargas = obj.CargasQueOtorga
+                            .flags.PoisonedAmmoAppliedTick = GetTickCountRaw()
+                            .flags.PoisonedAmmoDuracionMaxMs = obj.DuracionMaximaUntadoMs
+                            .flags.PoisonedAmmoDuracionEfectoMs = obj.DuracionMs
+                            .flags.PoisonedAmmoTickIntervaloMs = obj.TickIntervaloMs
+                            .flags.PoisonedAmmoChanceAplicarPct = obj.ChanceAplicarPct
+                            .flags.PoisonedAmmoChancePorGolpePct = obj.ChancePorGolpePct
+                            .flags.PoisonedAmmoDanoModo = obj.DanoModo
+                            .flags.PoisonedAmmoDanoMin = obj.DanoMin
+                            .flags.PoisonedAmmoDanoMax = obj.DanoMax
+                            .flags.PoisonedAmmoFactorPvP = obj.FactorPvP
+                            .flags.PoisonedAmmoFactorPvE = obj.FactorPvE
+                            .flags.PoisonedAmmoDanoPorStackModo = obj.DanoPorStackModo
+                            .flags.PoisonedAmmoDanoPorStackMin = obj.DanoPorStackMin
+                            .flags.PoisonedAmmoDanoPorStackMax = obj.DanoPorStackMax
+                            .flags.PoisonedAmmoStacksMax = obj.StacksMax
+                            .flags.PoisonedAmmoGolpesQueSumanStacks = obj.GolpesQueSumanStacks
+                            .flags.PoisonedAmmoIntervaloDecayStackMs = obj.IntervaloDecayStackMs
+                            .flags.PoisonedAmmoRefrescaTimerAlStackear = obj.RefrescaTimerAlStackear
+                            .flags.PoisonedAmmoPenalidadPunteriaPct = obj.PenalidadPunteriaPct
+                            .flags.PoisonedAmmoPenalidadEvasionPct = obj.PenalidadEvasionPct
+                            .flags.PoisonedAmmoPenalidadBloqueoEscudoPct = obj.PenalidadBloqueoEscudoPct
+                            .flags.PoisonedAmmoChancePifiaHechizoPct = obj.ChancePifiaHechizoPct
+                            .flags.PoisonedAmmoRegenManaReduccionPct = obj.RegenManaReduccionPct
+                            .flags.PoisonedAmmoRegenManaReduccionFija = obj.RegenManaReduccionFija
+                            .flags.PoisonedAmmoBloqueaRegenManaTotal = obj.BloqueaRegenManaTotal
+
+                            Call QuitarUserInvItem(UserIndex, Slot, 1)
+                            Call WriteConsoleMsg(UserIndex, "Untaste tus flechas con " & poisonFamilyName & " (" & obj.CargasQueOtorga & " cargas).", e_FontTypeNames.FONTTYPE_INFO)
+                            Call LogPoisonEvent("vial_use_ammo", .name, "", equipAmmo, obj.FamiliaVeneno, 0, obj.CargasQueOtorga, 0, 0)
+                            Call WritePoisonedAmmoIcon(UserIndex)
+                            Exit Sub
+                        End If
+
+                        If ObjData(equipWpn).Subtipo <> 11 Then
+                            Call WriteConsoleMsg(UserIndex, "Tu arma no es envenenable.", e_FontTypeNames.FONTTYPE_INFO)
+                            Exit Sub
+                        End If
+                        ' Verificar familia compatible.
+                        ' FamiliasCompatibles es CSV (ej '1,2,3'). Si esta vacio: acepta todas las familias (default).
+                        ' Si esta poblado: solo acepta las familias listadas.
+                        If LenB(ObjData(equipWpn).FamiliasCompatibles) > 0 Then
+                            Dim weaponFamCsv As String
+                            weaponFamCsv = CStr(obj.FamiliaVeneno)
+                            If InStr("," & ObjData(equipWpn).FamiliasCompatibles & ",", "," & weaponFamCsv & ",") = 0 Then
+                                Call WriteConsoleMsg(UserIndex, "Tu arma no acepta esta familia de veneno.", e_FontTypeNames.FONTTYPE_INFO)
+                                Exit Sub
+                            End If
+                        End If
+                        ' Si el arma ya esta untada con MISMA familia, rechazar (no se superpone)
+                        If .flags.PoisonedWeaponObjIndex = equipWpn And .flags.PoisonedWeaponCargas > 0 Then
+                            Call WriteConsoleMsg(UserIndex, "Tu arma ya esta untada con veneno.", e_FontTypeNames.FONTTYPE_INFO)
+                            Exit Sub
+                        End If
+                        ' Aplicar untado
+                        .flags.PoisonedWeaponObjIndex = equipWpn
+                        .flags.PoisonedWeaponFamilia = obj.FamiliaVeneno
+                        .flags.PoisonedWeaponCargas = obj.CargasQueOtorga
+                        .flags.PoisonedWeaponAppliedTick = GetTickCountRaw()
+                        .flags.PoisonedWeaponDuracionMaxMs = obj.DuracionMaximaUntadoMs
+                        .flags.PoisonedWeaponChanceAplicarPct = obj.ChanceAplicarPct
+                        .flags.PoisonedWeaponChancePorGolpePct = obj.ChancePorGolpePct
+                        .flags.PoisonedWeaponTickIntervaloMs = obj.TickIntervaloMs
+                        .flags.PoisonedWeaponDuracionEfectoMs = obj.DuracionMs
+                        .flags.PoisonedWeaponDanoModo = obj.DanoModo
+                        .flags.PoisonedWeaponDanoMin = obj.DanoMin
+                        .flags.PoisonedWeaponDanoMax = obj.DanoMax
+                        .flags.PoisonedWeaponFactorPvP = obj.FactorPvP
+                        .flags.PoisonedWeaponFactorPvE = obj.FactorPvE
+                        ' Campos especificos segun familia
+                        If obj.FamiliaVeneno = 2 Then
+                            ' Hemo: stacks, decay, etc.
+                            .flags.PoisonedWeaponDanoPorStackModo = obj.DanoPorStackModo
+                            .flags.PoisonedWeaponDanoPorStackMin = obj.DanoPorStackMin
+                            .flags.PoisonedWeaponDanoPorStackMax = obj.DanoPorStackMax
+                            .flags.PoisonedWeaponStacksMax = obj.StacksMax
+                            .flags.PoisonedWeaponGolpesQueSumanStacks = obj.GolpesQueSumanStacks
+                            .flags.PoisonedWeaponIntervaloDecayStackMs = obj.IntervaloDecayStackMs
+                            .flags.PoisonedWeaponRefrescaTimerAlStackear = obj.RefrescaTimerAlStackear
+                        ElseIf obj.FamiliaVeneno = 3 Then
+                            ' Neuro: penalidades de combate y regen mana
+                            .flags.PoisonedWeaponPenalidadPunteriaPct = obj.PenalidadPunteriaPct
+                            .flags.PoisonedWeaponPenalidadEvasionPct = obj.PenalidadEvasionPct
+                            .flags.PoisonedWeaponPenalidadBloqueoEscudoPct = obj.PenalidadBloqueoEscudoPct
+                            .flags.PoisonedWeaponChancePifiaHechizoPct = obj.ChancePifiaHechizoPct
+                            .flags.PoisonedWeaponRegenManaReduccionPct = obj.RegenManaReduccionPct
+                            .flags.PoisonedWeaponRegenManaReduccionFija = obj.RegenManaReduccionFija
+                            .flags.PoisonedWeaponBloqueaRegenManaTotal = obj.BloqueaRegenManaTotal
+                        End If
+                        Call QuitarUserInvItem(UserIndex, Slot, 1)
+                        Call WriteConsoleMsg(UserIndex, "Has untado tu arma con veneno.", e_FontTypeNames.FONTTYPE_INFO)
+                        Call LogPoisonEvent("vial_use", .name, "", 0, obj.FamiliaVeneno, 0, obj.CargasQueOtorga, 0, 0)
+                        Call WritePoisonedWeaponIcon(UserIndex)
+                    Case e_PotionType.CuresPoison
+                        ' --- Sistema venenos nuevo (TOGGLE26): matriz CuraMenor/Hemo/Neuro ---
+                        If Not IsFeatureEnabled("new_poison_system") Then
+                            Call WriteLocaleMsg(UserIndex, MSG_ENCUENTRAS_ENVENENADO, e_FontTypeNames.FONTTYPE_INFO)
+                            Exit Sub
+                        End If
+                        ' Cooldown global
+                        Dim nowTick As Long
+                        nowTick = GetTickCountRaw()
+                        If obj.PoisonCooldownMs > 0 And .Counters.LastPoisonCurePotion > 0 Then
+                            If (nowTick - .Counters.LastPoisonCurePotion) < obj.PoisonCooldownMs Then
+                                Call WriteConsoleMsg(UserIndex, "Aun no puedes usar otra pocion curativa.", e_FontTypeNames.FONTTYPE_INFO)
+                                Exit Sub
+                            End If
+                        End If
+                        ' Detectar si hay algo que curar
+                        Dim algoCurado As Boolean
+                        algoCurado = False
+                        ' Menor
+                        If obj.CuraMenor = 1 And .flags.PoisonMinorActive <> 0 Then
+                            Call RemovePoisonMinor(UserIndex, eUser)
+                            algoCurado = True
+                        End If
+                        ' Hemo: 1=eliminar total, 2=reducir N stacks
+                        If obj.CuraHemo = 1 And .flags.PoisonHemoStacks > 0 Then
+                            Call RemovePoisonHemo(UserIndex, eUser)
+                            algoCurado = True
+                        ElseIf obj.CuraHemo = 2 And .flags.PoisonHemoStacks > 0 Then
+                            ' Cooldown propio para parcial Hemo
+                            If obj.PoisonCooldownMs > 0 And .Counters.LastPoisonHemoPartialPotion > 0 Then
+                                If (nowTick - .Counters.LastPoisonHemoPartialPotion) < obj.PoisonCooldownMs Then
+                                    Call WriteConsoleMsg(UserIndex, "Aun no puedes usar otra pocion curativa parcial de Hemo.", e_FontTypeNames.FONTTYPE_INFO)
+                                    Exit Sub
+                                End If
+                            End If
+                            ' Buscar el EOT Hemo activo y llamar ReduceStacks (actualiza StacksActuales interno + cliente)
+                            Dim hemoFx As PoisonHemoEffect
+                            Dim kk As Integer
+                            For kk = 0 To UserList(UserIndex).EffectOverTime.EffectCount - 1
+                                If UserList(UserIndex).EffectOverTime.EffectList(kk).TypeId = e_EffectOverTimeType.ePoisonHemo Then
+                                    Set hemoFx = UserList(UserIndex).EffectOverTime.EffectList(kk)
+                                    Exit For
+                                End If
+                            Next kk
+                            If Not (hemoFx Is Nothing) Then
+                                Call hemoFx.ReduceStacks(obj.CuraHemoValor)
+                            End If
+                            .Counters.LastPoisonHemoPartialPotion = nowTick
+                            algoCurado = True
+                        End If
+                        ' Neuro
+                        If obj.CuraNeuro = 1 And .flags.PoisonNeuroActive <> 0 Then
+                            Call RemovePoisonNeuro(UserIndex, eUser)
+                            algoCurado = True
+                        End If
+                        If algoCurado Then
+                            .Counters.LastPoisonCurePotion = nowTick
+                            Call QuitarUserInvItem(UserIndex, Slot, 1)
+                            Call WriteLocaleMsg(UserIndex, MSG_CURADO_ENVENENAMIENTO, e_FontTypeNames.FONTTYPE_INFO)
+                            If obj.Snd1 <> 0 Then
+                                Call SendData(SendTarget.ToPCAliveArea, UserIndex, PrepareMessagePlayWave(obj.Snd1, .pos.x, .pos.y))
+                            Else
+                                Call SendData(SendTarget.ToPCAliveArea, UserIndex, PrepareMessagePlayWave(SND_BEBER, .pos.x, .pos.y))
+                            End If
+                        Else
+                            Call WriteLocaleMsg(UserIndex, MSG_ENCUENTRAS_ENVENENADO, e_FontTypeNames.FONTTYPE_INFO)
+                        End If
                     Case e_PotionType.HealsAllStatusEffects
                         Call QuitarUserInvItem(UserIndex, Slot, 1)
                         .flags.Envenenado = 0
+                        ' Sistema nuevo (TOGGLE26): limpia los 3 venenos nuevos
+                        If IsFeatureEnabled("new_poison_system") Then
+                            Call RemovePoisonMinor(UserIndex, eUser)
+                            Call RemovePoisonHemo(UserIndex, eUser)
+                            Call RemovePoisonNeuro(UserIndex, eUser)
+                        End If
                         .flags.Incinerado = 0
                         If .flags.Inmovilizado = 1 Then
                             .Counters.Inmovilizado = 0
