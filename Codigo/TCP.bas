@@ -745,6 +745,7 @@ Function ConnectUser(ByVal UserIndex As Integer, ByRef name As String, Optional 
             Call LogSecurity(logMessage)
         Else
             Call ConnectUser_Prepare(UserIndex, name)
+            Call SyncPatreonBridgeTier(UserIndex)
 
             If LoadCharacterFromDB(UserIndex) Then
                 If ConnectUser_Complete(UserIndex, name, newUser) Then
@@ -816,6 +817,7 @@ Public Function ConnectUserByID(ByVal UserIndex As Integer, ByVal CharID As Long
 
     ' Tell the loader to load by ID
     UserList(UserIndex).id = CharID
+    Call SyncPatreonBridgeTier(UserIndex)
 
     If LoadCharacterFromDB(UserIndex) Then
         If ConnectUser_Complete(UserIndex, name, newUser) Then

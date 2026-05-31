@@ -680,6 +680,7 @@ Dim tStr                        As String
         'Actualiza el Num de usuarios
         NumUsers = NumUsers + 1
         .flags.UserLogged = True
+        Call SyncPatreonBridgeCredits(UserIndex)
         Call ResetUserAutomatedActions(UserIndex)
         .Counters.LastSave = GetTickCountRaw()
         ' --- Sistema de venenos nuevo (TOGGLE26): recrear EOTs persistidos ---

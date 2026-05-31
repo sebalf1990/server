@@ -1388,6 +1388,7 @@ Private Sub HandleLoginNewChar(ByVal ConnectionID As Long)
         Exit Sub
     End If
     Debug.Assert UserList(UserIndex).AccountID > -1
+    Call SyncPatreonBridgeTier(UserIndex)
     Dim num_pc As Byte
     num_pc = GetPersonajesCountByIDDatabase(UserList(UserIndex).AccountID)
     Debug.Assert num_pc > 0
