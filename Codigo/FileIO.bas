@@ -1405,8 +1405,6 @@ Sub LoadOBJData()
                     .ResistenciaMagica = val(Leer.GetValue(ObjKey, "ResistenciaMagica"))
                 Case e_OBJType.otMinerals
                     .LingoteIndex = val(Leer.GetValue(ObjKey, "LingoteIndex"))
-                Case e_OBJType.otUsableOntarget
-                    .EfectoMagico = val(Leer.GetValue(ObjKey, "efectomagico"))
                 Case e_OBJType.otElementalRune
                     .Hechizo = val(Leer.GetValue(ObjKey, "Hechizo"))
                 Case e_OBJType.otParchment, e_OBJType.otSkinsSpells

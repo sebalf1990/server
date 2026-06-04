@@ -1582,18 +1582,18 @@ Public Enum e_MagicItemSubType
 End Enum
 
 Public Enum e_MagicItemEffect
-    eMagicresistance = 1
+    eMagicresistance = 1               ' RESERVADO: sin Case en el dispatcher (igual que upstream oficial)
     eModifyAttributes = 2
     eModifySkills = 3
     eRegenerateHealth = 4
     eRegenerateMana = 5
     eIncreaseDamageToNpc = 6
-    eReduceDamageToNpc = 7
+    eReduceDamageToNpc = 7               ' RESERVADO: sin Case en el dispatcher (igual que upstream oficial)
     eInmunityToNpcMagic = 9
     eIncinerate = 10
     eParalize = 11
     eProtectedResources = 12
-    eWalkHidden = 13
+    eWalkHidden = 13               ' RESERVADO: sin Case en el dispatcher (igual que upstream oficial)
     eProtectedInventory = 15
     ePreventMagicWords = 16
     ePreventInvisibleDetection = 17
@@ -1603,28 +1603,11 @@ Public Enum e_MagicItemEffect
     eTalkToDead = 21
 End Enum
 
-Public Enum e_MagicEffect
-    eMagicresistance = 1
-    eAttributeModifier = 2 'Requires CuantoAumento y QueAtributo
-    eSkillModifier = 3 'Requires CuantoAumento y QueSkill
-    eHealthRecovery = 4
-    eMeditationBonus = 5
-    eNpcDamageBonus = 6 'Requires CuantoAumento
-    eNpcDamageReduction = 7 'Rquires CuantoAumento
-    eReserved = 8
-    eMagicInmuneFromNpc = 9
-    eIncinerate = 10
-    eParalize = 11
-    eProtectResources = 12
-    eWalkHidden = 13
-    eIncreaseMagicDamage = 14 'Requires CuantoAumento
-    eInventoryProtection = 15
-    eSilentCast = 16
-    ePreventDetection = 17
-    eIncreaseSkillLearningChance = 18
-    eAddPoisonEffect = 19
-    eResurrectionItem = 20
-End Enum
+' --- e_MagicEffect eliminado (plan 02.001, Ola 2) ---
+' Enum declarado pero SIN ningun uso en el fork ni en el upstream oficial.
+' El enum canonico de efectos de items magicos es e_MagicItemEffect (arriba).
+' Se elimino para evitar la ambiguedad del valor 20 (eResurrectionItem aqui vs
+' e_MagicItemEffect.eRingOfShadows=20), que ya indujo a un analisis erroneo.
 
 Public Enum e_UssableOnTarget
     eRessurectionItem = 1

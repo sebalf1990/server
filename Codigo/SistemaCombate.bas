@@ -2180,10 +2180,94 @@ Private Sub UserDañoEspecial(ByVal AtacanteIndex As Integer, ByVal VictimaIndex
             End If
         End If
     End If
+    ' --- Veneno por amuleto (EfectoMagico ePoison) via sistema nuevo (plan 02.001, Ola 2) ---
+    ' El amuleto venenoso (flags.Envenena) aplica un veneno configurable desde su propio ObjData
+    ' (FamiliaVeneno + params), independiente del arma. Soporta las 3 familias (1 Minor / 2 Hemo / 3 Neuro).
+    If IsFeatureEnabled("new_poison_system") And UserList(AtacanteIndex).flags.Envenena > 0 Then
+        Dim amuletoVenenoIdx As Integer
+        amuletoVenenoIdx = UserList(AtacanteIndex).invent.EquippedAmuletAccesoryObjIndex
+        If amuletoVenenoIdx > 0 Then
+            Dim resistAmu As t_PoisonResist
+            Dim chanceAmu As Long
+            If ObjData(amuletoVenenoIdx).FamiliaVeneno = 1 Then
+                resistAmu = GetUserPoisonResist(VictimaIndex, 1)
+                If resistAmu.Inmune <> 0 Then
+                    Call WriteCombatConsoleMsg(VictimaIndex, "Resististe el veneno.")
+                    Exit Sub
+                End If
+                chanceAmu = ObjData(amuletoVenenoIdx).ChanceAplicarPct - resistAmu.ChancePct
+                If chanceAmu <= 0 Then
+                    Call WriteCombatConsoleMsg(VictimaIndex, "Resististe el veneno.")
+                    Exit Sub
+                End If
+                If RandomNumber(1, 100) <= chanceAmu Then
+                    Call CreatePoisonMinor(AtacanteIndex, eUser, VictimaIndex, eUser, 63, _
+                        ObjData(amuletoVenenoIdx).TickIntervaloMs, ObjData(amuletoVenenoIdx).DuracionMs, _
+                        ObjData(amuletoVenenoIdx).DanoModo, ObjData(amuletoVenenoIdx).DanoMin, ObjData(amuletoVenenoIdx).DanoMax, _
+                        ObjData(amuletoVenenoIdx).FactorPvP, ObjData(amuletoVenenoIdx).FactorPvE)
+                    Call WriteCombatConsoleMsg(VictimaIndex, "¡" & UserList(AtacanteIndex).name & " te ha envenenado!")
+                    Call WriteCombatConsoleMsg(AtacanteIndex, "¡Has envenenado a " & UserList(VictimaIndex).name & "!")
+                Else
+                    Call WriteCombatConsoleMsg(VictimaIndex, "Resististe el veneno.")
+                End If
+                Exit Sub
+            End If
+            If ObjData(amuletoVenenoIdx).FamiliaVeneno = 2 Then
+                resistAmu = GetUserPoisonResist(VictimaIndex, 2)
+                If resistAmu.Inmune <> 0 Then
+                    Call WriteCombatConsoleMsg(VictimaIndex, "Resististe el veneno.")
+                    Exit Sub
+                End If
+                chanceAmu = ObjData(amuletoVenenoIdx).ChanceAplicarPct - resistAmu.ChancePct
+                If chanceAmu <= 0 Then
+                    Call WriteCombatConsoleMsg(VictimaIndex, "Resististe el veneno.")
+                    Exit Sub
+                End If
+                If RandomNumber(1, 100) <= chanceAmu Then
+                    Call CreatePoisonHemo(AtacanteIndex, eUser, VictimaIndex, eUser, 64, _
+                        ObjData(amuletoVenenoIdx).TickIntervaloMs, ObjData(amuletoVenenoIdx).DuracionMs, _
+                        ObjData(amuletoVenenoIdx).DanoModo, ObjData(amuletoVenenoIdx).DanoMin, ObjData(amuletoVenenoIdx).DanoMax, _
+                        ObjData(amuletoVenenoIdx).DanoPorStackModo, ObjData(amuletoVenenoIdx).DanoPorStackMin, ObjData(amuletoVenenoIdx).DanoPorStackMax, _
+                        ObjData(amuletoVenenoIdx).StacksMax, ObjData(amuletoVenenoIdx).GolpesQueSumanStacks, ObjData(amuletoVenenoIdx).IntervaloDecayStackMs, _
+                        ObjData(amuletoVenenoIdx).RefrescaTimerAlStackear, ObjData(amuletoVenenoIdx).FactorPvP, ObjData(amuletoVenenoIdx).FactorPvE, 1)
+                    Call WriteCombatConsoleMsg(VictimaIndex, "¡" & UserList(AtacanteIndex).name & " te ha envenenado!")
+                    Call WriteCombatConsoleMsg(AtacanteIndex, "¡Has envenenado a " & UserList(VictimaIndex).name & "!")
+                Else
+                    Call WriteCombatConsoleMsg(VictimaIndex, "Resististe el veneno.")
+                End If
+                Exit Sub
+            End If
+            If ObjData(amuletoVenenoIdx).FamiliaVeneno = 3 Then
+                resistAmu = GetUserPoisonResist(VictimaIndex, 3)
+                If resistAmu.Inmune <> 0 Then
+                    Call WriteCombatConsoleMsg(VictimaIndex, "Resististe el veneno.")
+                    Exit Sub
+                End If
+                chanceAmu = ObjData(amuletoVenenoIdx).ChanceAplicarPct - resistAmu.ChancePct
+                If chanceAmu <= 0 Then
+                    Call WriteCombatConsoleMsg(VictimaIndex, "Resististe el veneno.")
+                    Exit Sub
+                End If
+                If RandomNumber(1, 100) <= chanceAmu Then
+                    Call CreatePoisonNeuro(AtacanteIndex, eUser, VictimaIndex, eUser, 65, _
+                        ObjData(amuletoVenenoIdx).TickIntervaloMs, ObjData(amuletoVenenoIdx).DuracionMs, _
+                        ObjData(amuletoVenenoIdx).PenalidadPunteriaPct, ObjData(amuletoVenenoIdx).PenalidadEvasionPct, _
+                        ObjData(amuletoVenenoIdx).PenalidadBloqueoEscudoPct, ObjData(amuletoVenenoIdx).ChancePifiaHechizoPct, _
+                        ObjData(amuletoVenenoIdx).RegenManaReduccionPct, ObjData(amuletoVenenoIdx).RegenManaReduccionFija, _
+                        ObjData(amuletoVenenoIdx).BloqueaRegenManaTotal)
+                    Call WriteCombatConsoleMsg(VictimaIndex, "¡" & UserList(AtacanteIndex).name & " te ha envenenado!")
+                    Call WriteCombatConsoleMsg(AtacanteIndex, "¡Has envenenado a " & UserList(VictimaIndex).name & "!")
+                Else
+                    Call WriteCombatConsoleMsg(VictimaIndex, "Resististe el veneno.")
+                End If
+                Exit Sub
+            End If
+        End If
+    End If
     ' --- Rama legacy: sistema viejo intacto ---
     If puedeEnvenenar And (UserList(VictimaIndex).flags.Envenenado = 0) Then
         If RandomNumber(1, 100) < 30 Then
-            UserList(VictimaIndex).flags.Envenenado = ObjData(ObjInd).Envenena
+            UserList(VictimaIndex).flags.Envenenado = MaximoInt(ObjData(ObjInd).Envenena, UserList(AtacanteIndex).flags.Envenena)
             Call WriteCombatConsoleMsg(VictimaIndex, "¡" & UserList(AtacanteIndex).name & " te ha envenenado!")
             Call WriteCombatConsoleMsg(AtacanteIndex, "¡Has envenenado a " & UserList(VictimaIndex).name & "!")
             Exit Sub

@@ -2719,6 +2719,8 @@ Sub HechizoPropNPC(ByVal hIndex As Integer, ByVal NpcIndex As Integer, ByVal Use
         Call NPCAtacado(NpcIndex, UserIndex)
         Damage = RandomNumber(Hechizos(hIndex).MinHp, Hechizos(hIndex).MaxHp)
         Damage = Damage + Porcentaje(Damage, UserMod.GetMagicLevelDamageBonus(UserList(UserIndex)) * UserList(UserIndex).Stats.ELV)
+        ' F3 (plan 02.001 Ola 3): bonus de dano magico por skill Magia (toggle mr-magic-bonus-damage)
+        If IsFeatureEnabled("mr-magic-bonus-damage") Then Damage = Damage + Porcentaje(Damage, UserList(UserIndex).Stats.UserSkills(e_Skill.Magia) * MagicSkillBonusDamageModifier)
         Dim MagicPenetration As Integer
         If UserList(UserIndex).invent.EquippedWeaponObjIndex > 0 Then
             Damage = Damage + Porcentaje(Damage, ObjData(UserList(UserIndex).invent.EquippedWeaponObjIndex).MagicDamageBonus)
@@ -3412,6 +3414,8 @@ Sub HechizoPropUsuario(ByVal UserIndex As Integer, ByRef b As Boolean, ByRef IsA
         If Not PuedeAtacar(UserIndex, tempChr) Then Exit Sub
         Damage = RandomNumber(Hechizos(h).MinHp, Hechizos(h).MaxHp)
         Damage = Damage + Porcentaje(Damage, UserMod.GetMagicLevelDamageBonus(UserList(UserIndex)) * UserList(UserIndex).Stats.ELV)
+        ' F3 (plan 02.001 Ola 3): bonus de dano magico por skill Magia (toggle mr-magic-bonus-damage)
+        If IsFeatureEnabled("mr-magic-bonus-damage") Then Damage = Damage + Porcentaje(Damage, UserList(UserIndex).Stats.UserSkills(e_Skill.Magia) * MagicSkillBonusDamageModifier)
         ' Si al hechizo le afecta el daño mágico
         Dim PorcentajeRM As Integer
         If UserList(UserIndex).invent.EquippedWeaponObjIndex > 0 Then
@@ -3661,6 +3665,8 @@ Sub HechizoCombinados(ByVal UserIndex As Integer, ByRef b As Boolean, ByRef IsAl
         If Not PuedeAtacar(UserIndex, targetUserIndex) Then Exit Sub
         Damage = RandomNumber(Hechizos(h).MinHp, Hechizos(h).MaxHp)
         Damage = Damage + Porcentaje(Damage, UserMod.GetMagicLevelDamageBonus(UserList(UserIndex)) * UserList(UserIndex).Stats.ELV)
+        ' F3 (plan 02.001 Ola 3): bonus de dano magico por skill Magia (toggle mr-magic-bonus-damage)
+        If IsFeatureEnabled("mr-magic-bonus-damage") Then Damage = Damage + Porcentaje(Damage, UserList(UserIndex).Stats.UserSkills(e_Skill.Magia) * MagicSkillBonusDamageModifier)
         ' mage has 30% damage reduction
         If UserList(UserIndex).clase = e_Class.Mage Then
             Damage = Damage * 0.7

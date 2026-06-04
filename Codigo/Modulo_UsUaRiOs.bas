@@ -599,7 +599,35 @@ Dim tStr                        As String
             Next
         End If
         If .invent.EquippedAmuletAccesoryObjIndex <> 0 Then
-            If ObjData(.invent.EquippedAmuletAccesoryObjIndex).EfectoMagico = 11 Then .flags.Paraliza = 1
+            ' Restaurar efectos flag-based del amuleto equipado tras reconectar (plan 02.001, Ola 2, fix R1).
+            ' Antes solo se restauraba Paraliza (=11) y el resto de efectos se perdian al reloguear.
+            ' Solo flags/mask: los modificadores de atributo/skill ya estan persistidos en el .chr.
+            Select Case ObjData(.invent.EquippedAmuletAccesoryObjIndex).EfectoMagico
+                Case e_MagicItemEffect.eRegenerateHealth
+                    .flags.RegeneracionHP = 1
+                Case e_MagicItemEffect.eRegenerateMana
+                    .flags.RegeneracionMana = 1
+                Case e_MagicItemEffect.eInmunityToNpcMagic
+                    .flags.NoMagiaEfecto = 1
+                Case e_MagicItemEffect.eIncinerate
+                    .flags.incinera = 1
+                Case e_MagicItemEffect.eParalize
+                    .flags.Paraliza = 1
+                Case e_MagicItemEffect.eProtectedInventory
+                    .flags.PendienteDelSacrificio = 1
+                Case e_MagicItemEffect.ePreventMagicWords
+                    .flags.NoPalabrasMagicas = 1
+                Case e_MagicItemEffect.ePreventInvisibleDetection
+                    .flags.NoDetectable = 1
+                Case e_MagicItemEffect.eIncreaseLearningSkills
+                    .flags.PendienteDelExperto = 1
+                Case e_MagicItemEffect.ePoison
+                    .flags.Envenena = 1
+                Case e_MagicItemEffect.eRingOfShadows
+                    .flags.AnilloOcultismo = 1
+                Case e_MagicItemEffect.eTalkToDead
+                    Call SetMask(.flags.StatusMask, e_StatusMask.eTalkToDead)
+            End Select
         End If
         Call WriteUserIndexInServer(UserIndex) 'Enviamos el User index
         Call WriteHora(UserIndex)
