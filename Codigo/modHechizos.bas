@@ -999,6 +999,21 @@ HechizoMaterializacion_Err:
     Call TraceError(Err.Number, Err.Description, "modHechizos.HechizoMaterializacion", Erl)
 End Sub
 
+Public Sub HechizoPortal(ByVal UserIndex As Integer, ByRef b As Boolean)
+    On Error GoTo HechizoPortal_Err
+    Dim h As Integer
+    h = UserList(UserIndex).Stats.UserHechizos(UserList(UserIndex).flags.Hechizo)
+    If Not MapaValido(Hechizos(h).TeleportXMap) Then
+        b = False
+        Exit Sub
+    End If
+    Call WarpUserChar(UserIndex, Hechizos(h).TeleportXMap, Hechizos(h).TeleportXX, Hechizos(h).TeleportXY, True)
+    b = True
+    Exit Sub
+HechizoPortal_Err:
+    Call TraceError(Err.Number, Err.Description, "modHechizos.HechizoPortal", Erl)
+End Sub
+
 Sub HandleHechizoTerreno(ByVal UserIndex As Integer, ByVal uh As Integer)
     On Error GoTo HandleHechizoTerreno_Err
     Dim b As Boolean
@@ -1018,6 +1033,8 @@ Sub HandleHechizoTerreno(ByVal UserIndex As Integer, ByVal uh As Integer)
                 TargetPos.x = .flags.TargetX
                 TargetPos.y = .flags.TargetY
                 b = MultiShot(UserIndex, TargetPos)
+            Case e_TipoHechizo.uPortal 'Tipo 6 - Portal Planar (R10): teleporta al caster al destino del hechizo
+                Call HechizoPortal(UserIndex, b)
         End Select
         If b Then
             If Not IsSet(Hechizos(uh).SpellRequirementMask, eIsSkill) Then
