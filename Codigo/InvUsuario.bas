@@ -122,8 +122,12 @@ Function ClasePuedeUsarItem(ByVal UserIndex As Integer, ByVal ObjIndex As Intege
     If profReqHerr > 0 Then
         ' Herramienta de profesion: con toggle ON ignoramos las ClaseProhibida
         ' y solo validamos que tenga la profesion aprendida.
+        ' Predicado PURO: NO emitir WriteLocaleMsg aca. CanUseObject usa este
+        ' predicado tambien al refrescar el inventario (writeInConsole=False); emitir
+        ' un mensaje corrompia el paquete eChangeInventorySlot (Writer compartido)
+        ' -> icono basura + cantidad 2207 + spam en consola. El mensaje lo emite
+        ' CanUseObject (MSG_PROF_ITEM_NO_USABLE) solo cuando writeInConsole=True.
         If Not TieneProfesionAprendida(UserIndex, profReqHerr) Then
-            Call WriteLocaleMsg(UserIndex, MSG_PROF_ITEM_NO_USABLE, e_FontTypeNames.FONTTYPE_INFO)
             ClasePuedeUsarItem = False
             Exit Function
         End If

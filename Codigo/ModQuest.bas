@@ -371,6 +371,7 @@ Public Sub LoadQuests()
             'CARGAMOS OBJETOS REQUERIDOS
             .RequiredOBJs = val(reader.GetValue("QUEST" & i, "RequiredOBJs"))
             .Trabajador = IIf(val(reader.GetValue("QUEST" & i, "Trabajador")) = 1, True, False)
+            .RequiredProfession = val(reader.GetValue("QUEST" & i, "RequiredProfession"))
             .TalkTo = val(reader.GetValue("QUEST" & i, "TalkTo"))
             If .RequiredOBJs > 0 Then
                 ReDim .RequiredOBJ(1 To .RequiredOBJs)
@@ -527,6 +528,11 @@ Public Function FinishQuestCheck(ByVal UserIndex As Integer, ByVal QuestIndex As
 
     With QuestList(QuestIndex)
 
+        ' --- Required profession (re-validar al entregar, espejo de CanUserAcceptQuest) ---
+        If .Trabajador And IsFeatureEnabled("professions_learnable") And .RequiredProfession > 0 Then
+            If Not TieneProfesionAprendida(UserIndex, .RequiredProfession) Then Exit Function
+        End If
+
         ' --- Required objects ---
         If .RequiredOBJs > 0 Then
             Dim lastObj As Long: lastObj = -1
@@ -625,9 +631,20 @@ End Function
 Public Function CanUserAcceptQuest(ByVal UserIndex As Integer, ByVal NpcIndex As Integer, ByVal QuestIndex As Integer, ByRef tmpQuest As t_Quest) As Boolean
     On Error GoTo ErrHandler
     CanUserAcceptQuest = False
-    If tmpQuest.Trabajador And UserList(UserIndex).clase <> e_Class.Trabajador Then
-        Call WriteLocaleMsg(UserIndex, MSG_QUEST_ONLY_FOR_WORKERS, e_FontTypeNames.FONTTYPE_INFO)
-        Exit Function
+    If tmpQuest.Trabajador Then
+        If IsFeatureEnabled("professions_learnable") Then
+            ' Con profesiones aprendibles la clase Trabajador no existe: se gatea por profesion.
+            ' Si la quest no declara RequiredProfession (=0), no se restringe por clase.
+            If tmpQuest.RequiredProfession > 0 Then
+                If Not TieneProfesionAprendida(UserIndex, tmpQuest.RequiredProfession) Then
+                    Call WriteLocaleMsg(UserIndex, MSG_PROF_NO_APRENDIDA, e_FontTypeNames.FONTTYPE_INFO)
+                    Exit Function
+                End If
+            End If
+        ElseIf UserList(UserIndex).clase <> e_Class.Trabajador Then
+            Call WriteLocaleMsg(UserIndex, MSG_QUEST_ONLY_FOR_WORKERS, e_FontTypeNames.FONTTYPE_INFO)
+            Exit Function
+        End If
     End If
     If NpcIndex > 0 Then
         If Distancia(UserList(UserIndex).pos, NpcList(NpcIndex).pos) > 5 Then

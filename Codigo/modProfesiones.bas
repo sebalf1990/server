@@ -14,7 +14,7 @@ Option Explicit
 ' Gateado por el feature toggle "professions_learnable".
 ' Ver: ia/plans/2026-04-22-sistema-profesiones-aprendibles.md
 
-Public Const PROF_MAX_SLOTS As Byte = 2
+Public Const PROF_MAX_SLOTS As Byte = 7
 Public Const PROF_MIN_ID    As Byte = 17
 Public Const PROF_MAX_ID    As Byte = 23
 
@@ -44,8 +44,9 @@ Public Sub LoadProfesionesConfig()
     Call Lector.Initialize(App.Path & "\profesiones.ini")
     MaxOlvidosPorPersonaje = CByte(val(Lector.GetValue("General", "MaxOlvidosPorPersonaje")))
     MaxProfesionesAprendidas = CByte(val(Lector.GetValue("General", "MaxProfesionesAprendidas")))
-    If MaxOlvidosPorPersonaje = 0 Then MaxOlvidosPorPersonaje = 2
+    ' MaxOlvidosPorPersonaje = 0 => olvidos ILIMITADOS (no se fuerza default)
     If MaxProfesionesAprendidas = 0 Then MaxProfesionesAprendidas = 2
+    If MaxProfesionesAprendidas > PROF_MAX_SLOTS Then MaxProfesionesAprendidas = PROF_MAX_SLOTS
     Call LoadSeccionProfesion(Lector, "Carpinteria", e_Skill.Carpinteria, False)
     Call LoadSeccionProfesion(Lector, "Herreria", e_Skill.Herreria, False)
     Call LoadSeccionProfesion(Lector, "Sastreria", e_Skill.Sastreria, False)
@@ -132,7 +133,7 @@ Public Function PuedeAprenderProfesion(ByVal UserIndex As Integer, ByVal Profesi
         Call WriteLocaleMsg(UserIndex, MSG_PROF_YA_APRENDIDA, e_FontTypeNames.FONTTYPE_INFO)
         Exit Function
     End If
-    If UserList(UserIndex).ProfessionForgotCount >= MaxOlvidosPorPersonaje And SlotsOcupados(UserIndex) >= MaxProfesionesAprendidas Then
+    If MaxOlvidosPorPersonaje > 0 And UserList(UserIndex).ProfessionForgotCount >= MaxOlvidosPorPersonaje And SlotsOcupados(UserIndex) >= MaxProfesionesAprendidas Then
         Call WriteLocaleMsg(UserIndex, MSG_PROF_SLOT_BLOQUEADO_POR_OLVIDOS, e_FontTypeNames.FONTTYPE_INFO)
         Exit Function
     End If
@@ -155,7 +156,7 @@ Public Function PuedeOlvidarProfesion(ByVal UserIndex As Integer, ByVal Profesio
         Call WriteLocaleMsg(UserIndex, MSG_PROF_NO_APRENDIDA, e_FontTypeNames.FONTTYPE_INFO)
         Exit Function
     End If
-    If UserList(UserIndex).ProfessionForgotCount >= MaxOlvidosPorPersonaje Then
+    If MaxOlvidosPorPersonaje > 0 And UserList(UserIndex).ProfessionForgotCount >= MaxOlvidosPorPersonaje Then
         Call WriteLocaleMsg(UserIndex, MSG_PROF_MAX_OLVIDOS_PERSONAJE, e_FontTypeNames.FONTTYPE_INFO)
         Exit Function
     End If
@@ -165,51 +166,58 @@ PuedeOlvidarProfesion_Err:
     Call TraceError(Err.Number, Err.Description, "modProfesiones.PuedeOlvidarProfesion", Erl)
 End Function
 
-Public Sub AprenderProfesion(ByVal UserIndex As Integer, ByVal ProfesionId As Integer)
+Public Function AprenderProfesion(ByVal UserIndex As Integer, ByVal ProfesionId As Integer) As Boolean
     On Error GoTo AprenderProfesion_Err
-    If Not IsFeatureEnabled("professions_learnable") Then Exit Sub
-    If Not PuedeAprenderProfesion(UserIndex, ProfesionId) Then Exit Sub
+    AprenderProfesion = False
+    If Not IsFeatureEnabled("professions_learnable") Then Exit Function
+    If Not PuedeAprenderProfesion(UserIndex, ProfesionId) Then Exit Function
     Dim i As Byte
+    Dim almacenada As Boolean
+    almacenada = False
     For i = 1 To PROF_MAX_SLOTS
         If UserList(UserIndex).Professions(i) = 0 Then
             UserList(UserIndex).Professions(i) = ProfesionId
+            almacenada = True
             Exit For
         End If
     Next i
+    If Not almacenada Then
+        ' Sin slot libre (limite real = PROF_MAX_SLOTS). No reportar exito ni consumir el item.
+        Call WriteLocaleMsg(UserIndex, MSG_PROF_YA_TIENE_2, e_FontTypeNames.FONTTYPE_INFO)
+        Exit Function
+    End If
     Call Execute("INSERT OR REPLACE INTO user_professions (user_id, profession_id, learned_at) VALUES (?, ?, ?);", UserList(UserIndex).Id, CInt(ProfesionId), CLng(GetTickCountRaw() \ 1000))
     Call RefrescarHerramientasInventario(UserIndex, ProfesionId)
     Call WriteLocaleMsg(UserIndex, MSG_PROF_APRENDIDA_OK, e_FontTypeNames.FONTTYPE_INFO, NombreProfesion(ProfesionId))
-    Exit Sub
+    AprenderProfesion = True
+    Exit Function
 AprenderProfesion_Err:
     Call TraceError(Err.Number, Err.Description, "modProfesiones.AprenderProfesion", Erl)
-End Sub
+End Function
 
-Public Sub OlvidarProfesion(ByVal UserIndex As Integer, ByVal ProfesionId As Integer)
+Public Function OlvidarProfesion(ByVal UserIndex As Integer, ByVal ProfesionId As Integer) As Boolean
     On Error GoTo OlvidarProfesion_Err
-    If Not IsFeatureEnabled("professions_learnable") Then Exit Sub
-    If Not PuedeOlvidarProfesion(UserIndex, ProfesionId) Then Exit Sub
+    OlvidarProfesion = False
+    If Not IsFeatureEnabled("professions_learnable") Then Exit Function
+    If Not PuedeOlvidarProfesion(UserIndex, ProfesionId) Then Exit Function
     Dim i            As Byte
-    Dim puntosDevol  As Byte
     For i = 1 To PROF_MAX_SLOTS
         If UserList(UserIndex).Professions(i) = ProfesionId Then
             UserList(UserIndex).Professions(i) = 0
             Exit For
         End If
     Next i
-    puntosDevol = UserList(UserIndex).Stats.UserSkills(ProfesionId)
-    UserList(UserIndex).Stats.UserSkills(ProfesionId) = 0
-    If puntosDevol > 0 Then
-        UserList(UserIndex).Stats.SkillPts = UserList(UserIndex).Stats.SkillPts + puntosDevol
-    End If
+    ' T5 (usuario 2026-06-03): olvidar quita el permiso pero CONSERVA el skill ya progresado.
     UserList(UserIndex).ProfessionForgotCount = UserList(UserIndex).ProfessionForgotCount + 1
     Call Execute("DELETE FROM user_professions WHERE user_id = ? AND profession_id = ?;", UserList(UserIndex).Id, CInt(ProfesionId))
     Call Execute("UPDATE user SET profession_forgot_count = ? WHERE id = ?;", CLng(UserList(UserIndex).ProfessionForgotCount), UserList(UserIndex).Id)
     Call RefrescarHerramientasInventario(UserIndex, ProfesionId)
     Call WriteLocaleMsg(UserIndex, MSG_PROF_OLVIDADA_OK, e_FontTypeNames.FONTTYPE_INFO, NombreProfesion(ProfesionId))
-    Exit Sub
+    OlvidarProfesion = True
+    Exit Function
 OlvidarProfesion_Err:
     Call TraceError(Err.Number, Err.Description, "modProfesiones.OlvidarProfesion", Erl)
-End Sub
+End Function
 
 Public Function CalcularExitoExtraccion(ByVal UserIndex As Integer, ByVal ProfesionId As Integer) As Boolean
     On Error GoTo CalcularExitoExtraccion_Err
@@ -301,7 +309,7 @@ Public Sub UsarManualProfesion(ByVal UserIndex As Integer, ByVal Slot As Byte)
     ProfesionId = ObjData(ObjIndex).ProfesionId
     If ProfesionId < PROF_MIN_ID Or ProfesionId > PROF_MAX_ID Then Exit Sub
     If Not PuedeAprenderProfesion(UserIndex, ProfesionId) Then Exit Sub
-    Call AprenderProfesion(UserIndex, ProfesionId)
+    If Not AprenderProfesion(UserIndex, ProfesionId) Then Exit Sub
     Call QuitarUserInvItem(UserIndex, Slot, 1)
     Call UpdateUserInv(False, UserIndex, Slot)
     Exit Sub
@@ -382,11 +390,17 @@ Public Function HandleProfesionChatCommand(ByVal UserIndex As Integer, ByVal cha
         Exit Function
     End If
     If cmd = "APRENDE" Then
-        Call AprenderProfesion(tUserRef.ArrayIndex, profId)
-        Call WriteConsoleMsg(UserIndex, "Aprendio " & NombreProfesion(profId) & " para " & targetName, e_FontTypeNames.FONTTYPE_INFO)
+        If AprenderProfesion(tUserRef.ArrayIndex, profId) Then
+            Call WriteConsoleMsg(UserIndex, "Aprendio " & NombreProfesion(profId) & " para " & targetName, e_FontTypeNames.FONTTYPE_INFO)
+        Else
+            Call WriteConsoleMsg(UserIndex, "No se pudo aprender " & NombreProfesion(profId) & " para " & targetName & " (ya aprendida, slots llenos o limite de olvidos).", e_FontTypeNames.FONTTYPE_INFO)
+        End If
     Else
-        Call OlvidarProfesion(tUserRef.ArrayIndex, profId)
-        Call WriteConsoleMsg(UserIndex, "Olvido " & NombreProfesion(profId) & " para " & targetName, e_FontTypeNames.FONTTYPE_INFO)
+        If OlvidarProfesion(tUserRef.ArrayIndex, profId) Then
+            Call WriteConsoleMsg(UserIndex, "Olvido " & NombreProfesion(profId) & " para " & targetName, e_FontTypeNames.FONTTYPE_INFO)
+        Else
+            Call WriteConsoleMsg(UserIndex, "No se pudo olvidar " & NombreProfesion(profId) & " para " & targetName & " (no la tiene o limite de olvidos).", e_FontTypeNames.FONTTYPE_INFO)
+        End If
     End If
     Call LogGM(GetUserRealName(UserIndex), "/" & cmd & " " & targetName & " " & NombreProfesion(profId))
     Exit Function

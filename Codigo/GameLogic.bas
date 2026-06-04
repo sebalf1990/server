@@ -868,7 +868,11 @@ Function LegalWalk(ByVal Map As Integer, _
             If (.Blocked And FLAG_AGUA) = 0 Then Exit Function
         End If
         If .trigger = WORKERONLY Then
-            If Not UserList(WalkerIndex).clase = Trabajador Then Exit Function
+            If IsFeatureEnabled("professions_learnable") Then
+                If Not TieneProfesionAprendida(WalkerIndex, e_Skill.Mineria) Then Exit Function
+            ElseIf Not UserList(WalkerIndex).clase = Trabajador Then
+                Exit Function
+            End If
         End If
         If WalkerIndex <> 0 Then
             If TileRequiresPatreon(Map, x, y) Then

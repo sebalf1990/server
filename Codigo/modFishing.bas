@@ -146,8 +146,12 @@ Public Sub PerformFishing(ByVal UserIndex As Integer)
         ' Attempt to catch fish
         Dim fishingChance As Integer
         Dim caughtFish    As Boolean
-        fishingChance = GetFishingChance(.Stats.UserSkills(e_Skill.Pescar))
-        caughtFish = RandomNumber(1, 100) <= fishingChance
+        If IsFeatureEnabled("professions_learnable") Then
+            caughtFish = CalcularExitoExtraccion(UserIndex, e_Skill.Pescar)
+        Else
+            fishingChance = GetFishingChance(.Stats.UserSkills(e_Skill.Pescar))
+            caughtFish = RandomNumber(1, 100) <= fishingChance
+        End If
         If Not caughtFish Then
             Call SendData(ToIndex, UserIndex, PrepareMessageParticleFX(.Char.charindex, 253, 25, False, GRH_FALLO_PESCA))
             GoTo SkillImprovement

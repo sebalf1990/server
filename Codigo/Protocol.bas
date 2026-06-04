@@ -8162,6 +8162,15 @@ Public Function HandleStartAutomatedAction(ByVal UserIndex As Integer)
     x = reader.ReadInt8()
     y = reader.ReadInt8()
     skill = reader.ReadInt8()
+    'Gating profesiones aprendibles para acciones automatizadas (espejo de HandleWork)
+    If IsFeatureEnabled("professions_learnable") Then
+        If skill = e_Skill.Pescar Or skill = e_Skill.Talar Or skill = e_Skill.Mineria Then
+            If Not TieneProfesionAprendida(UserIndex, CInt(skill)) Then
+                Call WriteLocaleMsg(UserIndex, MSG_PROF_NO_APRENDIDA, e_FontTypeNames.FONTTYPE_INFO)
+                Exit Function
+            End If
+        End If
+    End If
     Select Case skill
         Case e_Skill.Pescar
             If Not CanUserFish(UserIndex, x, y) Then

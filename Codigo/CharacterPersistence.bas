@@ -1701,13 +1701,14 @@ Private Sub SetupUserProfessions(ByRef User As t_User)
     On Error GoTo SetupUserProfessions_Err
     Dim RS    As ADODB.Recordset
     Dim slot  As Byte
-    User.Professions(1) = 0
-    User.Professions(2) = 0
+    For slot = 1 To PROF_MAX_SLOTS
+        User.Professions(slot) = 0
+    Next slot
     slot = 1
     Set RS = Query("SELECT profession_id FROM user_professions WHERE user_id = ? ORDER BY learned_at ASC;", User.Id)
     If RS Is Nothing Then Exit Sub
     Do While Not RS.EOF
-        If slot > 2 Then Exit Do
+        If slot > PROF_MAX_SLOTS Then Exit Do
         User.Professions(slot) = CInt(RS!profession_id)
         slot = slot + 1
         RS.MoveNext
@@ -1722,26 +1723,22 @@ Private Sub SaveCharacterProfessionsDB(ByRef U As t_User, ByRef QueryBreakdown A
     On Error GoTo SaveCharacterProfessionsDB_Err
     Dim QueryTimer As Long
     Dim i          As Byte
-    Dim p1         As Integer
-    Dim p2         As Integer
-    p1 = U.Professions(1)
-    p2 = U.Professions(2)
+    Dim idList     As String
     QueryTimer = GetTickCountRaw()
-    ' UPSERT por slot que tenga profesion (idempotente, sin DELETE+INSERT en orden)
-    For i = 1 To 2
+    idList = ""
+    ' UPSERT por slot ocupado + lista de profesiones vigentes (config-driven, N slots)
+    For i = 1 To PROF_MAX_SLOTS
         If U.Professions(i) > 0 Then
             Call Execute("INSERT OR REPLACE INTO user_professions (user_id, profession_id, learned_at) VALUES (?, ?, ?);", U.Id, CInt(U.Professions(i)), CLng(GetTickCountRaw() \ 1000))
+            If LenB(idList) > 0 Then idList = idList & ","
+            idList = idList & CStr(CInt(U.Professions(i)))
         End If
     Next i
-    ' Borro filas que no esten en los slots actuales (sin TRUNCATE general)
-    If p1 = 0 And p2 = 0 Then
+    ' Borro filas de profesiones que ya no estan en ningun slot (olvidadas)
+    If LenB(idList) = 0 Then
         Call Execute("DELETE FROM user_professions WHERE user_id = ?;", U.Id)
-    ElseIf p1 = 0 Then
-        Call Execute("DELETE FROM user_professions WHERE user_id = ? AND profession_id <> ?;", U.Id, CInt(p2))
-    ElseIf p2 = 0 Then
-        Call Execute("DELETE FROM user_professions WHERE user_id = ? AND profession_id <> ?;", U.Id, CInt(p1))
     Else
-        Call Execute("DELETE FROM user_professions WHERE user_id = ? AND profession_id NOT IN (?, ?);", U.Id, CInt(p1), CInt(p2))
+        Call Execute("DELETE FROM user_professions WHERE user_id = ? AND profession_id NOT IN (" & idList & ");", U.Id)
     End If
     Call AppendQueryDuration(QueryBreakdown, "save professions", QueryTimer)
     Exit Sub

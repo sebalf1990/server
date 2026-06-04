@@ -25,11 +25,17 @@ Public Sub ChopWood(ByVal UserIndex As Integer)
         End If
         Dim skillPoints As Integer
         Dim res         As Integer
-        Dim Suerte      As Integer
+        Dim Suerte           As Integer
+        Dim exitoExtraccion  As Boolean
         skillPoints = .Stats.UserSkills(e_Skill.Talar)
-        Suerte = Int(-0.00125 * skillPoints * skillPoints - 0.3 * skillPoints + 49)
-        res = RandomNumber(1, IIf(MapInfo(UserList(UserIndex).pos.Map).Seguro = 1, Suerte + 4, Suerte))
-        If res < 6 Then
+        If IsFeatureEnabled("professions_learnable") Then
+            exitoExtraccion = CalcularExitoExtraccion(UserIndex, e_Skill.Talar)
+        Else
+            Suerte = Int(-0.00125 * skillPoints * skillPoints - 0.3 * skillPoints + 49)
+            res = RandomNumber(1, IIf(MapInfo(UserList(UserIndex).pos.Map).Seguro = 1, Suerte + 4, Suerte))
+            exitoExtraccion = (res < 6)
+        End If
+        If exitoExtraccion Then
             Dim nPos  As t_WorldPos
             Dim MiObj As t_Obj
             Call ActualizarRecurso(.pos.Map, .AutomatedAction.x, .AutomatedAction.y)

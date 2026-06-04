@@ -1557,8 +1557,6 @@ Public Enum e_OBJType
     otPlants = 54
     otElementalRune = 55
     otFactionForgiveness = 56
-    otManualProfesion = 57
-    otPocionOlvidoProfesion = 58
     otElse = 100
 End Enum
 
@@ -2146,6 +2144,7 @@ Public Type t_Quest
     LimitLevel As Byte
     RequiredQuest As Integer 'Changed in order to develop more than 255 quests
     Trabajador As Boolean
+    RequiredProfession As Integer
     TalkTo As Integer
     RequiredOBJs As Byte
     RequiredOBJ() As t_Obj
@@ -3216,7 +3215,7 @@ Public Type t_User
     PacketTimers(1 To MAX_PACKET_COUNTERS) As Long
     PacketCounters(1 To MAX_PACKET_COUNTERS) As Long
     AutomatedAction As t_AutomatedAction
-    Professions(1 To 2) As Integer
+    Professions(1 To 7) As Integer
     ProfessionForgotCount As Byte
 End Type
 

@@ -65,7 +65,11 @@ Public Function CanUseObject(ByVal UserIndex As Integer, ByVal ObjIndex As Integ
             msg = "416"  ' Faction doesn't allow it.
         ElseIf Not ClasePuedeUsarItem(UserIndex, ObjIndex) Then
             CanUseObject = 2
-            msg = "265"  ' Class cannot use this item.
+            If IsFeatureEnabled("professions_learnable") And ProfesionDelItem(ObjIndex) > 0 Then
+                msg = CStr(MSG_PROF_ITEM_NO_USABLE) ' No podes usar este item sin aprender la profesion requerida.
+            Else
+                msg = "265"  ' Class cannot use this item.
+            End If
         ElseIf Not SexoPuedeUsarItem(UserIndex, ObjIndex) Then
             CanUseObject = 1
             msg = "267"  ' Sex cannot use this item.
@@ -356,7 +360,12 @@ Private Sub HandleGovernorNpcInteraction(ByVal UserIndex As Integer, ByVal NpcIn
 End Sub
 
 Private Sub HandleFishingDeliveryNpcInteraction(ByVal UserIndex As Integer, ByVal NpcIndex As Integer)
-    If UserList(UserIndex).clase <> Trabajador Then
+    If IsFeatureEnabled("professions_learnable") Then
+        If Not TieneProfesionAprendida(UserIndex, e_Skill.Pescar) Then
+            Call WriteLocaleMsg(UserIndex, MSG_PROF_NO_APRENDIDA, e_FontTypeNames.FONTTYPE_INFO)
+            Exit Sub
+        End If
+    ElseIf UserList(UserIndex).clase <> Trabajador Then
         'Msg2168=Solo los trabajadores pueden registrar los peces especiales.
         Call WriteLocaleMsg(UserIndex, MSG_SOLO_TRABAJADORES_PUEDEN_REGISTRAR_PECES_ESPECIALES, e_FontTypeNames.FONTTYPE_INFOIAO)
         Exit Sub

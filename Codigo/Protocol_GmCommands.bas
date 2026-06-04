@@ -3790,6 +3790,10 @@ Public Sub HandleCrearTorneo(ByVal UserIndex As Integer)
         nombre = reader.ReadString8
         reglas = reader.ReadString8
         If EsGM(UserIndex) And ((.flags.Privilegios And e_PlayerType.Consejero) = 0) Then
+            If IsFeatureEnabled("professions_learnable") And Trabajador > 0 Then
+                Call WriteConsoleMsg(UserIndex, "No se puede crear un torneo de Trabajador con profesiones aprendibles activas.", e_FontTypeNames.FONTTYPE_INFO)
+                Exit Sub
+            End If
             Torneo.NivelMinimo = NivelMinimo
             Torneo.NivelMaximo = NivelMaximo
             Torneo.cupos = cupos

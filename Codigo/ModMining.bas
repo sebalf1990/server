@@ -26,12 +26,18 @@ Public Sub MineMinerals(ByVal UserIndex As Integer)
         Dim Suerte     As Integer
         Dim res        As Integer
         Dim Metal      As Integer
-        Dim Yacimiento As t_ObjData
-        Dim skill      As Integer
+        Dim Yacimiento       As t_ObjData
+        Dim skill            As Integer
+        Dim exitoExtraccion  As Boolean
         skill = .Stats.UserSkills(e_Skill.Mineria)
-        Suerte = Int(-0.00125 * skill * skill - 0.3 * skill + 49)
-        res = RandomNumber(1, IIf(MapInfo(UserList(UserIndex).pos.Map).Seguro = 1, Suerte + 2, Suerte))
-        If res <= 5 Then
+        If IsFeatureEnabled("professions_learnable") Then
+            exitoExtraccion = CalcularExitoExtraccion(UserIndex, e_Skill.Mineria)
+        Else
+            Suerte = Int(-0.00125 * skill * skill - 0.3 * skill + 49)
+            res = RandomNumber(1, IIf(MapInfo(UserList(UserIndex).pos.Map).Seguro = 1, Suerte + 2, Suerte))
+            exitoExtraccion = (res <= 5)
+        End If
+        If exitoExtraccion Then
             Dim MiObj As t_Obj
             Dim nPos  As t_WorldPos
             Call ActualizarRecurso(.pos.Map, .AutomatedAction.x, .AutomatedAction.y)
