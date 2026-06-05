@@ -42,6 +42,7 @@ Option Explicit
 
 ' Module-level config cache (loaded once on first call)
 Private m_ConfigLoaded   As Boolean
+Private m_Enabled        As Boolean
 Private m_BaseUrl        As String
 Private m_ServiceToken   As String
 
@@ -65,6 +66,12 @@ Private Sub LoadBridgeConfig()
 
     m_ServiceToken = ini.GetValue("PatreonBridge", "ServiceToken")
 
+    ' Enabled defaults OFF. The game server already reads the patron tier from
+    ' account.is_active_patron (GetPatronTierFromAccountID); this synchronous HTTP
+    ' pull to the commerce web is an opt-in refresh. Anything other than 1 = OFF,
+    ' so local testing never blocks login on an unreachable web service.
+    m_Enabled = (Trim$(ini.GetValue("PatreonBridge", "Enabled")) = "1")
+
     m_ConfigLoaded = True
     Exit Sub
 
@@ -72,6 +79,7 @@ LoadBridgeConfig_Err:
     ' If ini read fails, use safe defaults so login is never broken.
     m_BaseUrl = "http://localhost:4001"
     m_ServiceToken = ""
+    m_Enabled = False
     m_ConfigLoaded = True
 End Sub
 
@@ -112,6 +120,7 @@ Public Sub SyncPatreonBridgeTier(ByVal UserIndex As Integer)
     On Error GoTo SyncTier_Err
 
     Call LoadBridgeConfig
+    If Not m_Enabled Then Exit Sub
 
     Dim accountID As Long
     accountID = UserList(UserIndex).AccountID
@@ -232,6 +241,7 @@ Public Sub SyncPatreonBridgeCredits(ByVal UserIndex As Integer)
     On Error GoTo SyncBridge_Err
 
     Call LoadBridgeConfig
+    If Not m_Enabled Then Exit Sub
 
     Dim accountID As Long
     accountID = UserList(UserIndex).AccountID
