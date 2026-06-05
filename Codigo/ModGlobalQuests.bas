@@ -98,7 +98,7 @@ Public Sub LoadGlobalQuests()
         With GlobalQuestInfo(i)
             .GatheringThreshold = CLng(val(IniFile.GetValue("GlobalQuest" & i, "GatheringThreshold")))
             .GatheringInitialInstallments = CLng(val(IniFile.GetValue("GlobalQuest" & i, "GatheringInitialInstallments")))
-            .GatheringGlobalInstallments = CLng(val(IniFile.GetValue("GlobalQuest" & i, "GatheringInitialInstallments")))
+            .GatheringGlobalInstallments = CLng(val(IniFile.GetValue("GlobalQuest" & i, "GatheringGlobalInstallments")))
             .BossSpawnMap = CInt(val(IniFile.GetValue("GlobalQuest" & i, "BossSpawnMap")))
             .BossSpawnPositionBottomRight.x = CInt(val(IniFile.GetValue("GlobalQuest" & i, "BossSpawnPositionBottomRightX")))
             .BossSpawnPositionBottomRight.y = CInt(val(IniFile.GetValue("GlobalQuest" & i, "BossSpawnPositionBottomRightY")))
@@ -199,7 +199,7 @@ Public Sub MaybeChangeGlobalQuestsState()
     For i = 1 To UBound(GlobalQuestInfo)
         If GlobalQuestInfo(i).IsActive And HasGlobalQuestEnded(GlobalQuestInfo(i)) And Not GlobalQuestInfo(i).FinishOnThresholdReach Then
             Call FinalizeGlobalQuest(i)
-        ElseIf Not GlobalQuestInfo(i).IsActive And HasGlobalQuestStarted(GlobalQuestInfo(i)) And Not HasGlobalQuestEnded(GlobalQuestInfo(i)) Then
+        ElseIf Not GlobalQuestInfo(i).IsActive And HasGlobalQuestStarted(GlobalQuestInfo(i)) And Not HasGlobalQuestEnded(GlobalQuestInfo(i)) And CanStartGlobalQuest(i) Then
             'if the quest is not active and the start date has passed but the end date hasn't passed yet [startDate;now;endDate] , start it
             Call StartGlobalQuest(i)
         End If
@@ -221,9 +221,22 @@ Public Function IsGlobalQuestInTheFuture(ByRef GlobalQuestData As t_GlobalQuestD
     IsGlobalQuestInTheFuture = GlobalQuestData.EndDate - DateTime.Now > 0
 End Function
 
+Private Function CanStartGlobalQuest(ByVal GlobalQuestIndex As Integer) As Boolean
+    If GlobalQuestIndex < LBound(GlobalQuestInfo) Or GlobalQuestIndex > UBound(GlobalQuestInfo) Then Exit Function
+
+    With GlobalQuestInfo(GlobalQuestIndex)
+        If LenB(.Name) = 0 Or .ObjectIndex <= 0 Or .GatheringThreshold <= 0 Then
+            Call LogError("Skipping invalid GlobalQuest " & GlobalQuestIndex & " " & .Name)
+            Exit Function
+        End If
+    End With
+
+    CanStartGlobalQuest = True
+End Function
+
 Public Sub FinalizeGlobalQuest(ByVal GlobalQuestIndex As Integer)
     If GlobalQuestIndex < LBound(GlobalQuestInfo) Or GlobalQuestIndex > UBound(GlobalQuestInfo) Then Exit Sub
-    Debug.Assert Not HasGlobalQuestEnded(GlobalQuestInfo(GlobalQuestIndex))
+    Debug.Assert HasGlobalQuestEnded(GlobalQuestInfo(GlobalQuestIndex))
     Debug.Assert HasGlobalQuestStarted(GlobalQuestInfo(GlobalQuestIndex))
     If (Not GlobalQuestInfo(GlobalQuestIndex).IsActive) Then
         LogError "Calling FinalizeGlobalQueston a quest that has already finished"

@@ -657,10 +657,10 @@ Public Sub ForceReset(ByRef instance As t_Lobby)
     instance.State = UnInitilized
     instance.SummonCoordinates.Map = -1
     instance.ClassFilter = -1
-    If Not Scenario Is Nothing Then
-        Call Scenario.Reset
+    If Not instance.Scenario Is Nothing Then
+        Call instance.Scenario.Reset
     End If
-    Set Scenario = Nothing
+    Set instance.Scenario = Nothing
     Erase instance.Players
     Exit Sub
 ForceReset_Err:
@@ -996,10 +996,12 @@ Public Function ValidateLobbySettings(ByRef LobbySettings As t_NewScenearioSetti
 End Function
 
 Public Sub CreatePublicEvent(ByRef LobbySettings As t_NewScenearioSettings)
-    GlobalLobbyIndex = GetAvailableLobby()
+    ' R3: validar ANTES de reservar el lobby (GetAvailableLobby lo consume); si no, fuga de lobby
     If Not ValidateLobbySettings(LobbySettings) Then
         Exit Sub
     End If
+    GlobalLobbyIndex = GetAvailableLobby()
+    If GlobalLobbyIndex < 0 Then Exit Sub ' pool de lobbies agotado
     Call InitializeLobby(LobbyList(GlobalLobbyIndex))
     Call ModLobby.SetupLobby(LobbyList(GlobalLobbyIndex), LobbySettings)
     Call CustomScenarios.PrepareNewEvent(LobbySettings.ScenearioType, GlobalLobbyIndex)

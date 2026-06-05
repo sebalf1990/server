@@ -1632,8 +1632,13 @@ Public Sub WriteBlacksmithElementalRunes(ByVal UserIndex As Integer)
     Dim i              As Long
     Dim validIndexes() As Integer
     Dim count          As Integer
-    ReDim validIndexes(1 To UBound(BlackSmithElementalRunes()))
     Call Writer.WriteInt16(ServerPacketID.eBlacksmithExtraObjects)
+    If Not IsFeatureEnabled("elemental_tags") Or UBound(BlackSmithElementalRunes()) < 1 Then
+        Call Writer.WriteInt16(0)
+        Call modSendData.SendData(ToIndex, UserIndex)
+        Exit Sub
+    End If
+    ReDim validIndexes(1 To UBound(BlackSmithElementalRunes()))
     For i = 1 To UBound(BlackSmithElementalRunes())
         ' Can the user create this object? If so add it to the list....
         If ObjData(BlackSmithElementalRunes(i)).SkHerreria <= UserList(UserIndex).Stats.UserSkills(e_Skill.Herreria) Then

@@ -5816,6 +5816,11 @@ Public Sub HandleParticipar(ByVal UserIndex As Integer)
                 RoomId = GlobalLobbyIndex
             End If
         End If
+        If RoomId < 0 Or RoomId > UBound(LobbyList) Then
+            ' R2: sin evento activo (GlobalLobbyIndex=-1) o RoomId invalido -> evita LobbyList fuera de rango
+            Call WriteLocaleMsg(UserIndex, MSG_NO_EVENTOS_ACTUALMENTE_HAY_NINGUN_EVENTO_CURSO, e_FontTypeNames.FONTTYPE_New_Eventos)
+            Exit Sub
+        End If
         If LobbyList(RoomId).State = AcceptingPlayers Then
             If LobbyList(RoomId).IsPublic Then
                 Dim addPlayerResult As t_response

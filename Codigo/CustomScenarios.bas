@@ -115,7 +115,7 @@ AddUpdateScenario_Err:
 End Function
 
 Public Sub RemoveUpdateScenario(ByRef Index As Integer)
-    Debug.Assert Index < UBound(ScenarioUpdateList)
+    Debug.Assert Index <= UBound(ScenarioUpdateList)
     Set ScenarioUpdateList(Index) = Nothing
     Dim i As Integer
     For i = 0 To ActiveUpdateSlots.currentIndex - 1
@@ -342,7 +342,7 @@ Public Function IsEventActive() As Boolean
         IsEventActive = Not InstanciaCaptura Is Nothing
     Else
         If GlobalLobbyIndex >= 0 Then
-            IsEventActive = LobbyList(GlobalLobbyIndex).State > e_LobbyState.UnInitilized And LobbyList(GlobalLobbyIndex).State < InProgress
+            IsEventActive = LobbyList(GlobalLobbyIndex).State > e_LobbyState.UnInitilized And LobbyList(GlobalLobbyIndex).State <= e_LobbyState.InProgress
         Else
             IsEventActive = False
         End If

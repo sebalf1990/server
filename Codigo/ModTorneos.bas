@@ -97,6 +97,11 @@ Public Sub ParticiparTorneo(ByVal UserIndex As Integer)
     On Error GoTo ParticiparTorneo_Err
     Dim IndexVacio As Byte
     IndexVacio = BuscarIndexFreeTorneo
+    If IndexVacio = 0 Then
+        ' R5: torneo lleno -> BuscarIndexFreeTorneo devuelve 0 (array base-1); evita IndexParticipantes(0)
+        Call WriteLocaleMsg(UserIndex, MSG_CUPOS_ESTAN_COMPLETOS, e_FontTypeNames.FONTTYPE_INFOIAO)
+        Exit Sub
+    End If
     Torneo.IndexParticipantes(IndexVacio) = UserIndex
     Torneo.participantes = Torneo.participantes + 1
     UserList(UserIndex).flags.EnTorneo = True
