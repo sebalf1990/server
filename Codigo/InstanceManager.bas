@@ -39,8 +39,22 @@ End Sub
 
 Public Function ReleaseInstance(ByVal InstanceMapIndex As Integer) As Boolean
     On Error GoTo ErrHandler
+    'Guard contra doble-release: si la instancia ya esta libre (MapResource=0) no la
+    're-encolamos. Sin esto, un release repetido pasa el puntero del heap por encima de
+    'UBound (el Debug.Assert se compila afuera en release) y corrompe el pool de instancias.
+    If InstanceMapIndex < LBound(MapInfo) Or InstanceMapIndex > UBound(MapInfo) Then
+        ReleaseInstance = False
+        Exit Function
+    End If
+    If MapInfo(InstanceMapIndex).MapResource = 0 Then
+        ReleaseInstance = False
+        Exit Function
+    End If
+    If AvailableInstanceMap.currentIndex >= UBound(AvailableInstanceMap.IndexInfo) Then
+        ReleaseInstance = False
+        Exit Function
+    End If
     AvailableInstanceMap.currentIndex = AvailableInstanceMap.currentIndex + 1
-    Debug.Assert AvailableInstanceMap.currentIndex <= UBound(AvailableInstanceMap.IndexInfo)
     AvailableInstanceMap.IndexInfo(AvailableInstanceMap.currentIndex) = InstanceMapIndex
     ReleaseInstance = True
     MapInfo(InstanceMapIndex).MapResource = 0

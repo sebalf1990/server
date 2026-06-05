@@ -636,7 +636,8 @@ Sub Main()
     End With
     Call ResetGameEventsTimer
     Call ResetUserAutoSaveTimer
-    Subasta.SubastaHabilitada = True
+    'Kill-switch de subastas: habilitada por default; se apaga con auctions_disabled=1.
+    Subasta.SubastaHabilitada = Not IsFeatureEnabled("auctions_disabled")
     Subasta.HaySubastaActiva = False
     Call ResetMeteo
     #If DIRECT_PLAY = 0 Then
@@ -1905,40 +1906,70 @@ End Function
 'where the XX is the number of migrations generated the same day
 Public Sub LoadDBMigrations()
     On Error GoTo LoadDBMigrations_Err
-    'Consulto a la DB a ver si existe la tabla migrations
+    'Consulto a la DB a ver si existe la tabla migrations; si no existe, la creo.
     Dim RS As Recordset
     Set RS = Query("select * from migrations")
-    Dim LastScript As String: LastScript = ""
     If RS Is Nothing Then
         Call Query("CREATE TABLE ""migrations"" (    ""id"" INTEGER NOT NULL,    ""date"" VARCHAR(11) NOT NULL,    ""description"" VARCHAR(50) NULL,    Primary key(""id""));")
-    Else
-        Set RS = Query("select date from migrations order by id desc LIMIT 1;")
-        If RS.RecordCount > 0 Then LastScript = RS!Date
     End If
+    'Recolectamos todos los scripts de ScriptsDB en un array.
+    Dim Files() As String
+    Dim count As Long
+    count = 0
+    ReDim Files(0 To 255)
     Dim sFilename As String
     sFilename = dir(App.Path & "/ScriptsDB/")
     Do While sFilename <> ""
         If Len(sFilename) > 11 Then
-            Dim date_ As String
-            date_ = Left(sFilename, 11)
-            If LastScript < date_ Then
-                'Leemos el archivo
-                Dim script      As String
-                Dim Description As String
-                Description = mid(sFilename, 13, Len(sFilename) - 16)
-                If RunScriptInFile(App.Path & "/ScriptsDB/" & sFilename) Then
-                    Call Query("insert into migrations (date, description) values (?,?);", date_, Description)
-                Else
-                    Call Err.raise(5, , "invalid - " & Description)
-                End If
-            End If
+            If count > UBound(Files) Then ReDim Preserve Files(0 To UBound(Files) + 256)
+            Files(count) = sFilename
+            count = count + 1
         End If
         sFilename = dir()
     Loop
+    If count = 0 Then Exit Sub
+    'Ordenamos por nombre (formato YYYYMMDD-XX...) para respetar el orden cronologico.
+    'dir() NO garantiza orden: sin esto, en una instalacion nueva (todas las migraciones
+    'de una) una migracion podria correr antes que aquella de la que depende.
+    Dim i As Long, j As Long, tmp As String
+    For i = 1 To count - 1
+        tmp = Files(i)
+        j = i - 1
+        Do While j >= 0
+            If Files(j) <= tmp Then Exit Do
+            Files(j + 1) = Files(j)
+            j = j - 1
+        Loop
+        Files(j + 1) = tmp
+    Next i
+    'Aplicamos en orden las que todavia NO esten registradas en la tabla migrations.
+    'Chequeo por-archivo (no marca de agua): asi un hueco como 20260513-02 sin -01
+    'no deja una migracion futura sin correr.
+    Dim date_ As String
+    Dim Description As String
+    Dim Registrada As Recordset
+    Dim YaRegistrada As Boolean
+    For i = 0 To count - 1
+        date_ = Left(Files(i), 11)
+        Set Registrada = Query("select 1 from migrations where date = ?;", date_)
+        YaRegistrada = False
+        If Not (Registrada Is Nothing) Then
+            If Not Registrada.EOF Then YaRegistrada = True
+        End If
+        If Not YaRegistrada Then
+            If RunScriptInFile(App.Path & "/ScriptsDB/" & Files(i)) Then
+                Description = mid(Files(i), 13, Len(Files(i)) - 16)
+                Call Query("insert into migrations (date, description) values (?,?);", date_, Description)
+            Else
+                Call Err.raise(5, , "invalid - " & Files(i))
+            End If
+        End If
+    Next i
     Exit Sub
 LoadDBMigrations_Err:
-    Call TraceError(Err.Number, Err.Description, "modGuilds.LoadDBMigrations", Erl)
-    Call MsgBox(DBError & vbNewLine & "Script:" & Err.Description, vbCritical, "ERROR MIGRATIONS")
+    'MsgBox removido: en server headless un fallo de migracion colgaba el arranque
+    'esperando un click. El error queda en el log de errores (TraceError).
+    Call TraceError(Err.Number, Err.Description, "General.LoadDBMigrations", Erl)
 End Sub
 
 Function FileText(Filename$) As String

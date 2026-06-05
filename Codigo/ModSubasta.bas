@@ -46,6 +46,11 @@ Dim Logear     As String
 
 Public Sub IniciarSubasta(ByVal UserIndex As Integer)
     On Error GoTo IniciarSubasta_Err
+    If Not Subasta.SubastaHabilitada Then
+        ' Subastas deshabilitadas (toggle auctions_disabled=1). El subastador no atiende.
+        Call WriteLocaleChatOverHead(UserIndex, 770, "", str$(NpcList(UserList(UserIndex).flags.TargetNPC.ArrayIndex).Char.charindex), vbRed) ' Msg770=El comerciante no esta disponible.
+        Exit Sub
+    End If
     If UserList(UserIndex).flags.Subastando = True And Not Subasta.HaySubastaActiva Then
         Call WriteLocaleChatOverHead(UserIndex, 1427, UserList(UserIndex).Counters.TiempoParaSubastar, NpcList(UserList(UserIndex).flags.TargetNPC.ArrayIndex).Char.charindex, _
                 vbWhite) ' Msg1427=Escribe /OFERTAINICIAL (cantidad) para comenzar la subasta. Te quedan: ¬1 segundos... ¡Apurate!
