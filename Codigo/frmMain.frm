@@ -3,8 +3,8 @@ Begin VB.Form frmMain
    BackColor       =   &H00E0E0E0&
    Caption         =   "Servidor Argentum 20"
    ClientHeight    =   6255
-   ClientLeft      =   21765
-   ClientTop       =   10305
+   ClientLeft      =   5400
+   ClientTop       =   6195
    ClientWidth     =   8595
    FillColor       =   &H00C0C0C0&
    BeginProperty Font 
@@ -22,6 +22,7 @@ Begin VB.Form frmMain
    PaletteMode     =   1  'UseZOrder
    ScaleHeight     =   6255
    ScaleWidth      =   8595
+   StartUpPosition =   3  'Windows Default
    Begin VB.Timer tControlHechizos 
       Left            =   4440
       Top             =   4800
@@ -1113,7 +1114,10 @@ End Sub
 Private Sub Automatic_Event_Timer()
     On Error GoTo Evento_Timer_Err
     'validacion para captura la bandera que es unico
-    If EventoActivo Then Exit Sub
+    'EventoActivo es el flag de eventos-multiplicador; IsEventActive() es el de
+    'lobby/escenario (DeathMatch/Captura/etc). Sin el segundo, se podia lanzar un
+    'auto-evento encima de uno de escenario ya en curso.
+    If EventoActivo Or IsEventActive() Then Exit Sub
     Dim CurrentDay    As Byte
     Dim CurrentHour   As Byte
     Dim EventOfTheDay As Integer

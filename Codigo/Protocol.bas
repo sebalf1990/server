@@ -5934,7 +5934,7 @@ Private Sub HandleOfertaInicial(ByVal UserIndex As Integer)
             Call LogearEventoDeSubasta(GetUserRealName(UserIndex) & ": Esta subastando el item numero " & Subasta.ObjSubastado & " con una cantidad de " & Subasta.ObjSubastadoCantidad & _
                     " y con un precio inicial de " & PonerPuntos(Subasta.OfertaInicial) & " monedas.")
             frmMain.SubastaTimer.Enabled = True
-            Call WarpUserChar(UserIndex, 14, 27, 64, True)
+            'Warp al mapa 14 (bosque inseguro, sin retorno) removido: exponia y varaba al vendedor durante la subasta. Se queda junto al subastador.
             'lalala toda la bola de los timerrr
         End If
     End With

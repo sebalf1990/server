@@ -792,11 +792,15 @@ ErrHandler:
 End Sub
 
 Public Function PuedeReto(ByVal UserIndex As Integer) As Boolean
+    'Mismas reglas que PuedeRetoConMensaje (gate final consistente con el de entrada):
+    'esCiudad en vez de Seguro + jugando_captura. Asi un reto aceptado no se cancela
+    'silenciosamente por un criterio de mapa distinto.
     With UserList(UserIndex)
         If .flags.EnReto Then Exit Function
         If .flags.EnConsulta Then Exit Function
         If .pos.Map = 0 Or .pos.x = 0 Or .pos.y = 0 Then Exit Function
-        If MapInfo(.pos.Map).Seguro = 0 Then Exit Function
+        If .flags.jugando_captura = 1 Then Exit Function
+        If Not esCiudad(.pos.Map) Then Exit Function
         If .flags.EnTorneo Then Exit Function
         If MapData(.pos.Map, .pos.x, .pos.y).trigger = CARCEL Then Exit Function
     End With
@@ -883,7 +887,7 @@ Private Function TodosPuedenReto(ByVal Oferente As Integer) As Boolean
                 Call CancelarSolicitudReto(Oferente, UserList(.Jugadores(i).CurIndex.ArrayIndex).name & " no tiene las monedas de oro suficientes.")
                 Exit Function
             ElseIf .PocionesMaximas >= 0 Then
-                If TieneObjetos(38, .PocionesMaximas + 1, Oferente) Then
+                If TieneObjetos(38, .PocionesMaximas + 1, .Jugadores(i).CurIndex.ArrayIndex) Then
                     Call CancelarSolicitudReto(Oferente, UserList(.Jugadores(i).CurIndex.ArrayIndex).name & " tiene demasiadas pociones rojas (Cantidad máxima: " & _
                             .PocionesMaximas & ").")
                     Exit Function

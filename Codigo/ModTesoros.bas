@@ -165,6 +165,8 @@ Public Sub PerderTesoro()
         If Iterations >= 20 Then
             TesoroNumMapa = TesoroMapa(RandomNumber(1, UBound(TesoroMapa)))
         End If
+        'Corte duro: si tras 200 intentos (10 mapas x 20) no hay lugar, abandono (evita loop infinito).
+        If Iterations >= 200 Then Exit Sub
     Loop
     BusquedaTesoroActiva = True
     Call MakeObj(TesoroRegalo(RandomNumber(1, UBound(TesoroRegalo))), TesoroNumMapa, TesoroX, TesoroY, False)
@@ -202,6 +204,8 @@ Public Sub PerderRegalo()
         If Iterations >= 20 Then
             RegaloNumMapa = RegaloMapa(RandomNumber(1, UBound(RegaloMapa)))
         End If
+        'Corte duro: si tras 200 intentos (10 mapas x 20) no hay lugar, abandono (evita loop infinito).
+        If Iterations >= 200 Then Exit Sub
     Loop
     BusquedaRegaloActiva = True
     Call MakeObj(RegaloRegalo(RandomNumber(1, UBound(RegaloRegalo))), RegaloNumMapa, RegaloX, RegaloY, False)
