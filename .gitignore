@@ -41,5 +41,7 @@ _assets
 # Archivos temporales de debug
 migrations_debug.log
 *.bak*
+*.bkp
+*bkp.db
 test_ado*.vbs
 "Empty_db - copia.db"
