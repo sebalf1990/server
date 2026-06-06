@@ -145,6 +145,9 @@ Public Sub ComenzarTorneoOk()
     Dim nombres As String
     Dim x       As Byte
     Dim y       As Byte
+    Dim i       As Integer
+    'Sin participantes no se inicia el torneo: evita el placeholder de nombre sin sustituir en el broadcast.
+    If Torneo.participantes <= 0 Then Exit Sub
     For i = 1 To Torneo.participantes
         nombres = nombres & UserList(Torneo.IndexParticipantes(i)).name & ", "
         x = Torneo.x
@@ -152,6 +155,7 @@ Public Sub ComenzarTorneoOk()
         Call FindLegalPos(Torneo.IndexParticipantes(i), Torneo.Mapa, x, y)
         Call WarpUserChar(Torneo.IndexParticipantes(i), Torneo.Mapa, x, y, True)
     Next i
+    If Len(nombres) >= 2 Then nombres = Left$(nombres, Len(nombres) - 2)
     Call SendData(SendTarget.ToAll, 0, PrepareMessageLocaleMsg(MSG_EVENTO_ELEGIDOS_PARTICIPAR_DAMOS_INICIO_EVENTO, nombres, e_FontTypeNames.FONTTYPE_CITIZEN)) 'Msg1676=Evento> Los elegidos para participar son: ¬1 damos inicio al evento.
     Exit Sub
 ComenzarTorneoOk_Err:

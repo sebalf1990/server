@@ -1554,7 +1554,7 @@ Public Enum e_OBJType
     OtQuest = 51
     otFishingPool = 52
     otUsableOntarget = 53
-    otPlants = 54
+    ' 54 = otPlants: tipo muerto eliminado (plan 02.001 Ola 11; sin uso en codigo)
     otElementalRune = 55
     otFactionForgiveness = 56
     otElse = 100
