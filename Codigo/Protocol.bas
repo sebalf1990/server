@@ -935,6 +935,12 @@ Public Function HandleIncomingData(ByVal ConnectionID As Long, ByVal Message As 
 End Function
 
 #If PYMMO = 0 Then
+    Private Function Sha256Hex(ByVal s As String) As String
+        Dim b() As Byte
+        b = StrConv(s, vbFromUnicode)
+        Sha256Hex = LCase$(hashHexFromBytes(b, API_HASH_SHA256))
+    End Function
+
     Private Sub HandleCreateAccount(ByVal ConnectionID As Long)
         On Error GoTo HandleCreateAccount_Err:
         Dim username As String
@@ -954,7 +960,11 @@ End Function
             Exit Sub
         End If
         Dim Result As ADODB.Recordset
-        Set Result = Query("INSERT INTO account (email, password, salt, validate_code) VALUES (?,?,?,?)", LCase(username), Password, Password, "123")
+        Dim salt As String
+        salt = RandomString(32)
+        Dim pwHash As String
+        pwHash = Sha256Hex(salt & Password)
+        Set Result = Query("INSERT INTO account (email, password, salt, validate_code) VALUES (?,?,?,?)", LCase(username), pwHash, salt, "123")
         If (Result Is Nothing) Then
             Call WriteErrorMsg(UserIndex, "Ya hay una cuenta asociada con ese email")
             Call CloseSocket(UserIndex)
@@ -988,13 +998,35 @@ Private Sub HandleLoginAccount(ByVal ConnectionID As Long)
         Exit Sub
     End If
     Dim Result As ADODB.Recordset
-    Set Result = Query("SELECT * FROM account WHERE UPPER(email)=UPPER(?) AND password=?", username, Password)
+    Set Result = Query("SELECT * FROM account WHERE UPPER(email)=UPPER(?)", username)
     If (Result.EOF) Then
         Call WriteErrorMsg(UserIndex, "Usuario o Contraseña erronea.")
         Call CloseSocket(UserIndex)
         Exit Sub
     End If
+    Dim storedPw As String
+    Dim storedSalt As String
+    Dim pwOk As Boolean
+    storedPw = Result!password & ""
+    storedSalt = Result!salt & ""
+    If (Len(storedPw) = 64 And Len(storedSalt) = 32 And storedSalt <> storedPw) Then
+        pwOk = (LCase$(storedPw) = Sha256Hex(storedSalt & Password))
+    Else
+        pwOk = (storedPw = Password)
+    End If
+    If (Not pwOk) Then
+        Call WriteErrorMsg(UserIndex, "Usuario o clave erronea.")
+        Call CloseSocket(UserIndex)
+        Exit Sub
+    End If
     UserList(UserIndex).AccountID = Result!Id
+    If (Len(storedPw) <> 64) Then
+        Dim migSalt As String
+        Dim migHash As String
+        migSalt = RandomString(32)
+        migHash = Sha256Hex(migSalt & Password)
+        Call Execute("UPDATE account SET password=?, salt=? WHERE id=?", migHash, migSalt, Result!Id)
+    End If
     Dim Personajes(1 To 10) As t_PersonajeCuenta
     Dim count               As Long
     count = GetPersonajesCuentaDatabase(Result!Id, Personajes)
