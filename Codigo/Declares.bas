@@ -1344,6 +1344,8 @@ Public Enum e_NPCType
     AO20ShopPjs = 22
     EventMaster = 23
     ArenaGuard = 24
+    
+    Transporter = 26
 End Enum
 
 Public Const MIN_APUÑALAR As Byte = 10
@@ -2993,6 +2995,8 @@ Public Type t_QuestStats
     QuestsDone() As Integer
 End Type
 
+Public Const SUBASTA_OFERTA_MAXIMA As Long = 1999999
+
 ' ------------- FACCIONES -------------
 Public Type t_Facciones
     Status As Byte ' Esto deberia ser e_Facciones
@@ -3504,6 +3508,12 @@ Public Type t_NpcInfoCache
     ResistChanceVenenoGenericoPct As Long
     ResistDanoVenenoGenericoFlat As Long
     ResistDanoVenenoGenericoPct As Long
+    CityCount       As Integer
+    CityNames()     As String
+    CityMap()       As Integer
+    CityX()         As Integer
+    CityY()         As Integer
+    CityPrice()     As Long
 End Type
 
 Public Enum e_TipoAI
@@ -3628,6 +3638,13 @@ Public Type t_Npc
     DisabledInBattleServer As Byte
     EsMaestroProfesion As Byte
     ProfesionEnsenada As Integer
+    OnlyEnabledInBattleServer As Byte
+    TransportCityCount  As Integer
+    TransportCityNames() As String
+    TransportCityMap()   As Integer
+    TransportCityX()     As Integer
+    TransportCityY()     As Integer
+    TransportCityPrice() As Long
 End Type
 
 '**********************************************************

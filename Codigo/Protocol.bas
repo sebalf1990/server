@@ -31,17 +31,6 @@ Option Explicit
 'having too many string lengths in the queue. Yes, each string is NULL-terminated :P
 
 Public Const SEPARATOR As String * 1 = vbNullChar
-Private Const SPELL_UNASSISTED_DARDO = 1
-Private Const SPELL_UNASSISTED_RUGIDO_SALVAJE = 5
-Private Const SPELL_UNASSISTED_RUGIDO_ARCANO = 348
-Private Const SPELL_UNASSISTED_FULGOR_IGNEO = 52
-Private Const SPELL_UNASSISTED_LATIDO_IGNEO = 349
-Private Const SPELL_UNASSISTED_ECO_IGNEO = 61
-Private Const SPELL_UNASSISTED_DESTELLO_MALVA = 62
-Private Const SPELL_UNASSISTED_FRACTURA_GLACIAL = 63
-Private Const SPELL_UNASSISTED_ALIENTO_CARMESI = 64
-Private Const SPELL_UNASSISTED_ENERGIA_ANCESTRAL = 65
-
 
 Public Enum e_EditOptions
     eo_Gold = 1
@@ -205,6 +194,8 @@ Public Function HandleIncomingData(ByVal ConnectionID As Long, ByVal Message As 
         End If
         Mapping(ConnectionID).PacketCount = Mapping(ConnectionID).PacketCount + 1
         If Mapping(ConnectionID).PacketCount > 100 Then
+            Dim PacketCountAtOverflow As Long
+            PacketCountAtOverflow = Mapping(ConnectionID).PacketCount
             'Lo kickeo
             If UserIndex > 0 Then
                 If Not IsMissing(optional_user_index) Then ' userindex may be invalid here
@@ -213,7 +204,8 @@ Public Function HandleIncomingData(ByVal ConnectionID As Long, ByVal Message As 
                 End If
                 Mapping(ConnectionID).PacketCount = 0
                 If IsFeatureEnabled("kick_packet_overflow") Then
-                    Call KickConnection(ConnectionID)
+                    Call LogDisconnectEvent("Protocol.HandleIncomingData", "KickConnection", UserIndex, ConnectionID, "packet_overflow count=" & CStr(PacketCountAtOverflow) & " packet=" & CStr(PacketId), PacketId)
+                    Call KickConnection(ConnectionID, "packet_overflow count=" & CStr(PacketCountAtOverflow) & " packet=" & CStr(PacketId), "Protocol.HandleIncomingData")
                 End If
             Else
                 If Not IsMissing(optional_user_index) Then ' userindex may be invalid here
@@ -222,7 +214,8 @@ Public Function HandleIncomingData(ByVal ConnectionID As Long, ByVal Message As 
                 End If
                 Mapping(ConnectionID).PacketCount = 0
                 If IsFeatureEnabled("kick_packet_overflow") Then
-                    Call KickConnection(ConnectionID)
+                    Call LogDisconnectEvent("Protocol.HandleIncomingData", "KickConnection", 0, ConnectionID, "packet_overflow count=" & CStr(PacketCountAtOverflow) & " packet=" & CStr(PacketId), PacketId)
+                    Call KickConnection(ConnectionID, "packet_overflow count=" & CStr(PacketCountAtOverflow) & " packet=" & CStr(PacketId), "Protocol.HandleIncomingData")
                 End If
             End If
             Exit Function
@@ -234,7 +227,8 @@ Public Function HandleIncomingData(ByVal ConnectionID As Long, ByVal Message As 
             Call SendData(SendTarget.ToGM, UserIndex, PrepareMessageConsoleMsg("Control Paquetes---> El usuario " & GetUserGMName(UserIndex) & " | IP: " & UserList( _
                     UserIndex).ConnectionDetails.IP & " ESTÁ ENVIANDO PAQUETES INVÁLIDOS", e_FontTypeNames.FONTTYPE_GUILD))
         End If
-        Call KickConnection(ConnectionID)
+        Call LogDisconnectEvent("Protocol.HandleIncomingData", "KickConnection", UserIndex, ConnectionID, "invalid_packet packet=" & CStr(PacketId), PacketId)
+        Call KickConnection(ConnectionID, "invalid_packet packet=" & CStr(PacketId), "Protocol.HandleIncomingData")
         Exit Function
     End If
     #If PYMMO = 1 Then
@@ -245,7 +239,8 @@ Public Function HandleIncomingData(ByVal ConnectionID As Long, ByVal Message As 
             If Not IsMissing(optional_user_index) Then ' userindex may be invalid here
                 'Is the user actually logged?
                 If Not UserList(UserIndex).flags.UserLogged Then
-                    Call CloseSocket(UserIndex)
+                    Call LogDisconnectEvent("Protocol.HandleIncomingData", "CloseSocket", UserIndex, ConnectionID, "packet_requires_logged_user_but_user_not_logged packet=" & CStr(PacketId), PacketId)
+                    Call CloseSocket(UserIndex, "packet_requires_logged_user_but_user_not_logged packet=" & CStr(PacketId), "Protocol.HandleIncomingData")
                     Exit Function
                     'He is logged. Reset idle counter if id is valid.
                 ElseIf PacketId <= ClientPacketID.[PacketCount] Then
@@ -253,7 +248,8 @@ Public Function HandleIncomingData(ByVal ConnectionID As Long, ByVal Message As 
                 End If
             Else
                 'If UserIndex is missing then kick out
-                Call KickConnection(ConnectionID)
+                Call LogDisconnectEvent("Protocol.HandleIncomingData", "KickConnection", 0, ConnectionID, "packet_requires_logged_user_but_user_not_logged packet=" & CStr(PacketId), PacketId)
+                Call KickConnection(ConnectionID, "packet_requires_logged_user_but_user_not_logged packet=" & CStr(PacketId), "Protocol.HandleIncomingData")
                 Exit Function ' Don't process incoming data
             End If
         Else
@@ -261,7 +257,8 @@ Public Function HandleIncomingData(ByVal ConnectionID As Long, ByVal Message As 
             Debug.Assert IsMissing(optional_user_index)
             If Not IsMissing(optional_user_index) Then
                 'If UserIndex is not missing then kick out
-                Call KickConnection(ConnectionID)
+                Call LogDisconnectEvent("Protocol.HandleIncomingData", "KickConnection", UserIndex, ConnectionID, "unexpected_login_packet_with_user packet=" & CStr(PacketId), PacketId)
+                Call KickConnection(ConnectionID, "unexpected_login_packet_with_user packet=" & CStr(PacketId), "Protocol.HandleIncomingData")
                 Exit Function ' Don't process incoming data
             End If
         End If
@@ -270,13 +267,15 @@ Public Function HandleIncomingData(ByVal ConnectionID As Long, ByVal Message As 
         If Not (PacketId = ClientPacketID.eCreateAccount Or PacketId = ClientPacketID.eLoginAccount) Then
             'Is the account actually logged?
             If UserList(UserIndex).AccountID = 0 Then
-                Call CloseSocket(UserIndex)
+                Call LogDisconnectEvent("Protocol.HandleIncomingData", "CloseSocket", UserIndex, ConnectionID, "packet_requires_logged_account_but_account_not_logged packet=" & CStr(PacketId), PacketId)
+                Call CloseSocket(UserIndex, "packet_requires_logged_account_but_account_not_logged packet=" & CStr(PacketId), "Protocol.HandleIncomingData")
                 Exit Function
             End If
             If Not (PacketId = ClientPacketID.eLoginExistingChar Or PacketId = ClientPacketID.eLoginNewChar) Then
                 'Is the user actually logged?
                 If Not UserList(UserIndex).flags.UserLogged Then
-                    Call CloseSocket(UserIndex)
+                    Call LogDisconnectEvent("Protocol.HandleIncomingData", "CloseSocket", UserIndex, ConnectionID, "packet_requires_logged_user_but_user_not_logged packet=" & CStr(PacketId), PacketId)
+                    Call CloseSocket(UserIndex, "packet_requires_logged_user_but_user_not_logged packet=" & CStr(PacketId), "Protocol.HandleIncomingData")
                     Exit Function
                     'He is logged. Reset idle counter if id is valid.
                 ElseIf PacketId <= ClientPacketID.[PacketCount] Then
@@ -912,7 +911,8 @@ Public Function HandleIncomingData(ByVal ConnectionID As Long, ByVal Message As 
             If Not IsMissing(optional_user_index) Then
                 Call SendData(SendTarget.ToGM, UserIndex, PrepareMessageConsoleMsg("[Error] Paquete desconocido: " & PacketId, e_FontTypeNames.FONTTYPE_GUILD))
             End If
-            Call KickConnection(ConnectionID)
+            Call LogDisconnectEvent("Protocol.HandleIncomingData", "KickConnection", UserIndex, ConnectionID, "unhandled_packet packet=" & CStr(PacketId), PacketId)
+            Call KickConnection(ConnectionID, "unhandled_packet packet=" & CStr(PacketId), "Protocol.HandleIncomingData")
             HandleIncomingData = False
             Exit Function
     End Select
@@ -926,7 +926,8 @@ Public Function HandleIncomingData(ByVal ConnectionID As Long, ByVal Message As 
         If Not IsMissing(optional_user_index) Then
             Call SendData(SendTarget.ToGM, UserIndex, PrepareMessageConsoleMsg("[Warning] " & errMsg, e_FontTypeNames.FONTTYPE_GUILD))
         End If
-        Call KickConnection(ConnectionID)
+        Call LogDisconnectEvent("Protocol.HandleIncomingData", "KickConnection", UserIndex, ConnectionID, "extra_bytes packet=" & CStr(PacketId) & " extra=" & CStr(reader.GetAvailable()), PacketId)
+        Call KickConnection(ConnectionID, "extra_bytes packet=" & CStr(PacketId) & " extra=" & CStr(reader.GetAvailable()), "Protocol.HandleIncomingData")
         HandleIncomingData = False
         Exit Function
     End If
@@ -5922,6 +5923,10 @@ Private Sub HandleOfertaInicial(ByVal UserIndex As Integer)
     With UserList(UserIndex)
         Dim Oferta As Long
         Oferta = reader.ReadInt32()
+        If Oferta < 1 Or Oferta > SUBASTA_OFERTA_MAXIMA Then
+            Call WriteLocaleMsg(UserIndex, MSG_SUBASTA_OFERTA_INVALIDA, e_FontTypeNames.FONTTYPE_INFO)
+            Exit Sub
+        End If
         If UserList(UserIndex).flags.Muerto = 1 Then
             Call WriteLocaleMsg(UserIndex, MSG_MUERTO, e_FontTypeNames.FONTTYPE_INFO)
             Exit Sub
@@ -5956,8 +5961,10 @@ Private Sub HandleOfertaInicial(ByVal UserIndex As Integer)
             Call SendData(SendTarget.ToAll, 0, PrepareMessageLocaleMsg(MSG_SUBASTANDO_CANTIDAD_PRECIO_INICIAL_MONEDAS_ESCRIBE_OFERTAR, GetUserDisplayName(UserIndex) & "¬" & ObjData(Subasta.ObjSubastado).name & "¬" & Subasta.ObjSubastadoCantidad & "¬" & _
                     PonerPuntos(Subasta.OfertaInicial), e_FontTypeNames.FONTTYPE_SUBASTA)) 'Msg1649=¬1 está subastando: ¬2 (Cantidad: ¬3 ) - con un precio inicial de ¬4 monedas. Escribe /OFERTAR (cantidad) para participar.
             .flags.Subastando = False
+            Subasta.PreparandoSubasta = False
             Subasta.HaySubastaActiva = True
             Subasta.Subastador = .name
+            Subasta.SubastadorIndex = UserIndex
             Subasta.MinutosDeSubasta = 5
             Subasta.TiempoRestanteSubasta = 300
             Call LogearEventoDeSubasta( _
@@ -5966,8 +5973,6 @@ Private Sub HandleOfertaInicial(ByVal UserIndex As Integer)
             Call LogearEventoDeSubasta(GetUserRealName(UserIndex) & ": Esta subastando el item numero " & Subasta.ObjSubastado & " con una cantidad de " & Subasta.ObjSubastadoCantidad & _
                     " y con un precio inicial de " & PonerPuntos(Subasta.OfertaInicial) & " monedas.")
             frmMain.SubastaTimer.Enabled = True
-            'Warp al mapa 14 (bosque inseguro, sin retorno) removido: exponia y varaba al vendedor durante la subasta. Se queda junto al subastador.
-            'lalala toda la bola de los timerrr
         End If
     End With
     Exit Sub
@@ -5986,9 +5991,11 @@ Private Sub HandleOfertaDeSubasta(ByVal UserIndex As Integer)
             Call WriteLocaleMsg(UserIndex, MSG_NO_HAY_NINGUNA_SUBASTA_CURSO_1229, e_FontTypeNames.FONTTYPE_INFO)
             Exit Sub
         End If
-        If Oferta < Subasta.MejorOferta + 100 Then
-            'Msg1230= Debe haber almenos una diferencia de 100 monedas a la ultima oferta!
-            Call WriteLocaleMsg(UserIndex, MSG_DEBE_HABER_ALMENOS_DIFERENCIA_MONEDAS_ULTIMA_OFERTA, e_FontTypeNames.FONTTYPE_INFO)
+        Dim DiferenciaMinima As Long
+        DiferenciaMinima = CLng(Subasta.MejorOferta * 0.05)
+        If DiferenciaMinima < 100 Then DiferenciaMinima = 100
+        If Oferta < Subasta.MejorOferta + DiferenciaMinima Then
+            Call WriteLocaleMsg(UserIndex, MSG_DEBE_HABER_ALMENOS_DIFERENCIA_MONEDAS_ULTIMA_OFERTA, e_FontTypeNames.FONTTYPE_INFO, PonerPuntos(DiferenciaMinima))
             Exit Sub
         End If
         If .name = Subasta.Subastador Then
@@ -6016,6 +6023,8 @@ Private Sub HandleOfertaDeSubasta(ByVal UserIndex As Integer)
                 Call LogearEventoDeSubasta(GetUserRealName(UserIndex) & ": Mejoro la oferta ofreciendo " & PonerPuntos(Oferta) & " monedas.")
                 Subasta.HuboOferta = True
                 Subasta.PosibleCancelo = False
+                Call WriteLocaleMsg(UserIndex, MSG_SUBASTA_OFERTA_PROPIA, e_FontTypeNames.FONTTYPE_SUBASTA, PonerPuntos(Oferta) & "¬" & ObjData(Subasta.ObjSubastado).name)
+                Call SendData(SendTarget.ToAll, 0, PrepareMessageLocaleMsg(MSG_SUBASTA_OFERTA_GLOBAL, GetUserDisplayName(UserIndex) & "¬" & PonerPuntos(Oferta) & "¬" & ObjData(Subasta.ObjSubastado).name & "¬" & PonerPuntos(Subasta.MejorOferta + 100), e_FontTypeNames.FONTTYPE_SUBASTA))
             End If
         Else
             'Msg1232= No posees esa cantidad de oro.
@@ -7026,86 +7035,48 @@ ErrHandler:
 End Sub
 
 Private Sub HandleCompletarViaje(ByVal UserIndex As Integer)
-    'Author: Pablo Mercavides
     On Error GoTo ErrHandler
+    Dim Destino As Byte
+    Destino = reader.ReadInt8()
+    reader.ReadInt32
     With UserList(UserIndex)
-        Dim Destino As Byte
-        Dim costo   As Long
-        Destino = reader.ReadInt8()
-        costo = reader.ReadInt32()
-        '  WTF el costo lo decide el cliente... Desactivo....
-        Exit Sub
-        If costo <= 0 Then Exit Sub
-        Dim DeDonde As t_CityWorldPos
-        If UserList(UserIndex).Stats.GLD < costo Then
-            'Msg1257= No tienes suficiente dinero.
-            Call WriteLocaleMsg(UserIndex, MSG_NO_TIENES_SUFICIENTE_DINERO_1257, e_FontTypeNames.FONTTYPE_INFO)
-        Else
-            Select Case Destino
-                Case e_Ciudad.cUllathorpe
-                    DeDonde = CityUllathorpe
-                Case e_Ciudad.cNix
-                    DeDonde = CityNix
-                Case e_Ciudad.cBanderbill
-                    DeDonde = CityBanderbill
-                Case e_Ciudad.cLindos 'Vamos a tener que ir por todo el desierto... uff!
-                    DeDonde = CityLindos
-                Case e_Ciudad.cArghal
-                    DeDonde = CityArghal
-                Case e_Ciudad.cForgat
-                    DeDonde = CityForgat
-                Case e_Ciudad.cArkhein
-                    DeDonde = CityArkhein
-                Case e_Ciudad.cEldoria
-                    DeDonde = CityEldoria
-                Case e_Ciudad.cPenthar
-                    DeDonde = CityPenthar
-                Case Else
-                    DeDonde = CityUllathorpe
-            End Select
-            If DeDonde.NecesitaNave > 0 Then
-                If UserList(UserIndex).Stats.UserSkills(e_Skill.Navegacion) < 80 Then
-                    'Msg1258= Debido a la peligrosidad del viaje, no puedo llevarte, ya que al menos necesitas saber manejar una barca.
-                    Call WriteLocaleMsg(UserIndex, MSG_NO_DEBIDO_PELIGROSIDAD_VIAJE_PUEDO_LLEVARTE_MENOS_NECESITAS_SABER, e_FontTypeNames.FONTTYPE_INFO)
-                    'Msg1259= Debido a la peligrosidad del viaje, no puedo llevarte, ya que al menos necesitas saber manejar una barca.
-                    Call WriteLocaleMsg(UserIndex, MSG_NO_DEBIDO_PELIGROSIDAD_VIAJE_PUEDO_LLEVARTE_MENOS_NECESITAS_SABER_1259, e_FontTypeNames.FONTTYPE_INFO)
-                Else
-                    If IsValidNpcRef(UserList(UserIndex).flags.TargetNPC) Then
-                        If NpcList(UserList(UserIndex).flags.TargetNPC.ArrayIndex).SoundClose <> 0 Then
-                            Call WritePlayWave(UserIndex, NpcList(UserList(UserIndex).flags.TargetNPC.ArrayIndex).SoundClose, NO_3D_SOUND, NO_3D_SOUND, , 1)
-                        End If
-                    End If
-                    Call WarpToLegalPos(UserIndex, DeDonde.MapaViaje, DeDonde.ViajeX, DeDonde.ViajeY, True)
-                    'Msg1260= Has viajado por varios días, te sientes exhausto!
-                    Call WriteLocaleMsg(UserIndex, MSG_VIAJADO_VARIOS_DIAS_SIENTES_EXHAUSTO_1260, e_FontTypeNames.FONTTYPE_INFO)
-                    UserList(UserIndex).Stats.MinAGU = 0
-                    UserList(UserIndex).Stats.MinHam = 0
-                    UserList(UserIndex).Stats.GLD = UserList(UserIndex).Stats.GLD - costo
-                    Call WriteUpdateHungerAndThirst(UserIndex)
-                    Call WriteUpdateUserStats(UserIndex)
-                End If
-            Else
-                Dim Map As Integer
-                Dim x   As Byte
-                Dim y   As Byte
-                Map = DeDonde.MapaViaje
-                x = DeDonde.ViajeX
-                y = DeDonde.ViajeY
-                If IsValidNpcRef(UserList(UserIndex).flags.TargetNPC) Then
-                    If NpcList(UserList(UserIndex).flags.TargetNPC.ArrayIndex).SoundClose <> 0 Then
-                        Call WritePlayWave(UserIndex, NpcList(UserList(UserIndex).flags.TargetNPC.ArrayIndex).SoundClose, NO_3D_SOUND, NO_3D_SOUND, , 1)
-                    End If
-                End If
-                Call WarpUserChar(UserIndex, Map, x, y, True)
-                'Msg1261= Has viajado por varios días, te sientes exhausto!
-                Call WriteLocaleMsg(UserIndex, MSG_VIAJADO_VARIOS_DIAS_SIENTES_EXHAUSTO_1261, e_FontTypeNames.FONTTYPE_INFO)
-                UserList(UserIndex).Stats.MinAGU = 0
-                UserList(UserIndex).Stats.MinHam = 0
-                UserList(UserIndex).Stats.GLD = UserList(UserIndex).Stats.GLD - costo
-                Call WriteUpdateHungerAndThirst(UserIndex)
-                Call WriteUpdateUserStats(UserIndex)
-            End If
+        If .flags.Muerto = 1 Then
+            Call WriteLocaleMsg(UserIndex, MSG_MUERTO, e_FontTypeNames.FONTTYPE_INFO)
+            Exit Sub
         End If
+        If Not IsValidNpcRef(.flags.TargetNPC) Then Exit Sub
+        Dim NpcIndex As Integer
+        NpcIndex = .flags.TargetNPC.ArrayIndex
+        If Distancia(NpcList(NpcIndex).pos, UserList(UserIndex).pos) > 4 Then
+            Call WriteLocaleMsg(UserIndex, MSG_DEMASIADO_LEJOS_VENDEDOR_PASAJES, e_FontTypeNames.FONTTYPE_INFO)
+            Exit Sub
+        End If
+        If NpcList(NpcIndex).npcType <> e_NPCType.Transporter And _
+           NpcList(NpcIndex).npcType <> e_NPCType.Pirata Then
+            Exit Sub
+        End If
+        If Destino < 1 Or Destino > NpcList(NpcIndex).TransportCityCount Then
+            Exit Sub
+        End If
+        Dim precio As Long
+        precio = NpcList(NpcIndex).TransportCityPrice(Destino)
+        If .Stats.GLD < precio Then
+            Call WriteLocaleMsg(UserIndex, MSG_NO_TIENES_SUFICIENTE_DINERO_1257, e_FontTypeNames.FONTTYPE_INFO)
+            Exit Sub
+        End If
+        Dim destMap As Integer
+        Dim destX   As Byte
+        Dim destY   As Byte
+        destMap = NpcList(NpcIndex).TransportCityMap(Destino)
+        destX = NpcList(NpcIndex).TransportCityX(Destino)
+        destY = NpcList(NpcIndex).TransportCityY(Destino)
+        If NpcList(NpcIndex).SoundClose <> 0 Then
+            Call WritePlayWave(UserIndex, NpcList(NpcIndex).SoundClose, NO_3D_SOUND, NO_3D_SOUND, , 1)
+        End If
+        .Stats.GLD = .Stats.GLD - precio
+        Call WriteUpdateUserStats(UserIndex)
+        Call WarpUserChar(UserIndex, destMap, destX, destY, True)
+        Call WriteLocaleMsg(UserIndex, MSG_VIAJADO_VARIOS_DIAS_SIENTES_EXHAUSTO_1261, e_FontTypeNames.FONTTYPE_INFO)
     End With
     Exit Sub
 ErrHandler:
@@ -7508,12 +7479,33 @@ Private Sub HandleLogMacroClickHechizo(ByVal UserIndex As Integer)
 End Sub
 
 Private Function IsUnassistedSpellAllowed(ByVal spellID As Integer) As Boolean
-    Select Case spellID
-        Case SPELL_UNASSISTED_DARDO, SPELL_UNASSISTED_RUGIDO_SALVAJE, SPELL_UNASSISTED_RUGIDO_ARCANO, SPELL_UNASSISTED_FULGOR_IGNEO, SPELL_UNASSISTED_LATIDO_IGNEO, SPELL_UNASSISTED_ECO_IGNEO, SPELL_UNASSISTED_DESTELLO_MALVA, SPELL_UNASSISTED_FRACTURA_GLACIAL, SPELL_UNASSISTED_ALIENTO_CARMESI, SPELL_UNASSISTED_ENERGIA_ANCESTRAL
-            IsUnassistedSpellAllowed = True
-        Case Else
-            IsUnassistedSpellAllowed = False
-    End Select
+    Const CONFIG_SECTION As String = "CONFIGURACIONES"
+    Const CONFIG_KEY As String = "UnassistedSpellsAllowed"
+    Const DEFAULT_UNASSISTED_SPELLS_ALLOWED As String = "1,5,348,52,349,61,62,63,64,65"
+
+    Static allowedSpells As String
+    Static isLoaded As Boolean
+    Dim rawAllowedSpells As String
+
+    If Not isLoaded Then
+        rawAllowedSpells = Trim$(GetVar(IniPath & "Configuracion.ini", CONFIG_SECTION, CONFIG_KEY))
+        rawAllowedSpells = Replace$(rawAllowedSpells, ";", ",")
+        rawAllowedSpells = Replace$(rawAllowedSpells, " ", vbNullString)
+
+        If LenB(rawAllowedSpells) = 0 Then
+            rawAllowedSpells = DEFAULT_UNASSISTED_SPELLS_ALLOWED
+            Call LogError("Falta configuracion [" & CONFIG_SECTION & "] " & CONFIG_KEY & " en Configuracion.ini. Usando lista por defecto: " & DEFAULT_UNASSISTED_SPELLS_ALLOWED)
+        End If
+
+        allowedSpells = "," & rawAllowedSpells & ","
+        Do While InStr(1, allowedSpells, ",,", vbBinaryCompare) > 0
+            allowedSpells = Replace$(allowedSpells, ",,", ",")
+        Loop
+
+        isLoaded = True
+    End If
+
+    IsUnassistedSpellAllowed = InStr(1, allowedSpells, "," & CStr(spellID) & ",", vbBinaryCompare) > 0
 End Function
 
 Private Sub HandleHome(ByVal UserIndex As Integer)
