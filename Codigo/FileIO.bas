@@ -207,17 +207,25 @@ End Sub
 
 Public Sub CargarSpawnList()
     On Error GoTo CargarSpawnList_Err
+    'Optimizacion de arranque: cargar npcs.dat una sola vez en memoria con
+    'clsIniManager en vez de GetVar. GetVar (GetPrivateProfileString) reescanea
+    'el archivo COMPLETO por llamada; con NumNPCs ~9000 eran ~18000 escaneos de
+    'npcs.dat por boot. Mismo patron que LoadOBJData.
     Dim n As Integer, LoopC As Integer
-    n = val(GetVar(DatPath & "npcs.dat", "INIT", "NumNPCs"))
+    Dim Leer As clsIniManager
+    Set Leer = New clsIniManager
+    Call Leer.Initialize(DatPath & "npcs.dat")
+    n = val(Leer.GetValue("INIT", "NumNPCs"))
     ReDim SpawnList(n) As t_CriaturasEntrenador
     For LoopC = 1 To n
         SpawnList(LoopC).NpcIndex = LoopC
-        SpawnList(LoopC).NpcName = GetVar(DatPath & "npcs.dat", "NPC" & LoopC, "Name")
-        SpawnList(LoopC).PuedeInvocar = val(GetVar(DatPath & "npcs.dat", "NPC" & LoopC, "PuedeInvocar")) = 1
+        SpawnList(LoopC).NpcName = Leer.GetValue("NPC" & LoopC, "Name")
+        SpawnList(LoopC).PuedeInvocar = val(Leer.GetValue("NPC" & LoopC, "PuedeInvocar")) = 1
         If Len(SpawnList(LoopC).NpcName) = 0 Then
             SpawnList(LoopC).NpcName = "Nada"
         End If
     Next LoopC
+    Set Leer = Nothing
     Exit Sub
 CargarSpawnList_Err:
     Call TraceError(Err.Number, Err.Description, "ES.CargarSpawnList", Erl)
@@ -1977,7 +1985,7 @@ Public Sub CargarMapaFormatoCSM(ByVal Map As Long, ByVal MAPFl As String)
                         End If
                     Else
                         ' Lo guardo en los logs + aparece en el Debug.Print
-                        Call TraceError(404, "NPC no existe en los .DAT's o está mal dateado. Posicion: " & Map & "-" & NPCs(i).x & "-" & NPCs(i).y, "ES.CargarMapaFormatoCSM")
+                        Call TraceError(404, "NPC no existe en los .DAT's o está mal dateado. NpcIndex: " & NumNpc & " Posicion: " & Map & "-" & NPCs(i).x & "-" & NPCs(i).y, "ES.CargarMapaFormatoCSM")
                     End If
                 End If
             Next i
@@ -2002,8 +2010,10 @@ Public Sub CargarMapaFormatoCSM(ByVal Map As Long, ByVal MAPFl As String)
             MapDat.restrict_mode = "0"
         End If
     End If
-    If SailingTiles * 100 / TotalTiles > SvrConfig.GetValue("FISHING_REQUIRED_PERCENT") And Not MapDat.Seguro Then
-        Call AddFishingPoolsToMap(Map)
+    If TotalTiles > 0 Then
+        If SailingTiles * 100 / TotalTiles > SvrConfig.GetValue("FISHING_REQUIRED_PERCENT") And Not MapDat.Seguro Then
+            Call AddFishingPoolsToMap(Map)
+        End If
     End If
     MapInfo(Map).map_name = MapDat.map_name
     MapInfo(Map).MapResource = Map
@@ -2055,7 +2065,7 @@ Public Sub CargarMapaFormatoCSM(ByVal Map As Long, ByVal MAPFl As String)
     Exit Sub
 ErrorHandler:
     Close fh
-    Call TraceError(Err.Number, Err.Description, "ES.CargarMapaFormatoCSM", Erl)
+    Call TraceError(Err.Number, Err.Description & " | Mapa: " & Map & " (" & MAPFl & ")", "ES.CargarMapaFormatoCSM", Erl)
 End Sub
 
 Sub AddFishingPoolsToMap(ByVal Map As Integer)
