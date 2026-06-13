@@ -207,17 +207,25 @@ End Sub
 
 Public Sub CargarSpawnList()
     On Error GoTo CargarSpawnList_Err
+    'Optimizacion de arranque: cargar npcs.dat una sola vez en memoria con
+    'clsIniManager en vez de GetVar. GetVar (GetPrivateProfileString) reescanea
+    'el archivo COMPLETO por llamada; con NumNPCs ~9000 eran ~18000 escaneos de
+    'npcs.dat por boot. Mismo patron que LoadOBJData.
     Dim n As Integer, LoopC As Integer
-    n = val(GetVar(DatPath & "npcs.dat", "INIT", "NumNPCs"))
+    Dim Leer As clsIniManager
+    Set Leer = New clsIniManager
+    Call Leer.Initialize(DatPath & "npcs.dat")
+    n = val(Leer.GetValue("INIT", "NumNPCs"))
     ReDim SpawnList(n) As t_CriaturasEntrenador
     For LoopC = 1 To n
         SpawnList(LoopC).NpcIndex = LoopC
-        SpawnList(LoopC).NpcName = GetVar(DatPath & "npcs.dat", "NPC" & LoopC, "Name")
-        SpawnList(LoopC).PuedeInvocar = val(GetVar(DatPath & "npcs.dat", "NPC" & LoopC, "PuedeInvocar")) = 1
+        SpawnList(LoopC).NpcName = Leer.GetValue("NPC" & LoopC, "Name")
+        SpawnList(LoopC).PuedeInvocar = val(Leer.GetValue("NPC" & LoopC, "PuedeInvocar")) = 1
         If Len(SpawnList(LoopC).NpcName) = 0 Then
             SpawnList(LoopC).NpcName = "Nada"
         End If
     Next LoopC
+    Set Leer = Nothing
     Exit Sub
 CargarSpawnList_Err:
     Call TraceError(Err.Number, Err.Description, "ES.CargarSpawnList", Erl)
