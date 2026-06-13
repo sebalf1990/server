@@ -1,1 +1,1 @@
-/* Migracion 2023 obsoleta neutralizada (plan 13.001 item B). La columna slot_knuckles ya no aplica en la DB de juego viva: la UPDATE fallaba con -2147467259 y se reintentaba en cada boot, tirando error 5 en LoadDBMigrations. Se deja como no-op para registrarla como aplicada y frenar el reintento. El slot de knuckles se unifico a weapon hace tiempo. */ SELECT 1;
+UPDATE user SET slot_weapon=slot_knuckles, slot_knuckles=0 WHERE slot_knuckles>0;
