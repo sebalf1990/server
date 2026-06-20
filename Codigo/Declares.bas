@@ -1715,6 +1715,93 @@ Public Enum e_TargetEffectType
     eNegative = 2
 End Enum
 
+' ============================================================================
+' === Sistema de danos elementales unificado (TOGGLE32 elemental_system) =====
+' Plan 20.002. Capa ADITIVA sobre el combate fisico (core intacto).
+' Registro PROPIO de tipos de dano; NO reutiliza e_ElementalTags (afinidad NPC oficial).
+' Ids 1..7 son built-in; 8..MAX_DAMAGE_TYPE_ID quedan extensibles por data.
+' Luz/Oscuridad quedan RESERVADOS al oficial: no se declaran aca.
+' ============================================================================
+Public Const MAX_DAMAGE_COMPONENTS As Byte = 4    ' componentes de dano tipado por fuente
+Public Const MAX_ELEMENTAL_PROCS   As Byte = 4    ' procs on-hit por fuente
+Public Const MAX_ELEMENTAL_RESISTS As Byte = 8    ' entradas de resistencia por entidad
+Public Const MAX_DAMAGE_TYPE_ID    As Long = 16   ' techo de ids de tipo (headroom para data)
+Public Const ELEMENTAL_RESIST_CAP_DEFAULT As Single = 0.75  ' techo default de reduccion %
+
+Public Enum e_DamageType
+    eDmgNone = 0
+    eDmgPhysical = 1
+    eDmgFire = 2
+    eDmgFrost = 3
+    eDmgPoison = 4
+    eDmgAcid = 5
+    eDmgArcane = 6
+    eDmgBleed = 7
+End Enum
+
+Public Enum e_ProcTrigger
+    eProcOnHit = 0       ' atacante: al golpear
+    eProcOnDamaged = 1   ' defensor: al ser golpeado (auras / thorns)
+End Enum
+
+Public Enum e_ProcKind
+    eProcDamageBonus = 0  ' suma dano extra tipado
+    eProcApplyState = 1   ' aplica un efecto del catalogo (EOT) -- real en Ola 1
+End Enum
+
+Public Type t_DamageComponent
+    DamageType As e_DamageType
+    MinDamage As Long
+    MaxDamage As Long
+End Type
+
+Public Type t_ElementalProc
+    ChancePct As Long           ' 0..100
+    Kind As e_ProcKind
+    Trigger As e_ProcTrigger
+    DamageType As e_DamageType  ' eProcDamageBonus
+    MinDamage As Long           ' eProcDamageBonus
+    MaxDamage As Long           ' eProcDamageBonus
+    EotId As Integer            ' eProcApplyState (preset EffectsOverTime.dat) -- Ola 1
+End Type
+
+Public Type t_ElementalResist
+    DamageType As e_DamageType
+    ' --- resist-a-dano (reduce el numero del componente) ---
+    ReduceChancePct As Long     ' 0..100: chance de anular el componente entero
+    ReduceFlat As Long          ' resta plana
+    ReducePct As Single         ' 0..1: reduccion porcentual
+    Immune As Byte              ' 1 = inmunidad absoluta a este tipo
+    ' --- resist-a-efecto (reduce el estado aplicado) -- Ola 1 ---
+    ReduceEffectMagnitudePct As Single
+    ReduceEffectDurationPct As Single
+    ReduceEffectChancePct As Long
+End Type
+
+' Carrier ofensivo: lo que una fuente (arma/municion/hechizo/npc) inflige.
+Public Type t_ElementalSource
+    CompCount As Byte
+    Comp(1 To MAX_DAMAGE_COMPONENTS) As t_DamageComponent
+    ProcCount As Byte
+    Proc(1 To MAX_ELEMENTAL_PROCS) As t_ElementalProc
+End Type
+
+' Carrier defensivo: resistencias por tipo de una entidad (item equipable / npc).
+Public Type t_ElementalResistSet
+    Count As Byte
+    Resist(1 To MAX_ELEMENTAL_RESISTS) As t_ElementalResist
+End Type
+
+' Metadata data-driven de un tipo de dano (DamageTypes.dat). Tuneable sin recompilar.
+Public Type t_DamageTypeInfo
+    nombre As String
+    NumberColor As Long          ' color del numero de dano (cliente, Ola 1)
+    DefaultParticle As Integer   ' particula default del tipo
+    ResistCapPct As Single       ' techo de reduccion para este tipo (0 = usa default)
+    TagElementalRelacionado As Long ' puente futuro al e_ElementalTags oficial (0 = ninguno)
+    Defined As Byte              ' 1 si vino del .dat
+End Type
+
 Public Type t_Hechizo
     AutoLanzar As Byte
     TargetEffectType As e_TargetEffectType
@@ -1835,6 +1922,8 @@ Public Type t_Hechizo
     CuraHemoValor As Integer
     CuraNeuro As Byte
     CuraNeuroValor As Integer
+    ' --- Sistema de danos elementales (TOGGLE32 elemental_system) ---
+    Elemental As t_ElementalSource
 End Type
 
 Public Type t_ActiveModifiers
@@ -2490,6 +2579,9 @@ Public Type t_ObjData
     InmunidadVenenoMenor As Byte
     InmunidadHemo As Byte
     InmunidadNeuro As Byte
+    ' --- Sistema de danos elementales (TOGGLE32 elemental_system) ---
+    Elemental As t_ElementalSource
+    ElementalResist As t_ElementalResistSet
 End Type
 
 '[Pablo ToxicWaste]
@@ -3508,6 +3600,9 @@ Public Type t_NpcInfoCache
     ResistChanceVenenoGenericoPct As Long
     ResistDanoVenenoGenericoFlat As Long
     ResistDanoVenenoGenericoPct As Long
+    ' --- Sistema de danos elementales (TOGGLE32 elemental_system) ---
+    Elemental As t_ElementalSource
+    ElementalResist As t_ElementalResistSet
     CityCount       As Integer
     CityNames()     As String
     CityMap()       As Integer

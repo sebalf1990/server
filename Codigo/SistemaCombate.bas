@@ -454,6 +454,11 @@ Private Sub UserDamageNpc(ByVal UserIndex As Integer, ByVal NpcIndex As Integer,
             Damage = Damage + DamageExtra
         End If
         ' Restamos el daño al NPC
+        ' --- Capa aditiva elemental (TOGGLE32 elemental_system). Core fisico INTACTO. ---
+        ' El motor ya aplico la resistencia por tipo del NPC; se suma post-fisico, pre-aplicacion.
+        Dim elemDmg As Long
+        elemDmg = modElementalCombat.ElementalDamageUserVsNpc(UserIndex, NpcIndex, .invent.EquippedWeaponObjIndex, .invent.EquippedMunitionObjIndex)
+        If elemDmg > 0 Then Damage = Damage + elemDmg
         If NPCs.DoDamageOrHeal(NpcIndex, UserIndex, eUser, -Damage, e_phisical, .invent.EquippedWeaponObjIndex, Color) = eStillAlive Then
             'efectos
             Dim ArmaObjInd, ObjInd As Integer
