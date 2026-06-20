@@ -1728,7 +1728,7 @@ Public Const MAX_ELEMENTAL_RESISTS As Byte = 8    ' entradas de resistencia por 
 Public Const MAX_DAMAGE_TYPE_ID    As Long = 16   ' techo de ids de tipo (headroom para data)
 Public Const ELEMENTAL_RESIST_CAP_DEFAULT As Single = 0.75  ' techo default de reduccion %
 
-Public Enum e_DamageType
+Public Enum e_ElementalDamageType
     eDmgNone = 0
     eDmgPhysical = 1
     eDmgFire = 2
@@ -1750,7 +1750,7 @@ Public Enum e_ProcKind
 End Enum
 
 Public Type t_DamageComponent
-    DamageType As e_DamageType
+    DamageType As e_ElementalDamageType
     MinDamage As Long
     MaxDamage As Long
 End Type
@@ -1759,14 +1759,14 @@ Public Type t_ElementalProc
     ChancePct As Long           ' 0..100
     Kind As e_ProcKind
     Trigger As e_ProcTrigger
-    DamageType As e_DamageType  ' eProcDamageBonus
+    DamageType As e_ElementalDamageType  ' eProcDamageBonus
     MinDamage As Long           ' eProcDamageBonus
     MaxDamage As Long           ' eProcDamageBonus
     EotId As Integer            ' eProcApplyState (preset EffectsOverTime.dat) -- Ola 1
 End Type
 
 Public Type t_ElementalResist
-    DamageType As e_DamageType
+    DamageType As e_ElementalDamageType
     ' --- resist-a-dano (reduce el numero del componente) ---
     ReduceChancePct As Long     ' 0..100: chance de anular el componente entero
     ReduceFlat As Long          ' resta plana
@@ -1998,6 +1998,7 @@ Public Type t_EffectOverTime
     ApplyStatusMask As Long
     SecondaryTargetModifier As Single
     RequireTransform As Integer
+    DamageColor As Long          ' color del numero de dano por tick (0 = rojo default)
 End Type
 
 Public Enum e_DamageResult

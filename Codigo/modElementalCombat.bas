@@ -5,7 +5,7 @@ Attribute VB_Name = "modElementalCombat"
 ' Sistema de danos elementales unificado (TOGGLE32 elemental_system). Plan 20.002 - Ola 0.
 '
 ' Motor de la CAPA ADITIVA sobre el combate fisico (core intacto). Provee:
-'   - Registro data-driven de tipos de dano (DamageTypes.dat) sobre e_DamageType.
+'   - Registro data-driven de tipos de dano (DamageTypes.dat) sobre e_ElementalDamageType.
 '   - Roll de componentes de dano tipado.
 '   - Resistencia generica por clave (2 sabores): resist-a-dano (chance/flat/pct + cap + inmune)
 '     y resist-a-efecto (Ola 1).
@@ -36,7 +36,7 @@ End Function
 ' ============================================================================
 ' Registro de tipos de dano (data-driven)
 ' ============================================================================
-Private Sub SetDamageTypeDefault(ByVal t As e_DamageType, ByVal nm As String, ByVal col As Long)
+Private Sub SetDamageTypeDefault(ByVal t As e_ElementalDamageType, ByVal nm As String, ByVal col As Long)
     If t < 1 Or t > MAX_DAMAGE_TYPE_ID Then Exit Sub
     DamageTypeReg(t).nombre = nm
     DamageTypeReg(t).NumberColor = col
@@ -104,7 +104,7 @@ ErrHandler:
     Call TraceError(Err.Number, Err.Description, "modElementalCombat.LoadDamageTypes", Erl)
 End Sub
 
-Public Function DamageTypeName(ByVal t As e_DamageType) As String
+Public Function DamageTypeName(ByVal t As e_ElementalDamageType) As String
     If t >= 1 And t <= MAX_DAMAGE_TYPE_ID Then
         If LenB(DamageTypeReg(t).nombre) > 0 Then
             DamageTypeName = DamageTypeReg(t).nombre
@@ -114,12 +114,12 @@ Public Function DamageTypeName(ByVal t As e_DamageType) As String
     DamageTypeName = "Tipo" & CStr(t)
 End Function
 
-Public Function DamageTypeColor(ByVal t As e_DamageType) As Long
+Public Function DamageTypeColor(ByVal t As e_ElementalDamageType) As Long
     If t >= 1 And t <= MAX_DAMAGE_TYPE_ID Then DamageTypeColor = DamageTypeReg(t).NumberColor
     If DamageTypeColor = 0 Then DamageTypeColor = vbWhite
 End Function
 
-Private Function ResistCapForType(ByVal t As e_DamageType) As Single
+Private Function ResistCapForType(ByVal t As e_ElementalDamageType) As Single
     Dim cap As Single
     If t >= 1 And t <= MAX_DAMAGE_TYPE_ID Then cap = DamageTypeReg(t).ResistCapPct
     If cap <= 0 Then cap = ELEMENTAL_RESIST_CAP_DEFAULT
@@ -155,7 +155,7 @@ Private Sub AddResistEntry(ByRef acc As t_ElementalResist, ByRef e As t_Elementa
     acc.ReduceEffectChancePct = acc.ReduceEffectChancePct + e.ReduceEffectChancePct
 End Sub
 
-Private Sub AddSetResist(ByRef acc As t_ElementalResist, ByRef rs As t_ElementalResistSet, ByVal dmgType As e_DamageType)
+Private Sub AddSetResist(ByRef acc As t_ElementalResist, ByRef rs As t_ElementalResistSet, ByVal dmgType As e_ElementalDamageType)
     Dim k As Integer
     For k = 1 To rs.Count
         If rs.Resist(k).DamageType = dmgType Then
@@ -164,7 +164,7 @@ Private Sub AddSetResist(ByRef acc As t_ElementalResist, ByRef rs As t_Elemental
     Next k
 End Sub
 
-Public Function GetUserElementalResist(ByVal UserIndex As Integer, ByVal dmgType As e_DamageType) As t_ElementalResist
+Public Function GetUserElementalResist(ByVal UserIndex As Integer, ByVal dmgType As e_ElementalDamageType) As t_ElementalResist
     Dim acc As t_ElementalResist
     acc.DamageType = dmgType
     If UserIndex > 0 Then
@@ -181,7 +181,7 @@ Public Function GetUserElementalResist(ByVal UserIndex As Integer, ByVal dmgType
     GetUserElementalResist = acc
 End Function
 
-Public Function GetNpcElementalResist(ByVal NpcIndex As Integer, ByVal dmgType As e_DamageType) As t_ElementalResist
+Public Function GetNpcElementalResist(ByVal NpcIndex As Integer, ByVal dmgType As e_ElementalDamageType) As t_ElementalResist
     Dim acc As t_ElementalResist
     acc.DamageType = dmgType
     If NpcIndex > 0 Then
@@ -194,7 +194,7 @@ Public Function GetNpcElementalResist(ByVal NpcIndex As Integer, ByVal dmgType A
     GetNpcElementalResist = acc
 End Function
 
-Private Function GetTargetResist(ByVal targetIsNpc As Boolean, ByVal targetIndex As Integer, ByVal dmgType As e_DamageType) As t_ElementalResist
+Private Function GetTargetResist(ByVal targetIsNpc As Boolean, ByVal targetIndex As Integer, ByVal dmgType As e_ElementalDamageType) As t_ElementalResist
     If targetIsNpc Then
         GetTargetResist = GetNpcElementalResist(targetIndex, dmgType)
     Else
@@ -203,7 +203,7 @@ Private Function GetTargetResist(ByVal targetIsNpc As Boolean, ByVal targetIndex
 End Function
 
 ' Aplica la cascada de resistencia-a-dano a un numero. Devuelve el dano final (>=0).
-Public Function ApplyElementalResist(ByVal RawDamage As Long, ByRef r As t_ElementalResist, ByVal dmgType As e_DamageType, ByRef outNullified As Boolean) As Long
+Public Function ApplyElementalResist(ByVal RawDamage As Long, ByRef r As t_ElementalResist, ByVal dmgType As e_ElementalDamageType, ByRef outNullified As Boolean) As Long
     outNullified = False
     If RawDamage <= 0 Then Exit Function
     ' Inmunidad: bloqueo absoluto
@@ -282,12 +282,20 @@ Private Function FireProcs(ByRef src As t_ElementalSource, ByVal trig As e_ProcT
                         total = total + fd
                         Call ElementalLog(logCtx & " PROC dmgBonus " & DamageTypeName(c.DamageType) & " final=" & fd)
                     Case eProcApplyState
-                        ' Aplica el preset de efecto (EotId) sobre el motor EOT (ej. Quemadura).
+                        ' Aplica el preset (EotId) respetando inmunidad / resist-a-efecto del tipo del proc.
                         If src.Proc(i).EotId > 0 Then
-                            Dim trt As e_ReferenceType
-                            If targetIsNpc Then trt = eNpc Else trt = eUser
-                            Call EffectsOverTime.CreateEffect(attackerIndex, attackerType, targetIndex, trt, src.Proc(i).EotId)
-                            Call ElementalLog(logCtx & " PROC applyState EotId=" & src.Proc(i).EotId & " aplicado")
+                            Dim rr As t_ElementalResist
+                            rr = GetTargetResist(targetIsNpc, targetIndex, src.Proc(i).DamageType)
+                            If rr.Immune <> 0 Then
+                                Call ElementalLog(logCtx & " PROC applyState BLOQUEADO (inmune " & DamageTypeName(src.Proc(i).DamageType) & ")")
+                            ElseIf rr.ReduceEffectChancePct > 0 And RandomNumber(1, 100) <= rr.ReduceEffectChancePct Then
+                                Call ElementalLog(logCtx & " PROC applyState resistido (chance efecto)")
+                            Else
+                                Dim trt As e_ReferenceType
+                                If targetIsNpc Then trt = eNpc Else trt = eUser
+                                Call EffectsOverTime.CreateEffect(attackerIndex, attackerType, targetIndex, trt, src.Proc(i).EotId)
+                                Call ElementalLog(logCtx & " PROC applyState EotId=" & src.Proc(i).EotId & " aplicado")
+                            End If
                         Else
                             Call ElementalLog(logCtx & " PROC applyState sin EotId (ignorado)")
                         End If

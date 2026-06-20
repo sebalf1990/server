@@ -49,6 +49,7 @@ Dim TickEffect           As Integer
 Dim Modifiers            As Integer
 Dim EffectBonus          As Single
 Dim SecondTargetModifier As Single
+Dim TickDmgColor         As Long
 Private DotInfo          As t_BaseDotInfo
 Private Source           As t_AnyReference
 
@@ -68,6 +69,7 @@ Public Sub Setup(ByVal SourceIndex As Integer, _
         TargetTicks = .Ticks
         TickTime = .TickTime
         TickEffect = .TickFX
+        If .DamageColor <> 0 Then TickDmgColor = .DamageColor Else TickDmgColor = vbRed
         Modifiers = .EffectModifiers
         SecondTargetModifier = 1 - .SecondaryTargetModifier
         If DotInfo.TargetRef.RefType = eUser And EffectOverTime(DotInfo.EotId).ClientEffectTypeId > 0 Then Call WriteSendSkillCdUpdate(TargetIndex, .ClientEffectTypeId, Id, _
@@ -258,9 +260,9 @@ Public Sub PerformAction()
                     TickHP = TickHP * DivineBloodHealingMultiplierBonus
                 End If
             End If
-            Call UserMod.DoDamageOrHeal(DotInfo.TargetRef.ArrayIndex, Source.ArrayIndex, Source.RefType, TickHP, e_dot, DotInfo.EotId)
+            Call UserMod.DoDamageOrHeal(DotInfo.TargetRef.ArrayIndex, Source.ArrayIndex, Source.RefType, TickHP, e_dot, DotInfo.EotId, DamageColor:=TickDmgColor)
         Else
-            Call UserMod.DoDamageOrHeal(DotInfo.TargetRef.ArrayIndex, 0, e_ReferenceType.eNone, TickHP, e_dot, DotInfo.EotId)
+            Call UserMod.DoDamageOrHeal(DotInfo.TargetRef.ArrayIndex, 0, e_ReferenceType.eNone, TickHP, e_dot, DotInfo.EotId, DamageColor:=TickDmgColor)
         End If
         If TickEffect > 0 Then
             If IsVisible(UserList(DotInfo.TargetRef.ArrayIndex)) Then
@@ -283,9 +285,9 @@ Public Sub PerformAction()
         End If
         TickHP = TickHP * SecondTargetModifier
         If IsValidRef(Source) Then
-            Call NPCs.DoDamageOrHeal(DotInfo.TargetRef.ArrayIndex, Source.ArrayIndex, Source.RefType, TickHP, e_dot, DotInfo.EotId)
+            Call NPCs.DoDamageOrHeal(DotInfo.TargetRef.ArrayIndex, Source.ArrayIndex, Source.RefType, TickHP, e_dot, DotInfo.EotId, TickDmgColor)
         Else
-            Call NPCs.DoDamageOrHeal(DotInfo.TargetRef.ArrayIndex, 0, e_ReferenceType.eNone, TickHP, e_dot, DotInfo.EotId)
+            Call NPCs.DoDamageOrHeal(DotInfo.TargetRef.ArrayIndex, 0, e_ReferenceType.eNone, TickHP, e_dot, DotInfo.EotId, TickDmgColor)
         End If
         If TickEffect > 0 Then Call SendData(SendTarget.ToNPCAliveArea, DotInfo.TargetRef.ArrayIndex, PrepareMessageCreateFX(NpcList( _
            DotInfo.TargetRef.ArrayIndex).Char.charindex, TickEffect, 0, NpcList(DotInfo.TargetRef.ArrayIndex).pos.x, NpcList(DotInfo.TargetRef.ArrayIndex).pos.y))

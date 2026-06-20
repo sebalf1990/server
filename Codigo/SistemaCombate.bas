@@ -416,22 +416,12 @@ Private Sub UserDamageNpc(ByVal UserIndex As Integer, ByVal NpcIndex As Integer,
             Call modSendData.SendData(ToIndex, UserIndex, PrepareMessageTextOverTile(Calc, .pos.x, .pos.y, vbGreen, 1300, -10, True))
         End If
         ' Golpe crítico
-        If PuedeGolpeCritico(UserIndex) Then
-            ' Si acertó - Doble chance contra NPCs
-            If RandomNumber(1, 100) <= GetCriticalHitChanceBase(UserIndex) Then
-                ' Daño del golpe crítico (usamos el daño base)
-                DamageExtra = DamageBase * 0.33
-                DamageExtra = DamageExtra * UserMod.GetPhysicalDamageModifier(UserList(UserIndex))
-                DamageExtra = DamageExtra * NPCs.GetPhysicDamageReduction(NpcList(NpcIndex))
-                ' Mostramos en consola el daño
-                If .ChatCombate = 1 Then
-                    Call WriteLocaleMsg(UserIndex, MSG_HIT_AND_CRITICAL_ON_CREATURE, e_FontTypeNames.FONTTYPE_INFOBOLD, PonerPuntos(Damage) & "¬" & (DamageExtra))
-                End If
-                ' Color naranja
-                Color = RGB(225, 165, 0)
-            End If
-            ' Stab
-        ElseIf PuedeApuñalar(UserIndex) Then
+        ' Apuñalar y critico CONVIVEN pero son EXCLUYENTES por golpe: apuñalar tiene precedencia.
+        ' Se tira apuñalar primero; si no procea, el critico (firma de bandido o universal) tiene su chance.
+        ' Apuñalar NO tiene resistencias; el critico SI (TryUniversalCrit aplica la clave DMG_TYPE_CRIT).
+        Dim didStab As Boolean
+        didStab = False
+        If PuedeApuñalar(UserIndex) Then
             ' Si acertó - Doble chance contra NPCs
             If RandomNumber(1, 100) <= GetStabbingChanceBase(UserIndex) Then
                 Dim min_stab_npc As Double
@@ -446,18 +436,36 @@ Private Sub UserDamageNpc(ByVal UserIndex As Integer, ByVal NpcIndex As Integer,
                 End If
                 ' Color amarillo
                 Color = vbYellow
+                didStab = True
             End If
             ' Sube skills en apuñalar
             Call SubirSkill(UserIndex, Apuñalar)
-        ElseIf modElementalCombat.UniversalCritActive() Then
-            ' Crit universal (TOGGLE32): fallback para clases sin firma propia. Data-tunable.
-            Dim critBonus As Long
-            Dim critCol As Long
-            critBonus = modElementalCombat.TryUniversalCrit(UserIndex, True, NpcIndex, DamageBase, critCol)
-            If critBonus > 0 Then
-                DamageExtra = critBonus
-                Color = critCol
-                If .ChatCombate = 1 Then Call WriteLocaleMsg(UserIndex, MSG_HIT_AND_CRITICAL_ON_CREATURE, e_FontTypeNames.FONTTYPE_INFOBOLD, PonerPuntos(Damage) & " +" & PonerPuntos(critBonus))
+        End If
+        ' Golpe critico: SOLO si no apuñaló (apuñalar gana). Bandido = su variante; resto = universal.
+        If Not didStab Then
+            If PuedeGolpeCritico(UserIndex) Then
+                ' Si acertó - Doble chance contra NPCs
+                If RandomNumber(1, 100) <= GetCriticalHitChanceBase(UserIndex) Then
+                    ' Daño del golpe crítico (usamos el daño base)
+                    DamageExtra = DamageBase * 0.33
+                    DamageExtra = DamageExtra * UserMod.GetPhysicalDamageModifier(UserList(UserIndex))
+                    DamageExtra = DamageExtra * NPCs.GetPhysicDamageReduction(NpcList(NpcIndex))
+                    If .ChatCombate = 1 Then
+                        Call WriteLocaleMsg(UserIndex, MSG_HIT_AND_CRITICAL_ON_CREATURE, e_FontTypeNames.FONTTYPE_INFOBOLD, PonerPuntos(Damage) & "¬" & (DamageExtra))
+                    End If
+                    ' Color naranja
+                    Color = RGB(225, 165, 0)
+                End If
+            ElseIf modElementalCombat.UniversalCritActive() Then
+                ' Crit universal (TOGGLE32): fallback para clases sin firma de bandido. Data-tunable.
+                Dim critBonus As Long
+                Dim critCol As Long
+                critBonus = modElementalCombat.TryUniversalCrit(UserIndex, True, NpcIndex, DamageBase, critCol)
+                If critBonus > 0 Then
+                    DamageExtra = critBonus
+                    Color = critCol
+                    If .ChatCombate = 1 Then Call WriteLocaleMsg(UserIndex, MSG_HIT_AND_CRITICAL_ON_CREATURE, e_FontTypeNames.FONTTYPE_INFOBOLD, PonerPuntos(Damage) & "¬" & PonerPuntos(critBonus))
+                End If
             End If
         End If
         If DamageExtra > 0 Then
