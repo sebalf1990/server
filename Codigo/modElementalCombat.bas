@@ -21,6 +21,11 @@ Option Explicit
 Public DamageTypeReg(1 To MAX_DAMAGE_TYPE_ID) As t_DamageTypeInfo
 Public DamageTypeRegLoaded As Boolean
 
+' Crit universal (plan 20.002 Ola 2). Config data-driven desde DamageTypes.dat [INIT].
+Public Const DMG_TYPE_CRIT As Long = 15   ' clave de resistencia para crit (fisico+magico)
+Private mUniversalCritChance As Single
+Private mUniversalCritMult As Single
+
 ' ============================================================================
 ' Toggle maestro
 ' ============================================================================
@@ -66,12 +71,18 @@ Public Sub LoadDamageTypes()
     On Error GoTo ErrHandler
     Call InitDamageTypeRegistryDefaults
     DamageTypeRegLoaded = True
+    mUniversalCritChance = 5
+    mUniversalCritMult = 0.5
+    DamageTypeReg(DMG_TYPE_CRIT).nombre = "Critico"
+    DamageTypeReg(DMG_TYPE_CRIT).NumberColor = RGB(255, 165, 0)
     If Not ElementalSystemEnabled() Then Exit Sub
     Dim fname As String
     fname = DatPath & "DamageTypes.dat"
     If LenB(dir(fname)) = 0 Then Exit Sub
     Dim Leer As New clsIniManager
     Call Leer.Initialize(fname)
+    If val(Leer.GetValue("INIT", "CritChancePct")) > 0 Then mUniversalCritChance = val(Leer.GetValue("INIT", "CritChancePct"))
+    If val(Leer.GetValue("INIT", "CritMult")) > 0 Then mUniversalCritMult = val(Leer.GetValue("INIT", "CritMult"))
     Dim count As Long, i As Long, sect As String, idv As Long
     count = val(Leer.GetValue("INIT", "TypeCount"))
     For i = 1 To count
@@ -247,7 +258,7 @@ End Function
 
 ' Dispara los procs de una fuente con el trigger dado contra un target.
 ' Devuelve el dano extra (kind=dmgBonus) ya reducido por la resistencia del target.
-Private Function FireProcs(ByRef src As t_ElementalSource, ByVal trig As e_ProcTrigger, ByVal targetIsNpc As Boolean, ByVal targetIndex As Integer, ByVal logCtx As String) As Long
+Private Function FireProcs(ByRef src As t_ElementalSource, ByVal trig As e_ProcTrigger, ByVal targetIsNpc As Boolean, ByVal targetIndex As Integer, ByVal attackerIndex As Integer, ByVal attackerType As e_ReferenceType, ByVal logCtx As String) As Long
     Dim total As Long, i As Integer
     For i = 1 To src.ProcCount
         If src.Proc(i).Trigger = trig Then
@@ -271,8 +282,15 @@ Private Function FireProcs(ByRef src As t_ElementalSource, ByVal trig As e_ProcT
                         total = total + fd
                         Call ElementalLog(logCtx & " PROC dmgBonus " & DamageTypeName(c.DamageType) & " final=" & fd)
                     Case eProcApplyState
-                        ' Ola 1: aplicar el preset de efecto (EotId) sobre el motor EOT.
-                        Call ElementalLog(logCtx & " PROC applyState EotId=" & src.Proc(i).EotId & " [stub Ola0]")
+                        ' Aplica el preset de efecto (EotId) sobre el motor EOT (ej. Quemadura).
+                        If src.Proc(i).EotId > 0 Then
+                            Dim trt As e_ReferenceType
+                            If targetIsNpc Then trt = eNpc Else trt = eUser
+                            Call EffectsOverTime.CreateEffect(attackerIndex, attackerType, targetIndex, trt, src.Proc(i).EotId)
+                            Call ElementalLog(logCtx & " PROC applyState EotId=" & src.Proc(i).EotId & " aplicado")
+                        Else
+                            Call ElementalLog(logCtx & " PROC applyState sin EotId (ignorado)")
+                        End If
                 End Select
             End If
         End If
@@ -284,8 +302,9 @@ End Function
 ' Punto de entrada gateado: camino user -> NPC (unico touchpoint de la Ola 0)
 ' Devuelve el dano elemental EXTRA a sumar (ya resistido). NO toca el dano fisico.
 ' ============================================================================
-Public Function ElementalDamageUserVsNpc(ByVal UserIndex As Integer, ByVal NpcIndex As Integer, ByVal WeaponObjIndex As Integer, ByVal MunitionObjIndex As Integer) As Long
+Public Function ElementalDamageUserVsNpc(ByVal UserIndex As Integer, ByVal NpcIndex As Integer, ByVal WeaponObjIndex As Integer, ByVal MunitionObjIndex As Integer, ByRef outColor As Long) As Long
     On Error GoTo ErrHandler
+    outColor = vbWhite
     If Not ElementalSystemEnabled() Then Exit Function
     If UserIndex <= 0 Or NpcIndex <= 0 Then Exit Function
     Dim total As Long
@@ -294,23 +313,27 @@ Public Function ElementalDamageUserVsNpc(ByVal UserIndex As Integer, ByVal NpcIn
     ' Componentes + procs onHit del arma
     If WeaponObjIndex > 0 Then
         total = total + ResolveComponentsVsTarget(ObjData(WeaponObjIndex).Elemental, True, NpcIndex, ctx & " weap")
-        total = total + FireProcs(ObjData(WeaponObjIndex).Elemental, eProcOnHit, True, NpcIndex, ctx & " weap")
+        total = total + FireProcs(ObjData(WeaponObjIndex).Elemental, eProcOnHit, True, NpcIndex, UserIndex, eUser, ctx & " weap")
     End If
-    ' Municion (rango): suma sus componentes/procs
+    ' Municion (rango): suma sus componentes/procs solo si el arma es de proyectil
     If MunitionObjIndex > 0 And WeaponObjIndex > 0 Then
         If ObjData(WeaponObjIndex).Proyectil > 0 Then
             total = total + ResolveComponentsVsTarget(ObjData(MunitionObjIndex).Elemental, True, NpcIndex, ctx & " ammo")
-            total = total + FireProcs(ObjData(MunitionObjIndex).Elemental, eProcOnHit, True, NpcIndex, ctx & " ammo")
+            total = total + FireProcs(ObjData(MunitionObjIndex).Elemental, eProcOnHit, True, NpcIndex, UserIndex, eUser, ctx & " ammo")
         End If
     End If
-    ' Procs onDamaged del NPC defensor (thorns/aura). Ola 0: fire + log; el HP sink al
-    ' atacante se conecta cuando se enganche el camino user-como-target (ola siguiente).
+    ' Procs onDamaged del NPC defensor (thorns/aura): aplican efecto al atacante (user).
+    ' El dano dmgBonus de retaliacion se loguea (HP sink al user en ola posterior).
     Dim t As Integer
     t = NpcList(NpcIndex).Numero
     If t > 0 Then
         Dim retal As Long
-        retal = FireProcs(NpcInfoCache(t).Elemental, eProcOnDamaged, False, UserIndex, ctx & " thorns")
+        retal = FireProcs(NpcInfoCache(t).Elemental, eProcOnDamaged, False, UserIndex, NpcIndex, eNpc, ctx & " thorns")
         If retal > 0 Then Call ElementalLog(ctx & " thorns retaliation=" & retal & " [HP sink Ola1]")
+    End If
+    ' Color del numero elemental = color del tipo primario del arma (Ola 1: 1 tipo por arma).
+    If WeaponObjIndex > 0 Then
+        If ObjData(WeaponObjIndex).Elemental.CompCount > 0 Then outColor = DamageTypeColor(ObjData(WeaponObjIndex).Elemental.Comp(1).DamageType)
     End If
     ElementalDamageUserVsNpc = total
     Exit Function
@@ -409,3 +432,38 @@ Public Sub ParseElementalResistFromIni(ByRef Leer As clsIniManager, ByVal sect A
     Next i
     rs.Count = n
 End Sub
+
+' ============================================================================
+' Crit universal (Ola 2): fallback para clases sin firma propia (bandido/asesino).
+' Resistencia a crit via clave DMG_TYPE_CRIT (reduce chance y dano; inmune = sin crit).
+' ============================================================================
+Public Function UniversalCritActive() As Boolean
+    UniversalCritActive = ElementalSystemEnabled()
+End Function
+
+' Devuelve el dano EXTRA de crit (0 si no critea). baseDamage = dano base del golpe.
+Public Function TryUniversalCrit(ByVal UserIndex As Integer, ByVal targetIsNpc As Boolean, ByVal targetIndex As Integer, ByVal baseDamage As Long, ByRef outColor As Long) As Long
+    On Error GoTo eh
+    outColor = DamageTypeColor(DMG_TYPE_CRIT)
+    If Not ElementalSystemEnabled() Then Exit Function
+    If baseDamage <= 0 Then Exit Function
+    Dim cr As t_ElementalResist
+    cr = GetTargetResist(targetIsNpc, targetIndex, DMG_TYPE_CRIT)
+    If cr.Immune <> 0 Then Exit Function
+    Dim chance As Single
+    chance = mUniversalCritChance - cr.ReduceChancePct
+    If chance <= 0 Then Exit Function
+    If chance > 100 Then chance = 100
+    If RandomNumber(1, 100) <= chance Then
+        Dim bonus As Long
+        bonus = Int(CDbl(baseDamage) * mUniversalCritMult)
+        Dim nul As Boolean
+        bonus = ApplyElementalResist(bonus, cr, DMG_TYPE_CRIT, nul)
+        If bonus < 0 Then bonus = 0
+        TryUniversalCrit = bonus
+        Call ElementalLog("U" & UserIndex & " universal crit base=" & baseDamage & " bonus=" & bonus)
+    End If
+    Exit Function
+eh:
+    Call TraceError(Err.Number, Err.Description, "modElementalCombat.TryUniversalCrit", Erl)
+End Function

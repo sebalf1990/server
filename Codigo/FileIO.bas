@@ -611,6 +611,10 @@ Public Sub CargarHechizos()
         ' --- Sistema venenos nuevo (TOGGLE26) ---
         Hechizos(Hechizo).FamiliaVeneno = val(Leer.GetValue("Hechizo" & Hechizo, "FamiliaVeneno"))
         Hechizos(Hechizo).ChanceAplicarPct = val(Leer.GetValue("Hechizo" & Hechizo, "ChanceAplicarPct"))
+        ' --- Sistema de danos elementales (TOGGLE32) ---
+        Hechizos(Hechizo).CritChance = val(Leer.GetValue("Hechizo" & Hechizo, "CritChance"))
+        Hechizos(Hechizo).CritMultiplier = val(Leer.GetValue("Hechizo" & Hechizo, "CritMultiplier"))
+        Call modElementalCombat.ParseElementalSourceFromIni(Leer, "Hechizo" & Hechizo, Hechizos(Hechizo).Elemental)
         Hechizos(Hechizo).TickIntervaloMs = val(Leer.GetValue("Hechizo" & Hechizo, "TickIntervaloMs"))
         Hechizos(Hechizo).DuracionMs = val(Leer.GetValue("Hechizo" & Hechizo, "DuracionMs"))
         Hechizos(Hechizo).DanoModo = val(Leer.GetValue("Hechizo" & Hechizo, "DanoModo"))

@@ -1924,6 +1924,9 @@ Public Type t_Hechizo
     CuraNeuroValor As Integer
     ' --- Sistema de danos elementales (TOGGLE32 elemental_system) ---
     Elemental As t_ElementalSource
+    ' --- Crit magico por hechizo (plan 20.002 Ola 2; wiring de cast pendiente) ---
+    CritChance As Long       ' 0..100; 0 = el hechizo nunca critea
+    CritMultiplier As Single ' multiplicador del dano en crit (ej 1.5)
 End Type
 
 Public Type t_ActiveModifiers

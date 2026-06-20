@@ -449,16 +449,34 @@ Private Sub UserDamageNpc(ByVal UserIndex As Integer, ByVal NpcIndex As Integer,
             End If
             ' Sube skills en apuñalar
             Call SubirSkill(UserIndex, Apuñalar)
+        ElseIf modElementalCombat.UniversalCritActive() Then
+            ' Crit universal (TOGGLE32): fallback para clases sin firma propia. Data-tunable.
+            Dim critBonus As Long
+            Dim critCol As Long
+            critBonus = modElementalCombat.TryUniversalCrit(UserIndex, True, NpcIndex, DamageBase, critCol)
+            If critBonus > 0 Then
+                DamageExtra = critBonus
+                Color = critCol
+                If .ChatCombate = 1 Then Call WriteLocaleMsg(UserIndex, MSG_HIT_AND_CRITICAL_ON_CREATURE, e_FontTypeNames.FONTTYPE_INFOBOLD, PonerPuntos(Damage) & " +" & PonerPuntos(critBonus))
+            End If
         End If
         If DamageExtra > 0 Then
             Damage = Damage + DamageExtra
         End If
         ' Restamos el daño al NPC
-        ' --- Capa aditiva elemental (TOGGLE32 elemental_system). Core fisico INTACTO. ---
-        ' El motor ya aplico la resistencia por tipo del NPC; se suma post-fisico, pre-aplicacion.
+        ' --- Capa elemental (TOGGLE32 elemental_system). Core fisico INTACTO. ---
+        ' Death-safe: aplica el dano elemental (con su color de tipo) primero; el fisico
+        ' solo si el NPC sobrevive. El motor ya aplico la resistencia por tipo (no pasa por defensa fisica).
         Dim elemDmg As Long
-        elemDmg = modElementalCombat.ElementalDamageUserVsNpc(UserIndex, NpcIndex, .invent.EquippedWeaponObjIndex, .invent.EquippedMunitionObjIndex)
-        If elemDmg > 0 Then Damage = Damage + elemDmg
+        Dim elemColor As Long
+        Dim npcAlive As Boolean
+        npcAlive = True
+        elemDmg = modElementalCombat.ElementalDamageUserVsNpc(UserIndex, NpcIndex, .invent.EquippedWeaponObjIndex, .invent.EquippedMunitionObjIndex, elemColor)
+        If elemDmg > 0 Then
+            If NPCs.DoDamageOrHeal(NpcIndex, UserIndex, eUser, -elemDmg, e_dot, .invent.EquippedWeaponObjIndex, elemColor) = eDead Then npcAlive = False
+        End If
+        ' Restamos el dano fisico al NPC
+        If npcAlive Then
         If NPCs.DoDamageOrHeal(NpcIndex, UserIndex, eUser, -Damage, e_phisical, .invent.EquippedWeaponObjIndex, Color) = eStillAlive Then
             'efectos
             Dim ArmaObjInd, ObjInd As Integer
@@ -489,6 +507,7 @@ Private Sub UserDamageNpc(ByVal UserIndex As Integer, ByVal NpcIndex As Integer,
             If IsFeatureEnabled("new_poison_system") And ObjInd > 0 Then
                 Call TryPoisonNpcWithWeapon(UserIndex, NpcIndex, ObjInd)
             End If
+        End If
         End If
     End With
     Exit Sub
