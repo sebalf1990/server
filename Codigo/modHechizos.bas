@@ -1626,6 +1626,26 @@ Sub HechizoEstadoUsuario(ByVal UserIndex As Integer, ByRef b As Boolean)
         Call InfoHechizo(UserIndex)
         b = True
     End If
+    ' --- Encantar Arma elemental (TOGGLE32 elemental_system): encanta el arma del target N ms ---
+    If modElementalCombat.ElementalSystemEnabled() And Hechizos(h).EnchantWeaponDurationMs > 0 Then
+        Dim ewWpn As Integer
+        ewWpn = UserList(targetUserIndex).invent.EquippedWeaponObjIndex
+        If ewWpn <= 0 Then
+            Call WriteConsoleMsg(UserIndex, "El objetivo no tiene arma equipada.", e_FontTypeNames.FONTTYPE_INFO)
+            b = False
+            Exit Sub
+        End If
+        With UserList(targetUserIndex).flags
+            .EnchantWeaponObjIndex = ewWpn
+            .EnchantWeaponDeadline = AddMod32(GetTickCountRaw(), Hechizos(h).EnchantWeaponDurationMs)
+            .EnchantWeaponSource = Hechizos(h).Elemental
+        End With
+        Call InfoHechizo(UserIndex)
+        Call WriteConsoleMsg(targetUserIndex, "Tu arma fue encantada (" & (Hechizos(h).EnchantWeaponDurationMs \ 1000) & "s).", e_FontTypeNames.FONTTYPE_FIGHT)
+        If targetUserIndex <> UserIndex Then Call WriteConsoleMsg(UserIndex, "Encantaste el arma de " & UserList(targetUserIndex).name & ".", e_FontTypeNames.FONTTYPE_FIGHT)
+        b = True
+        Exit Sub
+    End If
     ' --- Sistema venenos nuevo (TOGGLE26): TipoHechizoVeneno=1 unta arma/flechas del target ---
     If IsFeatureEnabled("new_poison_system") And Hechizos(h).TipoHechizoVeneno = 1 Then
         ' Target debe ser un usuario valido (self o aliado). No validamos hostilidad: aceptamos cualquier user.

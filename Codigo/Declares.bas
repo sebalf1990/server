@@ -1927,6 +1927,7 @@ Public Type t_Hechizo
     ' --- Crit magico por hechizo (plan 20.002 Ola 2; wiring de cast pendiente) ---
     CritChance As Long       ' 0..100; 0 = el hechizo nunca critea
     CritMultiplier As Single ' multiplicador del dano en crit (ej 1.5)
+    EnchantWeaponDurationMs As Long  ' >0 = el hechizo encanta el arma del target N ms (payload=Elemental)
 End Type
 
 Public Type t_ActiveModifiers
@@ -2857,6 +2858,10 @@ Public Type t_UserFlags
     PoisonedWeaponRegenManaReduccionPct As Long
     PoisonedWeaponRegenManaReduccionFija As Long
     PoisonedWeaponBloqueaRegenManaTotal As Byte
+    ' --- Encantar Arma elemental (TOGGLE32 elemental_system) ---
+    EnchantWeaponObjIndex As Integer
+    EnchantWeaponDeadline As Long
+    EnchantWeaponSource As t_ElementalSource
     ' Untado de municion (TOGGLE26): cache independiente para el stack de flechas equipado.
     PoisonedAmmoObjIndex As Integer
     PoisonedAmmoFamilia As Byte

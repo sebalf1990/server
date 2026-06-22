@@ -338,6 +338,15 @@ Public Function ElementalDamageUserVsNpc(ByVal UserIndex As Integer, ByVal NpcIn
             total = total + FireProcs(ObjData(MunitionObjIndex).Elemental, eProcOnHit, True, NpcIndex, UserIndex, eUser, ctx & " ammo")
         End If
     End If
+    ' Encantamiento temporal del arma (hechizo Encantar Arma). Aditivo al elemental base.
+    With UserList(UserIndex).flags
+        If .EnchantWeaponObjIndex > 0 And .EnchantWeaponObjIndex = WeaponObjIndex Then
+            If Not DeadlinePassed(GetTickCountRaw(), .EnchantWeaponDeadline) Then
+                total = total + ResolveComponentsVsTarget(.EnchantWeaponSource, True, NpcIndex, ctx & " ench")
+                total = total + FireProcs(.EnchantWeaponSource, eProcOnHit, True, NpcIndex, UserIndex, eUser, ctx & " ench")
+            End If
+        End If
+    End With
     ' Procs onDamaged del NPC defensor (thorns/aura): aplican efecto al atacante (user).
     ' El dano dmgBonus de retaliacion se loguea (HP sink al user en ola posterior).
     Dim t As Integer
@@ -347,9 +356,13 @@ Public Function ElementalDamageUserVsNpc(ByVal UserIndex As Integer, ByVal NpcIn
         retal = FireProcs(NpcInfoCache(t).Elemental, eProcOnDamaged, False, UserIndex, NpcIndex, eNpc, ctx & " thorns")
         If retal > 0 Then Call ElementalLog(ctx & " thorns retaliation=" & retal & " [HP sink Ola1]")
     End If
-    ' Color del numero elemental = color del tipo primario del arma (Ola 1: 1 tipo por arma).
+    ' Color del numero elemental: tipo primario del arma base; si no tiene, del encantamiento.
     If WeaponObjIndex > 0 Then
-        If ObjData(WeaponObjIndex).Elemental.CompCount > 0 Then outColor = DamageTypeColor(ObjData(WeaponObjIndex).Elemental.Comp(1).DamageType)
+        If ObjData(WeaponObjIndex).Elemental.CompCount > 0 Then
+            outColor = DamageTypeColor(ObjData(WeaponObjIndex).Elemental.Comp(1).DamageType)
+        ElseIf UserList(UserIndex).flags.EnchantWeaponObjIndex = WeaponObjIndex And UserList(UserIndex).flags.EnchantWeaponSource.CompCount > 0 Then
+            outColor = DamageTypeColor(UserList(UserIndex).flags.EnchantWeaponSource.Comp(1).DamageType)
+        End If
     End If
     ElementalDamageUserVsNpc = total
     Exit Function
