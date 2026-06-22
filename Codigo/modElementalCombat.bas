@@ -26,6 +26,10 @@ Public Const DMG_TYPE_CRIT As Long = 15   ' clave de resistencia para crit (fisi
 Private mUniversalCritChance As Single
 Private mUniversalCritMult As Single
 
+' Control / cap de slow (plan 20.002 Ola 3). Cacheado al boot (hot path de velocidad).
+Public ElementalSlowCapActive As Boolean
+Private mElementalSlowFloor As Single
+
 ' ============================================================================
 ' Toggle maestro
 ' ============================================================================
@@ -75,6 +79,8 @@ Public Sub LoadDamageTypes()
     mUniversalCritMult = 0.5
     DamageTypeReg(DMG_TYPE_CRIT).nombre = "Critico"
     DamageTypeReg(DMG_TYPE_CRIT).NumberColor = RGB(255, 165, 0)
+    ElementalSlowCapActive = ElementalSystemEnabled()
+    mElementalSlowFloor = 0.45
     If Not ElementalSystemEnabled() Then Exit Sub
     Dim fname As String
     fname = DatPath & "DamageTypes.dat"
@@ -83,6 +89,7 @@ Public Sub LoadDamageTypes()
     Call Leer.Initialize(fname)
     If val(Leer.GetValue("INIT", "CritChancePct")) > 0 Then mUniversalCritChance = val(Leer.GetValue("INIT", "CritChancePct"))
     If val(Leer.GetValue("INIT", "CritMult")) > 0 Then mUniversalCritMult = val(Leer.GetValue("INIT", "CritMult"))
+    If val(Leer.GetValue("INIT", "SlowFloorPct")) > 0 Then mElementalSlowFloor = val(Leer.GetValue("INIT", "SlowFloorPct"))
     Dim count As Long, i As Long, sect As String, idv As Long
     count = val(Leer.GetValue("INIT", "TypeCount"))
     For i = 1 To count
@@ -294,6 +301,7 @@ Private Function FireProcs(ByRef src As t_ElementalSource, ByVal trig As e_ProcT
                                 Dim trt As e_ReferenceType
                                 If targetIsNpc Then trt = eNpc Else trt = eUser
                                 Call EffectsOverTime.CreateEffect(attackerIndex, attackerType, targetIndex, trt, src.Proc(i).EotId)
+                                If attackerType = eUser And LenB(EffectOverTime(src.Proc(i).EotId).ApplyMsg) > 0 Then Call WriteConsoleMsg(attackerIndex, EffectOverTime(src.Proc(i).EotId).ApplyMsg, e_FontTypeNames.FONTTYPE_FIGHT)
                                 Call ElementalLog(logCtx & " PROC applyState EotId=" & src.Proc(i).EotId & " aplicado")
                             End If
                         Else
@@ -474,4 +482,22 @@ Public Function TryUniversalCrit(ByVal UserIndex As Integer, ByVal targetIsNpc A
     Exit Function
 eh:
     Call TraceError(Err.Number, Err.Description, "modElementalCombat.TryUniversalCrit", Erl)
+End Function
+
+' ============================================================================
+' Cap de control (Ola 3): nunca congelar por slow. Devuelve el multiplicador de
+' velocidad (1+mod) con el slow capeado. Toggle OFF = vanilla (floor 0 = max(0,...)).
+' El freeze duro sigue siendo por flag Paralizado/Inmovilizado, aparte de esto.
+' ============================================================================
+Public Function CappedSpeedMult(ByVal moveSpeedMod As Single) As Single
+    Dim mult As Single
+    mult = 1 + moveSpeedMod
+    Dim floorVal As Single
+    If ElementalSlowCapActive Then
+        floorVal = mElementalSlowFloor
+    Else
+        floorVal = 0
+    End If
+    If mult < floorVal Then mult = floorVal
+    CappedSpeedMult = mult
 End Function

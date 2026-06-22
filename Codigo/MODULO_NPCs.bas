@@ -943,13 +943,13 @@ Function UpdateNpcSpeed(ByVal NpcIndex As Integer)
         Else
             .Char.speeding = 210 / .IntervaloMovimiento
         End If
-        .Char.speeding = .Char.speeding * max(0, (1 + .Modifiers.MovementSpeed))
+        .Char.speeding = .Char.speeding * modElementalCombat.CappedSpeedMult(.Modifiers.MovementSpeed)
         Call SendData(SendTarget.ToNPCArea, NpcIndex, PrepareMessageSpeedingACT(.Char.charindex, .Char.speeding))
     End With
 End Function
 
 Function GetNpcSpeedModifiers(ByVal NpcIndex As Integer) As Single
-    GetNpcSpeedModifiers = max(0, (1 + NpcList(NpcIndex).Modifiers.MovementSpeed))
+    GetNpcSpeedModifiers = modElementalCombat.CappedSpeedMult(NpcList(NpcIndex).Modifiers.MovementSpeed)
 End Function
 
 Function GetNpcName(ByVal NpcNumber As Integer) As String

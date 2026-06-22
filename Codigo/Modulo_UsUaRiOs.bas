@@ -2687,7 +2687,7 @@ Public Function ActualizarVelocidadDeUsuario(ByVal UserIndex As Integer) As Sing
                 modificadorItem = modificadorItem * ObjData(.invent.EquippedArmorObjIndex).velocidad
             End If
         End If
-        velocidad = VelocidadNormal * modificadorItem * JineteLevelSpeed * modificadorHechizo * max(0, (1 + .Modifiers.MovementSpeed))
+        velocidad = VelocidadNormal * modificadorItem * JineteLevelSpeed * modificadorHechizo * modElementalCombat.CappedSpeedMult(.Modifiers.MovementSpeed)
 UpdateSpeed:
         .Char.speeding = velocidad
         If .flags.UserLogged Then

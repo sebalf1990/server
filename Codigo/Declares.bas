@@ -1999,6 +1999,7 @@ Public Type t_EffectOverTime
     SecondaryTargetModifier As Single
     RequireTransform As Integer
     DamageColor As Long          ' color del numero de dano por tick (0 = rojo default)
+    ApplyMsg As String           ' mensaje al atacante cuando el efecto se aplica (vacio = sin mensaje)
 End Type
 
 Public Enum e_DamageResult
