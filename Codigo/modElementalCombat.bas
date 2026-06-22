@@ -341,7 +341,7 @@ Public Function ElementalDamageUserVsNpc(ByVal UserIndex As Integer, ByVal NpcIn
     ' Encantamiento temporal del arma (hechizo Encantar Arma). Aditivo al elemental base.
     With UserList(UserIndex).flags
         If .EnchantWeaponObjIndex > 0 And .EnchantWeaponObjIndex = WeaponObjIndex Then
-            If Not DeadlinePassed(GetTickCountRaw(), .EnchantWeaponDeadline) Then
+            If .EnchantWeaponPermanent = 1 Or Not DeadlinePassed(GetTickCountRaw(), .EnchantWeaponDeadline) Then
                 total = total + ResolveComponentsVsTarget(.EnchantWeaponSource, True, NpcIndex, ctx & " ench")
                 total = total + FireProcs(.EnchantWeaponSource, eProcOnHit, True, NpcIndex, UserIndex, eUser, ctx & " ench")
             End If

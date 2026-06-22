@@ -2588,6 +2588,7 @@ Public Type t_ObjData
     ' --- Sistema de danos elementales (TOGGLE32 elemental_system) ---
     Elemental As t_ElementalSource
     ElementalResist As t_ElementalResistSet
+    EnchantWeaponDurationMs As Long  ' >0 = al usar el item encanta el arma N ms; <0 = permanente (demo)
 End Type
 
 '[Pablo ToxicWaste]
@@ -2861,6 +2862,7 @@ Public Type t_UserFlags
     ' --- Encantar Arma elemental (TOGGLE32 elemental_system) ---
     EnchantWeaponObjIndex As Integer
     EnchantWeaponDeadline As Long
+    EnchantWeaponPermanent As Byte
     EnchantWeaponSource As t_ElementalSource
     ' Untado de municion (TOGGLE26): cache independiente para el stack de flechas equipado.
     PoisonedAmmoObjIndex As Integer

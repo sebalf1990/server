@@ -1639,6 +1639,7 @@ Sub HechizoEstadoUsuario(ByVal UserIndex As Integer, ByRef b As Boolean)
             .EnchantWeaponObjIndex = ewWpn
             .EnchantWeaponDeadline = AddMod32(GetTickCountRaw(), Hechizos(h).EnchantWeaponDurationMs)
             .EnchantWeaponSource = Hechizos(h).Elemental
+            .EnchantWeaponPermanent = 0
         End With
         Call InfoHechizo(UserIndex)
         Call WriteConsoleMsg(targetUserIndex, "Tu arma fue encantada (" & (Hechizos(h).EnchantWeaponDurationMs \ 1000) & "s).", e_FontTypeNames.FONTTYPE_FIGHT)

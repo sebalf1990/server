@@ -1791,6 +1791,27 @@ Sub UseInvItem(ByVal UserIndex As Integer, ByVal Slot As Byte, ByVal ByClick As 
         ObjIndex = .invent.Object(Slot).ObjIndex
         .flags.TargetObjInvIndex = ObjIndex
         .flags.TargetObjInvSlot = Slot
+        ' --- Encantar Arma elemental (TOGGLE32): aceite/orbe con payload encantan el arma equipada ---
+        If modElementalCombat.ElementalSystemEnabled() And obj.EnchantWeaponDurationMs <> 0 Then
+            If .invent.EquippedWeaponObjIndex <= 0 Then
+                Call WriteConsoleMsg(UserIndex, "Necesitas un arma equipada para encantar.", e_FontTypeNames.FONTTYPE_INFO)
+                Exit Sub
+            End If
+            .flags.EnchantWeaponObjIndex = .invent.EquippedWeaponObjIndex
+            .flags.EnchantWeaponSource = obj.Elemental
+            If obj.EnchantWeaponDurationMs < 0 Then
+                .flags.EnchantWeaponPermanent = 1
+                .flags.EnchantWeaponDeadline = 0
+                Call WriteConsoleMsg(UserIndex, "Encantaste tu arma de forma permanente.", e_FontTypeNames.FONTTYPE_FIGHT)
+            Else
+                .flags.EnchantWeaponPermanent = 0
+                .flags.EnchantWeaponDeadline = AddMod32(GetTickCountRaw(), obj.EnchantWeaponDurationMs)
+                Call WriteConsoleMsg(UserIndex, "Encantaste tu arma (" & (obj.EnchantWeaponDurationMs \ 1000) & "s).", e_FontTypeNames.FONTTYPE_FIGHT)
+            End If
+            Call QuitarUserInvItem(UserIndex, Slot, 1)
+            Call UpdateUserInv(False, UserIndex, Slot)
+            Exit Sub
+        End If
 
         If obj.ProfesionId > 0 Then
             If obj.OBJType = e_OBJType.otUseOnce Then
