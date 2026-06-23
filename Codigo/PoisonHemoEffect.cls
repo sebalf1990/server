@@ -307,47 +307,15 @@ Public Sub IBaseEffectOverTime_TargetChangeTerrain()
 End Sub
 
 ' --- Logica propia ---
-Private Function CalcDmgComponent(ByVal modo As Byte, ByVal minV As Long, ByVal maxV As Long) As Long
-    Dim raw As Long
-    Dim targetMaxHp As Long
-    Select Case modo
-        Case 0 ' fijo
-            raw = minV
-        Case 1 ' rango
-            If maxV > minV Then
-                raw = RandomNumber(minV, maxV)
-            Else
-                raw = minV
-            End If
-        Case 2 ' pct_hp fijo
-            If DotInfo.TargetRef.RefType = eUser Then
-                targetMaxHp = UserList(DotInfo.TargetRef.ArrayIndex).Stats.MaxHp
-            Else
-                targetMaxHp = NpcList(DotInfo.TargetRef.ArrayIndex).Stats.MaxHp
-            End If
-            raw = (CLng(minV) * targetMaxHp) \ 100
-        Case 3 ' pct_hp rango
-            If DotInfo.TargetRef.RefType = eUser Then
-                targetMaxHp = UserList(DotInfo.TargetRef.ArrayIndex).Stats.MaxHp
-            Else
-                targetMaxHp = NpcList(DotInfo.TargetRef.ArrayIndex).Stats.MaxHp
-            End If
-            If maxV > minV Then
-                raw = (CLng(RandomNumber(minV, maxV)) * targetMaxHp) \ 100
-            Else
-                raw = (CLng(minV) * targetMaxHp) \ 100
-            End If
-    End Select
-    CalcDmgComponent = raw
-End Function
-
 Private Sub PerformTick()
     Dim TickDmg As Long
     Dim baseDmg As Long
     Dim stackDmg As Long
     Dim factor As Single
-    baseDmg = CalcDmgComponent(DanoModo, DanoMin, DanoMax)
-    stackDmg = CalcDmgComponent(DanoPorStackModo, DanoPorStackMin, DanoPorStackMax)
+    ' Roll base y por-stack via receta unica compartida (modElementalCombat).
+    ' RandomNumber(x,x)=x, asi que el helper cubre el caso min==max sin la guarda local.
+    baseDmg = modElementalCombat.RollDotTickBase(DotInfo.TargetRef.ArrayIndex, DotInfo.TargetRef.RefType, DanoModo, DanoMin, DanoMax)
+    stackDmg = modElementalCombat.RollDotTickBase(DotInfo.TargetRef.ArrayIndex, DotInfo.TargetRef.RefType, DanoPorStackModo, DanoPorStackMin, DanoPorStackMax)
     TickDmg = baseDmg + (stackDmg * StacksActuales)
     factor = 1
     If IsValidRef(Source) And Source.RefType = eUser And DotInfo.TargetRef.RefType = eUser Then
