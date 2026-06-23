@@ -214,29 +214,11 @@ End Sub
 ' --- Logica propia ---
 Private Sub PerformTick()
     Dim TickDmg As Long
-    Dim targetMaxHp As Long
     Dim factor As Single
     factor = 1
-    Select Case DanoModo
-        Case 0 ' fijo
-            TickDmg = DanoMin
-        Case 1 ' rango
-            TickDmg = RandomNumber(DanoMin, DanoMax)
-        Case 2 ' pct_hp fijo
-            If DotInfo.TargetRef.RefType = eUser Then
-                targetMaxHp = UserList(DotInfo.TargetRef.ArrayIndex).Stats.MaxHp
-            Else
-                targetMaxHp = NpcList(DotInfo.TargetRef.ArrayIndex).Stats.MaxHp
-            End If
-            TickDmg = (CLng(DanoMin) * targetMaxHp) \ 100
-        Case 3 ' pct_hp rango
-            If DotInfo.TargetRef.RefType = eUser Then
-                targetMaxHp = UserList(DotInfo.TargetRef.ArrayIndex).Stats.MaxHp
-            Else
-                targetMaxHp = NpcList(DotInfo.TargetRef.ArrayIndex).Stats.MaxHp
-            End If
-            TickDmg = (CLng(RandomNumber(DanoMin, DanoMax)) * targetMaxHp) \ 100
-    End Select
+    ' Roll base del tick via receta unica compartida (modElementalCombat).
+    ' El veneno trabaja con dano positivo; se niega mas abajo al aplicar.
+    TickDmg = modElementalCombat.RollDotTickBase(DotInfo.TargetRef.ArrayIndex, DotInfo.TargetRef.RefType, DanoModo, DanoMin, DanoMax)
     ' Factor PvP/PvE
     If IsValidRef(Source) And Source.RefType = eUser And DotInfo.TargetRef.RefType = eUser Then
         factor = FactorPvP

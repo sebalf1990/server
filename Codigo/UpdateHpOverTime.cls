@@ -285,17 +285,14 @@ End Sub
 
 Public Sub PerformAction()
     Dim rawTick As Long
-    rawTick = RandomNumber(DotHpMin, DotHpMax)
-    If DotDanoModo >= 2 Then
-        ' %HP del target: TickPower interpretado como porcentaje del MaxHp
-        Dim maxHpT As Long
-        If DotInfo.TargetRef.RefType = e_ReferenceType.eUser Then
-            maxHpT = UserList(DotInfo.TargetRef.ArrayIndex).Stats.MaxHp
-        ElseIf DotInfo.TargetRef.RefType = e_ReferenceType.eNpc Then
-            maxHpT = NpcList(DotInfo.TargetRef.ArrayIndex).Stats.MaxHp
-        End If
-        rawTick = Int(CDbl(maxHpT) * rawTick / 100)
-    End If
+    ' Roll base via receta unica compartida con el veneno (modElementalCombat).
+    ' Compatibilidad: el modo 0 historico del DoT generico = rango random (modo 1),
+    ' asi todos los presets eHealthModifier actuales (DanoModo ausente=0) siguen
+    ' randomizando igual que antes. Los valores negativos del preset se preservan.
+    Dim modoEff As Byte
+    modoEff = DotDanoModo
+    If modoEff = 0 Then modoEff = 1
+    rawTick = modElementalCombat.RollDotTickBase(DotInfo.TargetRef.ArrayIndex, DotInfo.TargetRef.RefType, modoEff, CLng(DotHpMin), CLng(DotHpMax))
     If DotStacksMax > 1 Then
         Dim perStack As Long
         If DotPerStackMax <> 0 And DotPerStackMax <> DotPerStackMin Then

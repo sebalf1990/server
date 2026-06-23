@@ -150,6 +150,42 @@ Public Function RollDamageComponent(ByRef c As t_DamageComponent) As Long
 End Function
 
 ' ============================================================================
+' Receta unica del roll de un tick de DoT enriquecido (compartida por el veneno
+' y por los DoT genericos de UpdateHpOverTime). Centraliza la cuenta del dano base.
+' modo: 0=fijo (Min) | 1=rango (Random Min..Max) | 2=%HP fijo | 3=%HP rango.
+' Preserva el signo de los inputs: el veneno pasa valores positivos y niega al
+' aplicar; los DoT genericos pasan valores negativos y aplican directo. NO aplica
+' factores PvP/PvE, EffectBonus, stacks ni reducciones: eso queda en cada motor.
+' ============================================================================
+Public Function RollDotTickBase(ByVal TargetIndex As Integer, _
+                                ByVal TargetType As e_ReferenceType, _
+                                ByVal DanoModo As Byte, _
+                                ByVal DanoMin As Long, _
+                                ByVal DanoMax As Long) As Long
+    Dim maxHpT As Long
+    Select Case DanoModo
+        Case 0 ' fijo
+            RollDotTickBase = DanoMin
+        Case 1 ' rango
+            RollDotTickBase = RandomNumber(DanoMin, DanoMax)
+        Case 2 ' pct_hp fijo
+            maxHpT = GetDotTargetMaxHp(TargetIndex, TargetType)
+            RollDotTickBase = (CLng(DanoMin) * maxHpT) \ 100
+        Case 3 ' pct_hp rango
+            maxHpT = GetDotTargetMaxHp(TargetIndex, TargetType)
+            RollDotTickBase = (CLng(RandomNumber(DanoMin, DanoMax)) * maxHpT) \ 100
+    End Select
+End Function
+
+Private Function GetDotTargetMaxHp(ByVal TargetIndex As Integer, ByVal TargetType As e_ReferenceType) As Long
+    If TargetType = e_ReferenceType.eUser Then
+        GetDotTargetMaxHp = UserList(TargetIndex).Stats.MaxHp
+    ElseIf TargetType = e_ReferenceType.eNpc Then
+        GetDotTargetMaxHp = NpcList(TargetIndex).Stats.MaxHp
+    End If
+End Function
+
+' ============================================================================
 ' Resistencia: agregacion por entidad + aplicacion con cap
 ' ============================================================================
 Private Sub AddResistEntry(ByRef acc As t_ElementalResist, ByRef e As t_ElementalResist)
