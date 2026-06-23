@@ -54,20 +54,18 @@ End Sub
 ' Devuelve la resistencia total de un usuario para la familia dada.
 ' Suma aditiva de los 7 slots equipables relevantes.
 Public Function GetUserPoisonResist(ByVal UserIndex As Integer, ByVal familia As Byte) As t_PoisonResist
+    ' Adapter (Step 4 dimension EFECTO): la resist al efecto del veneno sale del motor elemental (tipo
+    ' Veneno). Los call-sites solo usan Inmune + ChancePct (la resist al DAÑO/tick ya migro). familia se
+    ' ignora: las 3 familias comparten el tipo Veneno. Ver Engram resist-model.
     Dim r As t_PoisonResist
     If UserIndex <= 0 Then
         GetUserPoisonResist = r
         Exit Function
     End If
-    With UserList(UserIndex).invent
-        Call AddItemResist(r, .EquippedArmorObjIndex, familia)
-        Call AddItemResist(r, .EquippedHelmetObjIndex, familia)
-        Call AddItemResist(r, .EquippedShieldObjIndex, familia)
-        Call AddItemResist(r, .EquippedRingAccesoryObjIndex, familia)
-        Call AddItemResist(r, .EquippedAmuletAccesoryObjIndex, familia)
-        Call AddItemResist(r, .EquippedBackpackObjIndex, familia)
-        Call AddItemResist(r, .EquippedSaddleObjIndex, familia)
-    End With
+    Dim rE As t_ElementalResist
+    rE = modElementalCombat.GetUserElementalResist(UserIndex, e_ElementalDamageType.eDmgPoison)
+    If rE.Immune <> 0 Or rE.ImmuneEffect <> 0 Then r.Inmune = 1
+    r.ChancePct = rE.ReduceEffectChancePct
     GetUserPoisonResist = r
 End Function
 
@@ -116,52 +114,15 @@ End Function
 '   - DanoMinPct = DanoMaxPct = ResistDano*Pct (mismo).
 '   - Inmune: bloqueo total al aplicar.
 Public Function GetNpcPoisonResist(ByVal NpcIndex As Integer, ByVal familia As Byte) As t_PoisonResist
+    ' Adapter (Step 4 dimension EFECTO): resist al efecto del veneno desde el motor elemental (tipo Veneno).
     Dim r As t_PoisonResist
     If NpcIndex <= 0 Then
         GetNpcPoisonResist = r
         Exit Function
     End If
-    Dim npcType As Integer
-    npcType = NpcList(NpcIndex).Numero
-    If npcType <= 0 Then
-        GetNpcPoisonResist = r
-        Exit Function
-    End If
-    With NpcInfoCache(npcType)
-        ' 1) Resistencia especifica por familia
-        Select Case familia
-            Case 1
-                r.ChancePct = .ResistChanceVenenoMenorPct
-                r.DanoMinFlat = .ResistDanoVenenoMenorFlat
-                r.DanoMaxFlat = .ResistDanoVenenoMenorFlat
-                r.DanoMinPct = .ResistDanoVenenoMenorPct
-                r.DanoMaxPct = .ResistDanoVenenoMenorPct
-                If .InmunidadVenenoMenor <> 0 Then r.Inmune = 1
-            Case 2
-                r.ChancePct = .ResistChanceHemoPct
-                r.DanoMinFlat = .ResistDanoHemoFlat
-                r.DanoMaxFlat = .ResistDanoHemoFlat
-                r.DanoMinPct = .ResistDanoHemoPct
-                r.DanoMaxPct = .ResistDanoHemoPct
-                If .InmunidadHemo <> 0 Then r.Inmune = 1
-            Case 3
-                r.ChancePct = .ResistChanceNeuroPct
-                r.DanoMinFlat = .ResistDanoNeuroFlat
-                r.DanoMaxFlat = .ResistDanoNeuroFlat
-                r.DanoMinPct = .ResistDanoNeuroPct
-                r.DanoMaxPct = .ResistDanoNeuroPct
-                If .InmunidadNeuro <> 0 Then r.Inmune = 1
-        End Select
-        ' 2) Resistencia generica (afecta cualquier familia, se SUMA a la especifica)
-        '    - Inmunidad: gana si la especifica o la generica esta activa.
-        '    - Chance: se suma (capeo natural via chFin <= 0 en el caller).
-        '    - Dano flat/pct: se suman a los rangos especificos (ApplyDamageResist los aplica en cascada).
-        If .InmunidadVenenoGenerica <> 0 Then r.Inmune = 1
-        r.ChancePct = r.ChancePct + .ResistChanceVenenoGenericoPct
-        r.DanoMinFlat = r.DanoMinFlat + .ResistDanoVenenoGenericoFlat
-        r.DanoMaxFlat = r.DanoMaxFlat + .ResistDanoVenenoGenericoFlat
-        r.DanoMinPct = r.DanoMinPct + .ResistDanoVenenoGenericoPct
-        r.DanoMaxPct = r.DanoMaxPct + .ResistDanoVenenoGenericoPct
-    End With
+    Dim rE As t_ElementalResist
+    rE = modElementalCombat.GetNpcElementalResist(NpcIndex, e_ElementalDamageType.eDmgPoison)
+    If rE.Immune <> 0 Or rE.ImmuneEffect <> 0 Then r.Inmune = 1
+    r.ChancePct = rE.ReduceEffectChancePct
     GetNpcPoisonResist = r
 End Function
