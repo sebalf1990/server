@@ -300,9 +300,20 @@ Private Function FireProcs(ByRef src As t_ElementalSource, ByVal trig As e_ProcT
                             Else
                                 Dim trt As e_ReferenceType
                                 If targetIsNpc Then trt = eNpc Else trt = eUser
-                                Call EffectsOverTime.CreateEffect(attackerIndex, attackerType, targetIndex, trt, src.Proc(i).EotId)
+                                ' Limit-aware: si ya existe (segun Limit), Reset (refresca/suma stack); si no, crear.
+                                Dim existEff As IBaseEffectOverTime
+                                If targetIsNpc Then
+                                    Set existEff = EffectsOverTime.FindEffectOnTarget(attackerIndex, NpcList(targetIndex).EffectOverTime, src.Proc(i).EotId)
+                                Else
+                                    Set existEff = EffectsOverTime.FindEffectOnTarget(attackerIndex, UserList(targetIndex).EffectOverTime, src.Proc(i).EotId)
+                                End If
+                                If existEff Is Nothing Then
+                                    Call EffectsOverTime.CreateEffect(attackerIndex, attackerType, targetIndex, trt, src.Proc(i).EotId)
+                                Else
+                                    Call existEff.Reset(attackerIndex, attackerType, src.Proc(i).EotId)
+                                End If
                                 If attackerType = eUser And LenB(EffectOverTime(src.Proc(i).EotId).ApplyMsg) > 0 Then Call WriteConsoleMsg(attackerIndex, EffectOverTime(src.Proc(i).EotId).ApplyMsg, e_FontTypeNames.FONTTYPE_FIGHT)
-                                Call ElementalLog(logCtx & " PROC applyState EotId=" & src.Proc(i).EotId & " aplicado")
+                                Call ElementalLog(logCtx & " PROC applyState EotId=" & src.Proc(i).EotId & IIf(existEff Is Nothing, " aplicado", " refrescado"))
                             End If
                         Else
                             Call ElementalLog(logCtx & " PROC applyState sin EotId (ignorado)")

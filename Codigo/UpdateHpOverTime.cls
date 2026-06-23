@@ -53,6 +53,14 @@ Dim TickDmgColor         As Long
 Dim DotDanoModo          As Byte
 Dim DotFactorPvP         As Single
 Dim DotFactorPvE         As Single
+Dim StacksActuales       As Integer
+Dim GolpesAcum           As Integer
+Dim TimeSinceLastDecay   As Long
+Dim DotStacksMax         As Integer
+Dim DotPerStackMin       As Long
+Dim DotPerStackMax       As Long
+Dim DotGolpesQueSuman    As Integer
+Dim DotDecayMs           As Long
 Private DotInfo          As t_BaseDotInfo
 Private Source           As t_AnyReference
 
@@ -64,6 +72,9 @@ Public Sub Setup(ByVal SourceIndex As Integer, _
                  ByVal Id As Long)
     TimeSinceLastTick = 0
     TickCount = 0
+    StacksActuales = 1
+    GolpesAcum = 0
+    TimeSinceLastDecay = 0
     Call SetBaseDot(DotInfo, TargetIndex, TargetType, Id, EffectId)
     Call SetRef(Source, SourceIndex, SourceType)
     With EffectOverTime(EffectId)
@@ -76,6 +87,12 @@ Public Sub Setup(ByVal SourceIndex As Integer, _
         DotDanoModo = .DanoModo
         If .FactorPvP > 0 Then DotFactorPvP = .FactorPvP Else DotFactorPvP = 1
         If .FactorPvE > 0 Then DotFactorPvE = .FactorPvE Else DotFactorPvE = 1
+        DotPerStackMin = .DanoPorStackMin
+        DotPerStackMax = .DanoPorStackMax
+        DotStacksMax = .StacksMax
+        DotGolpesQueSuman = .GolpesQueSumanStacks
+        If DotGolpesQueSuman <= 0 Then DotGolpesQueSuman = 1
+        DotDecayMs = .IntervaloDecayStackMs
         Modifiers = .EffectModifiers
         SecondTargetModifier = 1 - .SecondaryTargetModifier
         If DotInfo.TargetRef.RefType = eUser And EffectOverTime(DotInfo.EotId).ClientEffectTypeId > 0 Then Call WriteSendSkillCdUpdate(TargetIndex, .ClientEffectTypeId, Id, _
@@ -156,6 +173,17 @@ Public Property Get IBaseEffectOverTime_EffectType() As e_EffectType
 End Property
 
 Public Sub IBaseEffectOverTime_Update(ByVal DeltaTime As Long)
+    If DotStacksMax > 1 And DotDecayMs > 0 Then
+        TimeSinceLastDecay = TimeSinceLastDecay + DeltaTime
+        If TimeSinceLastDecay >= DotDecayMs Then
+            TimeSinceLastDecay = 0
+            StacksActuales = StacksActuales - 1
+            If StacksActuales <= 0 Then
+                DotInfo.RemoveEffect = True
+                Exit Sub
+            End If
+        End If
+    End If
     If TickCount >= TargetTicks Or Not IsValidRef(DotInfo.TargetRef) Then
         DotInfo.RemoveEffect = True
         Exit Sub
@@ -179,6 +207,14 @@ End Property
 Public Function IBaseEffectOverTime_Reset(ByVal SourceUserId As Integer, ByVal SourceType As e_ReferenceType, ByVal NewEffectId As Integer) As Boolean
     IBaseEffectOverTime_Reset = True
     TickCount = 0
+    If DotStacksMax > 1 Then
+        GolpesAcum = GolpesAcum + 1
+        If GolpesAcum >= DotGolpesQueSuman Then
+            GolpesAcum = 0
+            If StacksActuales < DotStacksMax Then StacksActuales = StacksActuales + 1
+        End If
+        TimeSinceLastDecay = 0
+    End If
     If DotInfo.TargetRef.RefType = eUser And EffectOverTime(DotInfo.EotId).ClientEffectTypeId > 0 Then
         Call WriteSendSkillCdUpdate(DotInfo.TargetRef.ArrayIndex, EffectOverTime(DotInfo.EotId).ClientEffectTypeId, DotInfo.UniqueId, (TickTime * TargetTicks) - _
                 TimeSinceLastTick, TickTime * TargetTicks, EffectOverTime(DotInfo.EotId).buffType)
@@ -259,6 +295,15 @@ Public Sub PerformAction()
             maxHpT = NpcList(DotInfo.TargetRef.ArrayIndex).Stats.MaxHp
         End If
         rawTick = Int(CDbl(maxHpT) * rawTick / 100)
+    End If
+    If DotStacksMax > 1 Then
+        Dim perStack As Long
+        If DotPerStackMax <> 0 And DotPerStackMax <> DotPerStackMin Then
+            perStack = RandomNumber(DotPerStackMin, DotPerStackMax)
+        Else
+            perStack = DotPerStackMin
+        End If
+        rawTick = rawTick + StacksActuales * perStack
     End If
     Dim TickHP As Long
     TickHP = rawTick * EffectBonus

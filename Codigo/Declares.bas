@@ -2004,6 +2004,11 @@ Public Type t_EffectOverTime
     DanoModo As Byte             ' 0=fijo/rango (TickPower), 2=%HP del target (TickPower como %)
     FactorPvP As Single          ' multiplicador del tick vs jugador (0 = 1)
     FactorPvE As Single          ' multiplicador del tick vs NPC (0 = 1)
+    DanoPorStackMin As Long      ' dano extra por stack (negativo); 0 = sin stacks
+    DanoPorStackMax As Long
+    StacksMax As Integer         ' >1 habilita stacks; <=1 = DoT comun
+    GolpesQueSumanStacks As Integer
+    IntervaloDecayStackMs As Long ' ms sin pegar para perder 1 stack (0 = sin decay)
 End Type
 
 Public Enum e_DamageResult
