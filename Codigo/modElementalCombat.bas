@@ -347,6 +347,13 @@ Public Function ElementalDamageUserVsNpc(ByVal UserIndex As Integer, ByVal NpcIn
             End If
         End If
     End With
+    ' Orbe/amuleto equipado: su efecto elemental aplica mientras este equipado (el motor alcanza el orbe).
+    Dim orbIdx As Integer
+    orbIdx = UserList(UserIndex).invent.EquippedAmuletAccesoryObjIndex
+    If orbIdx > 0 Then
+        total = total + ResolveComponentsVsTarget(ObjData(orbIdx).Elemental, True, NpcIndex, ctx & " orb")
+        total = total + FireProcs(ObjData(orbIdx).Elemental, eProcOnHit, True, NpcIndex, UserIndex, eUser, ctx & " orb")
+    End If
     ' Procs onDamaged del NPC defensor (thorns/aura): aplican efecto al atacante (user).
     ' El dano dmgBonus de retaliacion se loguea (HP sink al user en ola posterior).
     Dim t As Integer
@@ -363,6 +370,9 @@ Public Function ElementalDamageUserVsNpc(ByVal UserIndex As Integer, ByVal NpcIn
         ElseIf UserList(UserIndex).flags.EnchantWeaponObjIndex = WeaponObjIndex And UserList(UserIndex).flags.EnchantWeaponSource.CompCount > 0 Then
             outColor = DamageTypeColor(UserList(UserIndex).flags.EnchantWeaponSource.Comp(1).DamageType)
         End If
+    End If
+    If outColor = vbWhite And orbIdx > 0 Then
+        If ObjData(orbIdx).Elemental.CompCount > 0 Then outColor = DamageTypeColor(ObjData(orbIdx).Elemental.Comp(1).DamageType)
     End If
     ElementalDamageUserVsNpc = total
     Exit Function
