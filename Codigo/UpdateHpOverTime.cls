@@ -50,6 +50,9 @@ Dim Modifiers            As Integer
 Dim EffectBonus          As Single
 Dim SecondTargetModifier As Single
 Dim TickDmgColor         As Long
+Dim DotDanoModo          As Byte
+Dim DotFactorPvP         As Single
+Dim DotFactorPvE         As Single
 Private DotInfo          As t_BaseDotInfo
 Private Source           As t_AnyReference
 
@@ -70,6 +73,9 @@ Public Sub Setup(ByVal SourceIndex As Integer, _
         TickTime = .TickTime
         TickEffect = .TickFX
         If .DamageColor <> 0 Then TickDmgColor = .DamageColor Else TickDmgColor = vbRed
+        DotDanoModo = .DanoModo
+        If .FactorPvP > 0 Then DotFactorPvP = .FactorPvP Else DotFactorPvP = 1
+        If .FactorPvE > 0 Then DotFactorPvE = .FactorPvE Else DotFactorPvE = 1
         Modifiers = .EffectModifiers
         SecondTargetModifier = 1 - .SecondaryTargetModifier
         If DotInfo.TargetRef.RefType = eUser And EffectOverTime(DotInfo.EotId).ClientEffectTypeId > 0 Then Call WriteSendSkillCdUpdate(TargetIndex, .ClientEffectTypeId, Id, _
@@ -242,8 +248,26 @@ Public Sub IBaseEffectOverTime_TargetChangeTerrain()
 End Sub
 
 Public Sub PerformAction()
-    Dim TickHP As Integer
-    TickHP = RandomNumber(DotHpMin, DotHpMax) * EffectBonus
+    Dim rawTick As Long
+    rawTick = RandomNumber(DotHpMin, DotHpMax)
+    If DotDanoModo >= 2 Then
+        ' %HP del target: TickPower interpretado como porcentaje del MaxHp
+        Dim maxHpT As Long
+        If DotInfo.TargetRef.RefType = e_ReferenceType.eUser Then
+            maxHpT = UserList(DotInfo.TargetRef.ArrayIndex).Stats.MaxHp
+        ElseIf DotInfo.TargetRef.RefType = e_ReferenceType.eNpc Then
+            maxHpT = NpcList(DotInfo.TargetRef.ArrayIndex).Stats.MaxHp
+        End If
+        rawTick = Int(CDbl(maxHpT) * rawTick / 100)
+    End If
+    Dim TickHP As Long
+    TickHP = rawTick * EffectBonus
+    ' Factor PvP/PvE por tipo de target
+    If DotInfo.TargetRef.RefType = e_ReferenceType.eUser Then
+        TickHP = TickHP * DotFactorPvP
+    ElseIf DotInfo.TargetRef.RefType = e_ReferenceType.eNpc Then
+        TickHP = TickHP * DotFactorPvE
+    End If
     If DotInfo.TargetRef.RefType = e_ReferenceType.eUser Then
         If IsSet(Modifiers, e_ModifierTypes.MagicReduction) Then
             TickHP = TickHP * UserMod.GetMagicDamageReduction(UserList(DotInfo.TargetRef.ArrayIndex))
