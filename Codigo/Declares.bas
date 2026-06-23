@@ -1769,9 +1769,16 @@ Public Type t_ElementalResist
     DamageType As e_ElementalDamageType
     ' --- resist-a-dano (reduce el numero del componente) ---
     ReduceChancePct As Long     ' 0..100: chance de anular el componente entero
-    ReduceFlat As Long          ' resta plana
-    ReducePct As Single         ' 0..1: reduccion porcentual
-    Immune As Byte              ' 1 = inmunidad absoluta a este tipo
+    ReduceFlat As Long          ' resta plana (fijo legacy)
+    ReducePct As Single         ' 0..1: reduccion porcentual (fijo legacy)
+    Immune As Byte              ' 1 = inmunidad a daño Y efecto (legacy: ambos)
+    ImmuneDamage As Byte        ' 1 = inmune solo al daño (el efecto puede aplicarse)
+    ImmuneEffect As Byte        ' 1 = inmune solo al efecto (el daño entra)
+    ' --- rango aleatorio (Step 4: preservar el veneno). Activos solo si *Max > 0 ---
+    ReduceFlatMin As Long       ' min del rango de resta plana
+    ReduceFlatMax As Long       ' max del rango (>0 activa el rango; si 0 usa ReduceFlat fijo)
+    ReducePctMin As Long        ' min del rango de pct (entero 0..100)
+    ReducePctMax As Long        ' max del rango pct (>0 activa el rango; si 0 usa ReducePct fijo)
     ' --- resist-a-efecto (reduce el estado aplicado) -- Ola 1 ---
     ReduceEffectMagnitudePct As Single
     ReduceEffectDurationPct As Single

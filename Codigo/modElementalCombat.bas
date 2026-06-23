@@ -192,7 +192,13 @@ Private Sub AddResistEntry(ByRef acc As t_ElementalResist, ByRef e As t_Elementa
     acc.ReduceChancePct = acc.ReduceChancePct + e.ReduceChancePct
     acc.ReduceFlat = acc.ReduceFlat + e.ReduceFlat
     acc.ReducePct = acc.ReducePct + e.ReducePct
+    acc.ReduceFlatMin = acc.ReduceFlatMin + e.ReduceFlatMin
+    acc.ReduceFlatMax = acc.ReduceFlatMax + e.ReduceFlatMax
+    acc.ReducePctMin = acc.ReducePctMin + e.ReducePctMin
+    acc.ReducePctMax = acc.ReducePctMax + e.ReducePctMax
     If e.Immune <> 0 Then acc.Immune = 1
+    If e.ImmuneDamage <> 0 Then acc.ImmuneDamage = 1
+    If e.ImmuneEffect <> 0 Then acc.ImmuneEffect = 1
     acc.ReduceEffectMagnitudePct = acc.ReduceEffectMagnitudePct + e.ReduceEffectMagnitudePct
     acc.ReduceEffectDurationPct = acc.ReduceEffectDurationPct + e.ReduceEffectDurationPct
     acc.ReduceEffectChancePct = acc.ReduceEffectChancePct + e.ReduceEffectChancePct
@@ -207,18 +213,23 @@ Private Sub AddSetResist(ByRef acc As t_ElementalResist, ByRef rs As t_Elemental
     Next k
 End Sub
 
+Private Sub AddSlotElementalResist(ByRef acc As t_ElementalResist, ByVal ObjIndex As Integer, ByVal dmgType As e_ElementalDamageType)
+    ' Robustez: un slot de equipo vacio es ObjIndex 0; evitar ObjData(0) (out of range con user-target).
+    If ObjIndex > 0 Then Call AddSetResist(acc, ObjData(ObjIndex).ElementalResist, dmgType)
+End Sub
+
 Public Function GetUserElementalResist(ByVal UserIndex As Integer, ByVal dmgType As e_ElementalDamageType) As t_ElementalResist
     Dim acc As t_ElementalResist
     acc.DamageType = dmgType
     If UserIndex > 0 Then
         With UserList(UserIndex).invent
-            Call AddSetResist(acc, ObjData(.EquippedArmorObjIndex).ElementalResist, dmgType)
-            Call AddSetResist(acc, ObjData(.EquippedHelmetObjIndex).ElementalResist, dmgType)
-            Call AddSetResist(acc, ObjData(.EquippedShieldObjIndex).ElementalResist, dmgType)
-            Call AddSetResist(acc, ObjData(.EquippedRingAccesoryObjIndex).ElementalResist, dmgType)
-            Call AddSetResist(acc, ObjData(.EquippedAmuletAccesoryObjIndex).ElementalResist, dmgType)
-            Call AddSetResist(acc, ObjData(.EquippedBackpackObjIndex).ElementalResist, dmgType)
-            Call AddSetResist(acc, ObjData(.EquippedSaddleObjIndex).ElementalResist, dmgType)
+            Call AddSlotElementalResist(acc, .EquippedArmorObjIndex, dmgType)
+            Call AddSlotElementalResist(acc, .EquippedHelmetObjIndex, dmgType)
+            Call AddSlotElementalResist(acc, .EquippedShieldObjIndex, dmgType)
+            Call AddSlotElementalResist(acc, .EquippedRingAccesoryObjIndex, dmgType)
+            Call AddSlotElementalResist(acc, .EquippedAmuletAccesoryObjIndex, dmgType)
+            Call AddSlotElementalResist(acc, .EquippedBackpackObjIndex, dmgType)
+            Call AddSlotElementalResist(acc, .EquippedSaddleObjIndex, dmgType)
         End With
     End If
     GetUserElementalResist = acc
@@ -249,8 +260,8 @@ End Function
 Public Function ApplyElementalResist(ByVal RawDamage As Long, ByRef r As t_ElementalResist, ByVal dmgType As e_ElementalDamageType, ByRef outNullified As Boolean) As Long
     outNullified = False
     If RawDamage <= 0 Then Exit Function
-    ' Inmunidad: bloqueo absoluto
-    If r.Immune <> 0 Then
+    ' Inmunidad al daño: bloqueo absoluto (Immune legacy = ambos; ImmuneDamage = solo daño)
+    If r.Immune <> 0 Or r.ImmuneDamage <> 0 Then
         outNullified = True
         Exit Function
     End If
@@ -264,12 +275,32 @@ Public Function ApplyElementalResist(ByVal RawDamage As Long, ByRef r As t_Eleme
             Exit Function
         End If
     End If
-    ' Cascada: flat -> pct (capeado)
+    ' Cascada: flat -> pct (capeado). Rango aleatorio si *Max>0 (Step 4: preserva el veneno).
     Dim dmg As Long
-    dmg = RawDamage - r.ReduceFlat
+    Dim flat As Long
+    If r.ReduceFlatMax > 0 Then
+        If r.ReduceFlatMin >= r.ReduceFlatMax Then
+            flat = r.ReduceFlatMin
+        Else
+            flat = RandomNumber(r.ReduceFlatMin, r.ReduceFlatMax)
+        End If
+    Else
+        flat = r.ReduceFlat
+    End If
+    dmg = RawDamage - flat
     If dmg <= 0 Then Exit Function
     Dim pct As Single
-    pct = r.ReducePct
+    If r.ReducePctMax > 0 Then
+        Dim pctInt As Long
+        If r.ReducePctMin >= r.ReducePctMax Then
+            pctInt = r.ReducePctMin
+        Else
+            pctInt = RandomNumber(r.ReducePctMin, r.ReducePctMax)
+        End If
+        pct = pctInt / 100#
+    Else
+        pct = r.ReducePct
+    End If
     Dim cap As Single
     cap = ResistCapForType(dmgType)
     If pct > cap Then pct = cap
@@ -329,7 +360,7 @@ Private Function FireProcs(ByRef src As t_ElementalSource, ByVal trig As e_ProcT
                         If src.Proc(i).EotId > 0 Then
                             Dim rr As t_ElementalResist
                             rr = GetTargetResist(targetIsNpc, targetIndex, src.Proc(i).DamageType)
-                            If rr.Immune <> 0 Then
+                            If rr.Immune <> 0 Or rr.ImmuneEffect <> 0 Then
                                 Call ElementalLog(logCtx & " PROC applyState BLOQUEADO (inmune " & DamageTypeName(src.Proc(i).DamageType) & ")")
                             ElseIf rr.ReduceEffectChancePct > 0 And RandomNumber(1, 100) <= rr.ReduceEffectChancePct Then
                                 Call ElementalLog(logCtx & " PROC applyState resistido (chance efecto)")
@@ -511,7 +542,13 @@ Public Sub ParseElementalResistFromIni(ByRef Leer As clsIniManager, ByVal sect A
         rs.Resist(i).ReduceChancePct = val(Leer.GetValue(sect, p & "Chance"))
         rs.Resist(i).ReduceFlat = val(Leer.GetValue(sect, p & "Flat"))
         rs.Resist(i).ReducePct = val(Leer.GetValue(sect, p & "Pct"))
+        rs.Resist(i).ReduceFlatMin = val(Leer.GetValue(sect, p & "FlatMin"))
+        rs.Resist(i).ReduceFlatMax = val(Leer.GetValue(sect, p & "FlatMax"))
+        rs.Resist(i).ReducePctMin = val(Leer.GetValue(sect, p & "PctMin"))
+        rs.Resist(i).ReducePctMax = val(Leer.GetValue(sect, p & "PctMax"))
         rs.Resist(i).Immune = val(Leer.GetValue(sect, p & "Immune"))
+        rs.Resist(i).ImmuneDamage = val(Leer.GetValue(sect, p & "ImmuneDmg"))
+        rs.Resist(i).ImmuneEffect = val(Leer.GetValue(sect, p & "ImmuneEff"))
         rs.Resist(i).ReduceEffectMagnitudePct = val(Leer.GetValue(sect, p & "EffMag"))
         rs.Resist(i).ReduceEffectDurationPct = val(Leer.GetValue(sect, p & "EffDur"))
         rs.Resist(i).ReduceEffectChancePct = val(Leer.GetValue(sect, p & "EffChance"))
