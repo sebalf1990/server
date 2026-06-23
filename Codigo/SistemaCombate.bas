@@ -584,7 +584,17 @@ Private Function NpcDamage(ByVal NpcIndex As Integer, ByVal UserIndex As Integer
     If UserList(UserIndex).ChatCombate = 1 Then
         Call WriteNPCHitUser(UserIndex, Lugar, Damage)
     End If
-    If UserList(UserIndex).flags.Privilegios And e_PlayerType.User Then Call UserMod.DoDamageOrHeal(UserIndex, NpcIndex, eNpc, -Damage, e_phisical, 0)
+    If UserList(UserIndex).flags.Privilegios And e_PlayerType.User Then
+        ' --- Capa elemental npc->user (TOGGLE32 elemental_system). Core fisico INTACTO. ---
+        ' Death-safe: elemental (con color de tipo) primero; fisico solo si el user sobrevive.
+        Dim elemDmgN As Long, elemColorN As Long, userVivoN As Boolean
+        userVivoN = True
+        elemDmgN = modElementalCombat.ElementalDamageNpcVsUser(NpcIndex, UserIndex, elemColorN)
+        If elemDmgN > 0 Then
+            If UserMod.DoDamageOrHeal(UserIndex, NpcIndex, eNpc, -elemDmgN, e_dot, 0, -1, -1, elemColorN) = eDead Then userVivoN = False
+        End If
+        If userVivoN Then Call UserMod.DoDamageOrHeal(UserIndex, NpcIndex, eNpc, -Damage, e_phisical, 0)
+    End If
     If UserList(UserIndex).flags.Meditando Then
         If Damage > Fix(UserList(UserIndex).Stats.MinHp / 100 * UserList(UserIndex).Stats.UserAtributos(e_Atributos.Inteligencia) * UserList(UserIndex).Stats.UserSkills( _
                 e_Skill.Meditar) / 100 * 12 / (RandomNumber(0, 5) + 7)) Then
@@ -1251,36 +1261,19 @@ Private Sub UserDamageToUser(ByVal AtacanteIndex As Integer, ByVal VictimaIndex 
         End If
         ' Mostramos en consola el golpe a la victima independientemente de la configuración de chat
         Call WriteUserHittedByUser(VictimaIndex, Lugar, UserList(AtacanteIndex).Char.charindex, DamageStr)
-        ' Golpe crítico (ignora defensa)
-        If PuedeGolpeCritico(AtacanteIndex) Then
-            ' Si acertó
-            If RandomNumber(1, 100) <= GetCriticalHitChanceAgainstUsers(AtacanteIndex, VictimaIndex) Then
-                ' Daño del golpe crítico (usamos el daño base)
-                BonusDamage = Damage * CriticalHitDmgModifier
-                DamageStr = PonerPuntos(BonusDamage)
-                ' Mostramos en consola el daño al atacante
-                If UserList(AtacanteIndex).ChatCombate = 1 Then
-                    Call WriteLocaleMsg(AtacanteIndex, MSG_HIT_AND_CRITICAL_ON_CREATURE, e_FontTypeNames.FONTTYPE_INFOBOLD, Damage & "¬" & DamageStr)
-                End If
-                ' Y a la víctima
-                If .ChatCombate = 1 Then
-                    Call WriteLocaleMsg(VictimaIndex, MSG_PLAYER_CRITICALLY_HIT_YOU, e_FontTypeNames.FONTTYPE_INFOBOLD, UserList(AtacanteIndex).name & "¬" & DamageStr)
-                End If
-                Call SendData(SendTarget.ToPCAliveArea, AtacanteIndex, PrepareMessagePlayWave(SND_IMPACTO_CRITICO, UserList(AtacanteIndex).pos.x, UserList(AtacanteIndex).pos.y))
-                ' Color naranja
-                Color = RGB(225, 165, 0)
-            End If
-            ' Apuñalar (le afecta la defensa)
-        ElseIf PuedeApuñalar(AtacanteIndex) Then
+        ' Golpe crítico / apuñalar: CONVIVEN pero son EXCLUYENTES por golpe. Apuñalar tiene PRECEDENCIA
+        ' (se tira primero; si procea no hay crit; si NO procea el crit -clase o universal- tiene su
+        ' chance). Mismo criterio que el camino user->NPC (decision sesion previa).
+        Dim didStabU As Boolean
+        didStabU = False
+        If PuedeApuñalar(AtacanteIndex) Then
             If RandomNumber(1, 100) <= GetStabbingChanceAgainstUsers(AtacanteIndex, VictimaIndex) Then
                 ' Daño del apuñalamiento
                 BonusDamage = Damage * ModicadorApuñalarClase(UserList(AtacanteIndex).clase)
                 DamageStr = PonerPuntos(BonusDamage)
-                ' Mostramos en consola el golpe al atacante solo si tiene activado el chat de combate
                 If UserList(AtacanteIndex).ChatCombate = 1 Then
                     Call WriteLocaleMsg(AtacanteIndex, "210", e_FontTypeNames.FONTTYPE_INFOBOLD, .name & "¬" & DamageStr)
                 End If
-                ' Mostramos en consola el golpe a la victima independientemente de la configuración de chat
                 Call WriteLocaleMsg(VictimaIndex, "211", e_FontTypeNames.FONTTYPE_INFOBOLD, UserList(AtacanteIndex).name & "¬" & DamageStr)
                 'Fx de apuñalar
                 Call SendData(SendTarget.ToPCAliveArea, AtacanteIndex, PrepareMessageCreateFX(UserList(VictimaIndex).Char.charindex, FX_STABBING, 0, UserList( _
@@ -1297,9 +1290,40 @@ Private Sub UserDamageToUser(ByVal AtacanteIndex As Integer, ByVal VictimaIndex 
                 Call WriteFlashScreen(VictimaIndex, &H3C3CFF, 200, True)
                 Call WriteFlashScreen(AtacanteIndex, &H3C3CFF, 150, True)
                 Call SendData(SendTarget.ToPCAliveArea, AtacanteIndex, PrepareMessagePlayWave(SND_IMPACTO, UserList(AtacanteIndex).pos.x, UserList(AtacanteIndex).pos.y))
+                didStabU = True
             End If
             ' Sube skills en apuñalar
             Call SubirSkill(AtacanteIndex, Apuñalar)
+        End If
+        ' Crit SOLO si no apuñaló (apuñalar gana). Bandido = su variante; resto = universal.
+        If Not didStabU Then
+            If PuedeGolpeCritico(AtacanteIndex) Then
+                ' Si acertó
+                If RandomNumber(1, 100) <= GetCriticalHitChanceAgainstUsers(AtacanteIndex, VictimaIndex) Then
+                    ' Daño del golpe crítico (usamos el daño base)
+                    BonusDamage = Damage * CriticalHitDmgModifier
+                    DamageStr = PonerPuntos(BonusDamage)
+                    If UserList(AtacanteIndex).ChatCombate = 1 Then
+                        Call WriteLocaleMsg(AtacanteIndex, MSG_HIT_AND_CRITICAL_ON_CREATURE, e_FontTypeNames.FONTTYPE_INFOBOLD, Damage & "¬" & DamageStr)
+                    End If
+                    If .ChatCombate = 1 Then
+                        Call WriteLocaleMsg(VictimaIndex, MSG_PLAYER_CRITICALLY_HIT_YOU, e_FontTypeNames.FONTTYPE_INFOBOLD, UserList(AtacanteIndex).name & "¬" & DamageStr)
+                    End If
+                    Call SendData(SendTarget.ToPCAliveArea, AtacanteIndex, PrepareMessagePlayWave(SND_IMPACTO_CRITICO, UserList(AtacanteIndex).pos.x, UserList(AtacanteIndex).pos.y))
+                    ' Color naranja
+                    Color = RGB(225, 165, 0)
+                End If
+            ElseIf modElementalCombat.UniversalCritActive() Then
+                ' Crit universal (TOGGLE32): fallback para clases sin firma (no bandido/asesino). Data-tunable.
+                Dim critBonusU As Long, critColU As Long
+                critBonusU = modElementalCombat.TryUniversalCrit(AtacanteIndex, False, VictimaIndex, Damage, critColU)
+                If critBonusU > 0 Then
+                    BonusDamage = critBonusU
+                    Color = critColU
+                    If UserList(AtacanteIndex).ChatCombate = 1 Then Call WriteLocaleMsg(AtacanteIndex, MSG_HIT_AND_CRITICAL_ON_CREATURE, e_FontTypeNames.FONTTYPE_INFOBOLD, PonerPuntos(Damage) & "¬" & PonerPuntos(critBonusU))
+                    If .ChatCombate = 1 Then Call WriteLocaleMsg(VictimaIndex, MSG_PLAYER_CRITICALLY_HIT_YOU, e_FontTypeNames.FONTTYPE_INFOBOLD, UserList(AtacanteIndex).name & "¬" & PonerPuntos(critBonusU))
+                End If
+            End If
         End If
         If PuedeDesequiparDeUnGolpe(AtacanteIndex) Then
             If RandomNumber(1, 100) <= ProbabilidadDesequipar(AtacanteIndex) Then
@@ -1316,6 +1340,16 @@ Private Sub UserDamageToUser(ByVal AtacanteIndex As Integer, ByVal VictimaIndex 
                 End If
             End If
         End If
+        ' --- Capa elemental PvP (TOGGLE32 elemental_system). Core fisico INTACTO. ---
+        ' Death-safe: aplica el elemental (con su color de tipo) primero; el fisico solo si la victima
+        ' sobrevive. El motor ya aplico la resistencia por tipo del defensor (no pasa por defensa fisica).
+        Dim elemDmgU As Long, elemColorU As Long, victimaVivaU As Boolean
+        victimaVivaU = True
+        elemDmgU = modElementalCombat.ElementalDamageUserVsTarget(AtacanteIndex, False, VictimaIndex, UserList(AtacanteIndex).invent.EquippedWeaponObjIndex, UserList(AtacanteIndex).invent.EquippedMunitionObjIndex, elemColorU)
+        If elemDmgU > 0 Then
+            If UserMod.DoDamageOrHeal(VictimaIndex, AtacanteIndex, e_ReferenceType.eUser, -elemDmgU, e_DamageSourceType.e_dot, UserList(AtacanteIndex).invent.EquippedWeaponObjIndex, -1, -1, elemColorU) = eDead Then victimaVivaU = False
+        End If
+        If victimaVivaU Then
         If UserMod.DoDamageOrHeal(VictimaIndex, AtacanteIndex, e_ReferenceType.eUser, -Damage, e_DamageSourceType.e_phisical, .invent.EquippedWeaponObjIndex, -1, -1, Color) = _
                 eStillAlive Then
             'Sonido del golpe
@@ -1325,6 +1359,7 @@ Private Sub UserDamageToUser(ByVal AtacanteIndex As Integer, ByVal VictimaIndex 
                     UserList(VictimaIndex).pos.y))
             ' Intentamos aplicar algún efecto de estado
             Call UserDañoEspecial(AtacanteIndex, VictimaIndex, aType)
+        End If
         End If
     End With
     Exit Sub

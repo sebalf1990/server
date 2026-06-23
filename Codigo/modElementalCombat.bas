@@ -393,35 +393,35 @@ Private Function FireProcs(ByRef src As t_ElementalSource, ByVal trig As e_ProcT
 End Function
 
 ' ============================================================================
-' Punto de entrada gateado: camino user -> NPC (unico touchpoint de la Ola 0)
-' Devuelve el dano elemental EXTRA a sumar (ya resistido). NO toca el dano fisico.
+' Punto de entrada gateado: camino user -> target (NPC o USER). Generalizado en la
+' Ola 5 para habilitar PvP. Devuelve el dano elemental EXTRA (ya resistido por tipo).
 ' ============================================================================
-Public Function ElementalDamageUserVsNpc(ByVal UserIndex As Integer, ByVal NpcIndex As Integer, ByVal WeaponObjIndex As Integer, ByVal MunitionObjIndex As Integer, ByRef outColor As Long) As Long
+Public Function ElementalDamageUserVsTarget(ByVal UserIndex As Integer, ByVal targetIsNpc As Boolean, ByVal targetIndex As Integer, ByVal WeaponObjIndex As Integer, ByVal MunitionObjIndex As Integer, ByRef outColor As Long) As Long
     On Error GoTo ErrHandler
     outColor = vbWhite
     If Not ElementalSystemEnabled() Then Exit Function
-    If UserIndex <= 0 Or NpcIndex <= 0 Then Exit Function
+    If UserIndex <= 0 Or targetIndex <= 0 Then Exit Function
     Dim total As Long
     Dim ctx As String
-    ctx = "U" & UserIndex & "->N" & NpcIndex
+    ctx = "U" & UserIndex & IIf(targetIsNpc, "->N", "->U") & targetIndex
     ' Componentes + procs onHit del arma
     If WeaponObjIndex > 0 Then
-        total = total + ResolveComponentsVsTarget(ObjData(WeaponObjIndex).Elemental, True, NpcIndex, ctx & " weap")
-        total = total + FireProcs(ObjData(WeaponObjIndex).Elemental, eProcOnHit, True, NpcIndex, UserIndex, eUser, ctx & " weap")
+        total = total + ResolveComponentsVsTarget(ObjData(WeaponObjIndex).Elemental, targetIsNpc, targetIndex, ctx & " weap")
+        total = total + FireProcs(ObjData(WeaponObjIndex).Elemental, eProcOnHit, targetIsNpc, targetIndex, UserIndex, eUser, ctx & " weap")
     End If
     ' Municion (rango): suma sus componentes/procs solo si el arma es de proyectil
     If MunitionObjIndex > 0 And WeaponObjIndex > 0 Then
         If ObjData(WeaponObjIndex).Proyectil > 0 Then
-            total = total + ResolveComponentsVsTarget(ObjData(MunitionObjIndex).Elemental, True, NpcIndex, ctx & " ammo")
-            total = total + FireProcs(ObjData(MunitionObjIndex).Elemental, eProcOnHit, True, NpcIndex, UserIndex, eUser, ctx & " ammo")
+            total = total + ResolveComponentsVsTarget(ObjData(MunitionObjIndex).Elemental, targetIsNpc, targetIndex, ctx & " ammo")
+            total = total + FireProcs(ObjData(MunitionObjIndex).Elemental, eProcOnHit, targetIsNpc, targetIndex, UserIndex, eUser, ctx & " ammo")
         End If
     End If
     ' Encantamiento temporal del arma (hechizo Encantar Arma). Aditivo al elemental base.
     With UserList(UserIndex).flags
         If .EnchantWeaponObjIndex > 0 And .EnchantWeaponObjIndex = WeaponObjIndex Then
             If .EnchantWeaponPermanent = 1 Or Not DeadlinePassed(GetTickCountRaw(), .EnchantWeaponDeadline) Then
-                total = total + ResolveComponentsVsTarget(.EnchantWeaponSource, True, NpcIndex, ctx & " ench")
-                total = total + FireProcs(.EnchantWeaponSource, eProcOnHit, True, NpcIndex, UserIndex, eUser, ctx & " ench")
+                total = total + ResolveComponentsVsTarget(.EnchantWeaponSource, targetIsNpc, targetIndex, ctx & " ench")
+                total = total + FireProcs(.EnchantWeaponSource, eProcOnHit, targetIsNpc, targetIndex, UserIndex, eUser, ctx & " ench")
             End If
         End If
     End With
@@ -429,17 +429,18 @@ Public Function ElementalDamageUserVsNpc(ByVal UserIndex As Integer, ByVal NpcIn
     Dim orbIdx As Integer
     orbIdx = UserList(UserIndex).invent.EquippedAmuletAccesoryObjIndex
     If orbIdx > 0 Then
-        total = total + ResolveComponentsVsTarget(ObjData(orbIdx).Elemental, True, NpcIndex, ctx & " orb")
-        total = total + FireProcs(ObjData(orbIdx).Elemental, eProcOnHit, True, NpcIndex, UserIndex, eUser, ctx & " orb")
+        total = total + ResolveComponentsVsTarget(ObjData(orbIdx).Elemental, targetIsNpc, targetIndex, ctx & " orb")
+        total = total + FireProcs(ObjData(orbIdx).Elemental, eProcOnHit, targetIsNpc, targetIndex, UserIndex, eUser, ctx & " orb")
     End If
-    ' Procs onDamaged del NPC defensor (thorns/aura): aplican efecto al atacante (user).
-    ' El dano dmgBonus de retaliacion se loguea (HP sink al user en ola posterior).
-    Dim t As Integer
-    t = NpcList(NpcIndex).Numero
-    If t > 0 Then
-        Dim retal As Long
-        retal = FireProcs(NpcInfoCache(t).Elemental, eProcOnDamaged, False, UserIndex, NpcIndex, eNpc, ctx & " thorns")
-        If retal > 0 Then Call ElementalLog(ctx & " thorns retaliation=" & retal & " [HP sink Ola1]")
+    ' Procs onDamaged del defensor (thorns/aura). Solo NPC por ahora (thorns de user defensor = diferido).
+    If targetIsNpc Then
+        Dim t As Integer
+        t = NpcList(targetIndex).Numero
+        If t > 0 Then
+            Dim retal As Long
+            retal = FireProcs(NpcInfoCache(t).Elemental, eProcOnDamaged, False, UserIndex, targetIndex, eNpc, ctx & " thorns")
+            If retal > 0 Then Call ElementalLog(ctx & " thorns retaliation=" & retal & " [HP sink Ola1]")
+        End If
     End If
     ' Color del numero elemental: tipo primario del arma base; si no tiene, del encantamiento.
     If WeaponObjIndex > 0 Then
@@ -452,10 +453,39 @@ Public Function ElementalDamageUserVsNpc(ByVal UserIndex As Integer, ByVal NpcIn
     If outColor = vbWhite And orbIdx > 0 Then
         If ObjData(orbIdx).Elemental.CompCount > 0 Then outColor = DamageTypeColor(ObjData(orbIdx).Elemental.Comp(1).DamageType)
     End If
-    ElementalDamageUserVsNpc = total
+    ElementalDamageUserVsTarget = total
     Exit Function
 ErrHandler:
-    Call TraceError(Err.Number, Err.Description, "modElementalCombat.ElementalDamageUserVsNpc", Erl)
+    Call TraceError(Err.Number, Err.Description, "modElementalCombat.ElementalDamageUserVsTarget", Erl)
+End Function
+
+' Wrapper retrocompatible: camino user -> NPC (call-site existente sin cambios).
+Public Function ElementalDamageUserVsNpc(ByVal UserIndex As Integer, ByVal NpcIndex As Integer, ByVal WeaponObjIndex As Integer, ByVal MunitionObjIndex As Integer, ByRef outColor As Long) As Long
+    ElementalDamageUserVsNpc = ElementalDamageUserVsTarget(UserIndex, True, NpcIndex, WeaponObjIndex, MunitionObjIndex, outColor)
+End Function
+
+' Punto de entrada: camino NPC -> user (PvP elemental). El NPC atacante saca sus componentes/procs
+' de NpcInfoCache. Devuelve el dano elemental EXTRA (ya resistido por el tipo del defensor user).
+Public Function ElementalDamageNpcVsUser(ByVal NpcIndex As Integer, ByVal VictimaIndex As Integer, ByRef outColor As Long) As Long
+    On Error GoTo ErrHandler
+    outColor = vbWhite
+    If Not ElementalSystemEnabled() Then Exit Function
+    If NpcIndex <= 0 Or VictimaIndex <= 0 Then Exit Function
+    Dim t As Integer
+    t = NpcList(NpcIndex).Numero
+    If t <= 0 Then Exit Function
+    Dim total As Long
+    Dim ctx As String
+    ctx = "N" & NpcIndex & "->U" & VictimaIndex
+    ' Componentes + procs onHit del NPC atacante (target = user).
+    total = total + ResolveComponentsVsTarget(NpcInfoCache(t).Elemental, False, VictimaIndex, ctx & " npc")
+    total = total + FireProcs(NpcInfoCache(t).Elemental, eProcOnHit, False, VictimaIndex, NpcIndex, eNpc, ctx & " npc")
+    ' Color del numero: tipo primario del NPC.
+    If NpcInfoCache(t).Elemental.CompCount > 0 Then outColor = DamageTypeColor(NpcInfoCache(t).Elemental.Comp(1).DamageType)
+    ElementalDamageNpcVsUser = total
+    Exit Function
+ErrHandler:
+    Call TraceError(Err.Number, Err.Description, "modElementalCombat.ElementalDamageNpcVsUser", Erl)
 End Function
 
 ' ============================================================================
