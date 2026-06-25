@@ -527,7 +527,10 @@ Private Sub UserDamageNpc(ByVal UserIndex As Integer, ByVal NpcIndex As Integer,
             tThorns = NpcList(NpcIndex).Numero
             Dim netDmgN As Long
             netDmgN = hpAntesN - NpcList(NpcIndex).Stats.MinHp
-            If tThorns > 0 And netDmgN > 0 Then Call modElementalCombat.ResolveThorns(NpcInfoCache(tThorns).Elemental, NpcIndex, eNpc, False, UserIndex, netDmgN, "U" & UserIndex & "->N" & NpcIndex)
+            Dim atkTypeN As e_ElementalDamageType
+            atkTypeN = eDmgNone
+            If elemDmg > 0 Then atkTypeN = modElementalCombat.DamageTypeFromColor(elemColor)
+            If tThorns > 0 And netDmgN > 0 Then Call modElementalCombat.ResolveThorns(NpcInfoCache(tThorns).Elemental, NpcIndex, eNpc, False, UserIndex, netDmgN, atkTypeN, "U" & UserIndex & "->N" & NpcIndex)
         End If
     End With
     Exit Sub
@@ -614,7 +617,10 @@ Private Function NpcDamage(ByVal NpcIndex As Integer, ByVal UserIndex As Integer
         If userVivoN Then
             Dim netNU As Long
             netNU = hpAntesNU - UserList(UserIndex).Stats.MinHp
-            If netNU > 0 Then Call modElementalCombat.FireUserThorns(UserIndex, True, NpcIndex, netNU, "N" & NpcIndex & "->U" & UserIndex)
+            Dim atkTypeNU As e_ElementalDamageType
+            atkTypeNU = eDmgNone
+            If elemDmgN > 0 Then atkTypeNU = modElementalCombat.DamageTypeFromColor(elemColorN)
+            If netNU > 0 Then Call modElementalCombat.FireUserThorns(UserIndex, True, NpcIndex, netNU, atkTypeNU, "N" & NpcIndex & "->U" & UserIndex)
         End If
     End If
     If UserList(UserIndex).flags.Meditando Then
@@ -1393,7 +1399,10 @@ Private Sub UserDamageToUser(ByVal AtacanteIndex As Integer, ByVal VictimaIndex 
         If victimaVivaU Then
             Dim netVU As Long
             netVU = hpAntesVU - UserList(VictimaIndex).Stats.MinHp
-            If netVU > 0 Then Call modElementalCombat.FireUserThorns(VictimaIndex, False, AtacanteIndex, netVU, "U" & AtacanteIndex & "->U" & VictimaIndex)
+            Dim atkTypeVU As e_ElementalDamageType
+            atkTypeVU = eDmgNone
+            If elemDmgU > 0 Then atkTypeVU = modElementalCombat.DamageTypeFromColor(elemColorU)
+            If netVU > 0 Then Call modElementalCombat.FireUserThorns(VictimaIndex, False, AtacanteIndex, netVU, atkTypeVU, "U" & AtacanteIndex & "->U" & VictimaIndex)
         End If
     End With
     Exit Sub

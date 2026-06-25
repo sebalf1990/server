@@ -405,13 +405,26 @@ Private Function FireProcs(ByRef src As t_ElementalSource, ByVal trig As e_ProcT
     FireProcs = total
 End Function
 
+' Tipo elemental cuyo color de numero coincide (para reflejo-espejo de espinas). eDmgNone si no matchea/fisico.
+Public Function DamageTypeFromColor(ByVal numberColor As Long) As e_ElementalDamageType
+    DamageTypeFromColor = eDmgNone
+    If numberColor = 0 Or numberColor = vbWhite Then Exit Function
+    Dim t As Integer
+    For t = 1 To MAX_DAMAGE_TYPE_ID
+        If DamageTypeReg(t).NumberColor = numberColor Then
+            DamageTypeFromColor = t
+            Exit Function
+        End If
+    Next t
+End Function
+
 ' === Espinas / Thorns (plan 20.002) ===
 ' El DEFENSOR retalia al ATACANTE tras recibir un golpe (se llama POST-dano para conocer el dano neto).
 ' Maneja procs onDamaged Kind=dmgBonus con el modelo configurable: fijo (Min-Max) o reflejo % de netDamage;
 ' fisico o elemental; directo o resistido (elemental=resist del tipo; fisico-resistido=TP3); letal o no.
 ' El applyState onDamaged (efectos) lo sigue disparando FireProcs en el on-hit. Anti-loop: aplica por
 ' DoDamageOrHeal directo (e_dot), no re-dispara espinas.
-Public Sub ResolveThorns(ByRef defenderSrc As t_ElementalSource, ByVal defenderIndex As Integer, ByVal defenderType As e_ReferenceType, ByVal attackerIsNpc As Boolean, ByVal attackerIndex As Integer, ByVal netDamage As Long, ByVal logCtx As String)
+Public Sub ResolveThorns(ByRef defenderSrc As t_ElementalSource, ByVal defenderIndex As Integer, ByVal defenderType As e_ReferenceType, ByVal attackerIsNpc As Boolean, ByVal attackerIndex As Integer, ByVal netDamage As Long, ByVal attackType As e_ElementalDamageType, ByVal logCtx As String)
     On Error GoTo ErrHandler
     If Not ElementalSystemEnabled() Then Exit Sub
     If attackerIndex <= 0 Then Exit Sub
@@ -423,32 +436,47 @@ Public Sub ResolveThorns(ByRef defenderSrc As t_ElementalSource, ByVal defenderI
             If ch < 0 Then ch = 0
             If ch > 100 Then ch = 100
             If ch >= 100 Or RandomNumber(1, 100) <= ch Then
-                Dim dmg As Long
-                If defenderSrc.Proc(i).ReflectPct > 0 Then
-                    dmg = (netDamage * defenderSrc.Proc(i).ReflectPct) \ 100
-                Else
-                    Dim c As t_DamageComponent
-                    c.DamageType = defenderSrc.Proc(i).DamageType
-                    c.MinDamage = defenderSrc.Proc(i).MinDamage
-                    c.MaxDamage = defenderSrc.Proc(i).MaxDamage
-                    dmg = RollDamageComponent(c)
-                End If
-                If defenderSrc.Proc(i).BypassResist = 0 Then
-                    If defenderSrc.Proc(i).Physical = 0 Then
-                        ' Elemental resistido: por la resist del tipo del atacante.
-                        Dim rThorn As t_ElementalResist, nulT As Boolean
-                        rThorn = GetTargetResist(attackerIsNpc, attackerIndex, defenderSrc.Proc(i).DamageType)
-                        dmg = ApplyElementalResist(dmg, rThorn, defenderSrc.Proc(i).DamageType, nulT)
+                ' Tipo/naturaleza efectivos. ReflectMirror (espejo): el dano devuelto toma el TIPO del golpe del
+                ' atacante; si el golpe no tuvo componente elemental (attackType=eDmgNone) la espina no actua.
+                Dim effType As e_ElementalDamageType, effPhysical As Byte, doMirror As Boolean
+                doMirror = True
+                If defenderSrc.Proc(i).ReflectMirror = 1 Then
+                    If attackType = eDmgNone Then
+                        doMirror = False
                     Else
-                        ' Fisico resistido (TP3): por la defensa/armadura del atacante (reusa la mitigacion fisica).
-                        If attackerIsNpc Then
-                            dmg = dmg * NPCs.GetPhysicDamageReduction(NpcList(attackerIndex))
+                        effType = attackType
+                        effPhysical = 0
+                    End If
+                Else
+                    effType = defenderSrc.Proc(i).DamageType
+                    effPhysical = defenderSrc.Proc(i).Physical
+                End If
+                If doMirror Then
+                    Dim dmg As Long
+                    If defenderSrc.Proc(i).ReflectPct > 0 Then
+                        dmg = (netDamage * defenderSrc.Proc(i).ReflectPct) \ 100
+                    Else
+                        Dim c As t_DamageComponent
+                        c.DamageType = effType
+                        c.MinDamage = defenderSrc.Proc(i).MinDamage
+                        c.MaxDamage = defenderSrc.Proc(i).MaxDamage
+                        dmg = RollDamageComponent(c)
+                    End If
+                    If defenderSrc.Proc(i).BypassResist = 0 Then
+                        If effPhysical = 0 Then
+                            Dim rThorn As t_ElementalResist, nulT As Boolean
+                            rThorn = GetTargetResist(attackerIsNpc, attackerIndex, effType)
+                            dmg = ApplyElementalResist(dmg, rThorn, effType, nulT)
                         Else
-                            dmg = dmg * UserMod.GetPhysicDamageReduction(UserList(attackerIndex))
+                            If attackerIsNpc Then
+                                dmg = dmg * NPCs.GetPhysicDamageReduction(NpcList(attackerIndex))
+                            Else
+                                dmg = dmg * UserMod.GetPhysicDamageReduction(UserList(attackerIndex))
+                            End If
                         End If
                     End If
+                    If dmg > 0 Then Call ApplyThornsDamage(attackerIsNpc, attackerIndex, defenderIndex, defenderType, dmg, defenderSrc.Proc(i).Lethal, effPhysical, effType, logCtx)
                 End If
-                If dmg > 0 Then Call ApplyThornsDamage(attackerIsNpc, attackerIndex, defenderIndex, defenderType, dmg, defenderSrc.Proc(i).Lethal, defenderSrc.Proc(i).Physical, defenderSrc.Proc(i).DamageType, logCtx)
             End If
         End If
     Next i
@@ -481,26 +509,26 @@ End Sub
 
 ' Espinas del USER defensor (plan 20.002 TP2): recorre los 7 slots de gear y dispara los procs onDamaged
 ' de cada item equipado (espejo de GetUserElementalResist). Cada item contribuye sus espinas.
-Public Sub FireUserThorns(ByVal defenderUserIndex As Integer, ByVal attackerIsNpc As Boolean, ByVal attackerIndex As Integer, ByVal netDamage As Long, ByVal logCtx As String)
+Public Sub FireUserThorns(ByVal defenderUserIndex As Integer, ByVal attackerIsNpc As Boolean, ByVal attackerIndex As Integer, ByVal netDamage As Long, ByVal attackType As e_ElementalDamageType, ByVal logCtx As String)
     On Error GoTo ErrHandler
     If Not ElementalSystemEnabled() Then Exit Sub
     If defenderUserIndex <= 0 Or attackerIndex <= 0 Or netDamage <= 0 Then Exit Sub
     With UserList(defenderUserIndex).invent
-        Call FireSlotThorns(.EquippedArmorObjIndex, defenderUserIndex, attackerIsNpc, attackerIndex, netDamage, logCtx)
-        Call FireSlotThorns(.EquippedHelmetObjIndex, defenderUserIndex, attackerIsNpc, attackerIndex, netDamage, logCtx)
-        Call FireSlotThorns(.EquippedShieldObjIndex, defenderUserIndex, attackerIsNpc, attackerIndex, netDamage, logCtx)
-        Call FireSlotThorns(.EquippedRingAccesoryObjIndex, defenderUserIndex, attackerIsNpc, attackerIndex, netDamage, logCtx)
-        Call FireSlotThorns(.EquippedAmuletAccesoryObjIndex, defenderUserIndex, attackerIsNpc, attackerIndex, netDamage, logCtx)
-        Call FireSlotThorns(.EquippedBackpackObjIndex, defenderUserIndex, attackerIsNpc, attackerIndex, netDamage, logCtx)
-        Call FireSlotThorns(.EquippedSaddleObjIndex, defenderUserIndex, attackerIsNpc, attackerIndex, netDamage, logCtx)
+        Call FireSlotThorns(.EquippedArmorObjIndex, defenderUserIndex, attackerIsNpc, attackerIndex, netDamage, attackType, logCtx)
+        Call FireSlotThorns(.EquippedHelmetObjIndex, defenderUserIndex, attackerIsNpc, attackerIndex, netDamage, attackType, logCtx)
+        Call FireSlotThorns(.EquippedShieldObjIndex, defenderUserIndex, attackerIsNpc, attackerIndex, netDamage, attackType, logCtx)
+        Call FireSlotThorns(.EquippedRingAccesoryObjIndex, defenderUserIndex, attackerIsNpc, attackerIndex, netDamage, attackType, logCtx)
+        Call FireSlotThorns(.EquippedAmuletAccesoryObjIndex, defenderUserIndex, attackerIsNpc, attackerIndex, netDamage, attackType, logCtx)
+        Call FireSlotThorns(.EquippedBackpackObjIndex, defenderUserIndex, attackerIsNpc, attackerIndex, netDamage, attackType, logCtx)
+        Call FireSlotThorns(.EquippedSaddleObjIndex, defenderUserIndex, attackerIsNpc, attackerIndex, netDamage, attackType, logCtx)
     End With
     Exit Sub
 ErrHandler:
     Call TraceError(Err.Number, Err.Description, "modElementalCombat.FireUserThorns", Erl)
 End Sub
 
-Private Sub FireSlotThorns(ByVal ObjIndex As Integer, ByVal defenderUserIndex As Integer, ByVal attackerIsNpc As Boolean, ByVal attackerIndex As Integer, ByVal netDamage As Long, ByVal logCtx As String)
-    If ObjIndex > 0 Then Call ResolveThorns(ObjData(ObjIndex).Elemental, defenderUserIndex, eUser, attackerIsNpc, attackerIndex, netDamage, logCtx)
+Private Sub FireSlotThorns(ByVal ObjIndex As Integer, ByVal defenderUserIndex As Integer, ByVal attackerIsNpc As Boolean, ByVal attackerIndex As Integer, ByVal netDamage As Long, ByVal attackType As e_ElementalDamageType, ByVal logCtx As String)
+    If ObjIndex > 0 Then Call ResolveThorns(ObjData(ObjIndex).Elemental, defenderUserIndex, eUser, attackerIsNpc, attackerIndex, netDamage, attackType, logCtx)
 End Sub
 
 ' ============================================================================
@@ -830,6 +858,7 @@ Public Sub ParseElementalSourceFromIni(ByRef Leer As clsIniManager, ByVal sect A
         src.Proc(i).Physical = val(Leer.GetValue(sect, p & "Physical"))
         src.Proc(i).BypassResist = val(Leer.GetValue(sect, p & "BypassResist"))
         src.Proc(i).Lethal = val(Leer.GetValue(sect, p & "Lethal"))
+        src.Proc(i).ReflectMirror = val(Leer.GetValue(sect, p & "ReflectMirror"))
     Next i
     src.ProcCount = n
 End Sub
