@@ -601,11 +601,21 @@ Private Function NpcDamage(ByVal NpcIndex As Integer, ByVal UserIndex As Integer
         ' Death-safe: elemental (con color de tipo) primero; fisico solo si el user sobrevive.
         Dim elemDmgN As Long, elemColorN As Long, userVivoN As Boolean
         userVivoN = True
+        Dim hpAntesNU As Long
+        hpAntesNU = UserList(UserIndex).Stats.MinHp
         elemDmgN = modElementalCombat.ElementalDamageNpcVsUser(NpcIndex, UserIndex, elemColorN)
         If elemDmgN > 0 Then
             If UserMod.DoDamageOrHeal(UserIndex, NpcIndex, eNpc, -elemDmgN, e_dot, 0, -1, -1, elemColorN) = eDead Then userVivoN = False
         End If
-        If userVivoN Then Call UserMod.DoDamageOrHeal(UserIndex, NpcIndex, eNpc, -Damage, e_phisical, 0)
+        If userVivoN Then
+            If UserMod.DoDamageOrHeal(UserIndex, NpcIndex, eNpc, -Damage, e_phisical, 0) = eDead Then userVivoN = False
+        End If
+        ' Espinas del user defensor (plan 20.002 TP2): post-dano npc->user, solo si sobrevivio
+        If userVivoN Then
+            Dim netNU As Long
+            netNU = hpAntesNU - UserList(UserIndex).Stats.MinHp
+            If netNU > 0 Then Call modElementalCombat.FireUserThorns(UserIndex, True, NpcIndex, netNU, "N" & NpcIndex & "->U" & UserIndex)
+        End If
     End If
     If UserList(UserIndex).flags.Meditando Then
         If Damage > Fix(UserList(UserIndex).Stats.MinHp / 100 * UserList(UserIndex).Stats.UserAtributos(e_Atributos.Inteligencia) * UserList(UserIndex).Stats.UserSkills( _
@@ -1359,6 +1369,8 @@ Private Sub UserDamageToUser(ByVal AtacanteIndex As Integer, ByVal VictimaIndex 
         ' sobrevive. El motor ya aplico la resistencia por tipo del defensor (no pasa por defensa fisica).
         Dim elemDmgU As Long, elemColorU As Long, victimaVivaU As Boolean
         victimaVivaU = True
+        Dim hpAntesVU As Long
+        hpAntesVU = UserList(VictimaIndex).Stats.MinHp
         elemDmgU = modElementalCombat.ElementalDamageUserVsTarget(AtacanteIndex, False, VictimaIndex, UserList(AtacanteIndex).invent.EquippedWeaponObjIndex, UserList(AtacanteIndex).invent.EquippedMunitionObjIndex, elemColorU)
         If elemDmgU > 0 Then
             If UserMod.DoDamageOrHeal(VictimaIndex, AtacanteIndex, e_ReferenceType.eUser, -elemDmgU, e_DamageSourceType.e_dot, UserList(AtacanteIndex).invent.EquippedWeaponObjIndex, -1, -1, elemColorU) = eDead Then victimaVivaU = False
@@ -1373,7 +1385,15 @@ Private Sub UserDamageToUser(ByVal AtacanteIndex As Integer, ByVal VictimaIndex 
                     UserList(VictimaIndex).pos.y))
             ' Intentamos aplicar algún efecto de estado
             Call UserDañoEspecial(AtacanteIndex, VictimaIndex, aType)
+        Else
+            victimaVivaU = False
         End If
+        End If
+        ' Espinas del user defensor (plan 20.002 TP2): post-dano user->user, solo si sobrevivio
+        If victimaVivaU Then
+            Dim netVU As Long
+            netVU = hpAntesVU - UserList(VictimaIndex).Stats.MinHp
+            If netVU > 0 Then Call modElementalCombat.FireUserThorns(VictimaIndex, False, AtacanteIndex, netVU, "U" & AtacanteIndex & "->U" & VictimaIndex)
         End If
     End With
     Exit Sub

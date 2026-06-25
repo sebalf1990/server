@@ -456,6 +456,30 @@ ErrHandler:
     Call TraceError(Err.Number, Err.Description, "modElementalCombat.ApplyThornsDamage", Erl)
 End Sub
 
+' Espinas del USER defensor (plan 20.002 TP2): recorre los 7 slots de gear y dispara los procs onDamaged
+' de cada item equipado (espejo de GetUserElementalResist). Cada item contribuye sus espinas.
+Public Sub FireUserThorns(ByVal defenderUserIndex As Integer, ByVal attackerIsNpc As Boolean, ByVal attackerIndex As Integer, ByVal netDamage As Long, ByVal logCtx As String)
+    On Error GoTo ErrHandler
+    If Not ElementalSystemEnabled() Then Exit Sub
+    If defenderUserIndex <= 0 Or attackerIndex <= 0 Or netDamage <= 0 Then Exit Sub
+    With UserList(defenderUserIndex).invent
+        Call FireSlotThorns(.EquippedArmorObjIndex, defenderUserIndex, attackerIsNpc, attackerIndex, netDamage, logCtx)
+        Call FireSlotThorns(.EquippedHelmetObjIndex, defenderUserIndex, attackerIsNpc, attackerIndex, netDamage, logCtx)
+        Call FireSlotThorns(.EquippedShieldObjIndex, defenderUserIndex, attackerIsNpc, attackerIndex, netDamage, logCtx)
+        Call FireSlotThorns(.EquippedRingAccesoryObjIndex, defenderUserIndex, attackerIsNpc, attackerIndex, netDamage, logCtx)
+        Call FireSlotThorns(.EquippedAmuletAccesoryObjIndex, defenderUserIndex, attackerIsNpc, attackerIndex, netDamage, logCtx)
+        Call FireSlotThorns(.EquippedBackpackObjIndex, defenderUserIndex, attackerIsNpc, attackerIndex, netDamage, logCtx)
+        Call FireSlotThorns(.EquippedSaddleObjIndex, defenderUserIndex, attackerIsNpc, attackerIndex, netDamage, logCtx)
+    End With
+    Exit Sub
+ErrHandler:
+    Call TraceError(Err.Number, Err.Description, "modElementalCombat.FireUserThorns", Erl)
+End Sub
+
+Private Sub FireSlotThorns(ByVal ObjIndex As Integer, ByVal defenderUserIndex As Integer, ByVal attackerIsNpc As Boolean, ByVal attackerIndex As Integer, ByVal netDamage As Long, ByVal logCtx As String)
+    If ObjIndex > 0 Then Call ResolveThorns(ObjData(ObjIndex).Elemental, defenderUserIndex, eUser, attackerIsNpc, attackerIndex, netDamage, logCtx)
+End Sub
+
 ' ============================================================================
 ' Punto de entrada gateado: camino user -> target (NPC o USER). Generalizado en la
 ' Ola 5 para habilitar PvP. Devuelve el dano elemental EXTRA (ya resistido por tipo).
