@@ -126,6 +126,19 @@ Public Function DamageTypeColor(ByVal t As e_ElementalDamageType) As Long
     If DamageTypeColor = 0 Then DamageTypeColor = vbWhite
 End Function
 
+' Nombre del tipo elemental cuyo color de numero coincide (para mensajes de consola, plan 20.002 TP4).
+' Devuelve "" si el color no corresponde a ningun tipo (ej dano fisico) -> el call-site usa el mensaje generico.
+Public Function DamageTypeNameFromColor(ByVal numberColor As Long) As String
+    If numberColor = 0 Or numberColor = vbWhite Then Exit Function
+    Dim t As Integer
+    For t = 1 To MAX_DAMAGE_TYPE_ID
+        If DamageTypeReg(t).NumberColor = numberColor Then
+            DamageTypeNameFromColor = DamageTypeReg(t).nombre
+            Exit Function
+        End If
+    Next t
+End Function
+
 Private Function ResistCapForType(ByVal t As e_ElementalDamageType) As Single
     Dim cap As Single
     If t >= 1 And t <= MAX_DAMAGE_TYPE_ID Then cap = DamageTypeReg(t).ResistCapPct

@@ -2029,7 +2029,15 @@ Public Function DoDamageOrHeal(ByVal NpcIndex As Integer, _
         If SourceType = eUser Then
             DamageStr = PonerPuntos(Math.Abs(amount))
             If UserList(SourceIndex).ChatCombate = 1 Then
-                Call WriteLocaleMsg(SourceIndex, MSG_DEALT_DAMAGE_TO_CREATURE, e_FontTypeNames.FONTTYPE_FIGHT, DamageStr)
+                ' Plan 20.002 TP4: si el dano es elemental (e_dot con color de tipo), nombrar el tipo en consola.
+                Dim dmgTypeName As String
+                dmgTypeName = vbNullString
+                If DamageSourceType = e_dot Then dmgTypeName = modElementalCombat.DamageTypeNameFromColor(DamageColor)
+                If LenB(dmgTypeName) > 0 Then
+                    Call WriteLocaleMsg(SourceIndex, MSG_DEALT_TYPED_DAMAGE_TO_CREATURE, e_FontTypeNames.FONTTYPE_FIGHT, DamageStr & Chr(&HAC) & dmgTypeName)
+                Else
+                    Call WriteLocaleMsg(SourceIndex, MSG_DEALT_DAMAGE_TO_CREATURE, e_FontTypeNames.FONTTYPE_FIGHT, DamageStr)
+                End If
             End If
         End If
         amount = EffectsOverTime.TargetApplyDamageReduction(NpcList(NpcIndex).EffectOverTime, amount, SourceIndex, SourceType, DamageSourceType)
