@@ -3106,6 +3106,10 @@ Public Sub CargarDonadores()
 End Sub
 
 Public Function IsFeatureEnabled(ByVal featureName As String)
+    ' Step 6 (plan 20.002): veneno unificado bajo el toggle maestro elemental.
+    ' "new_poison_system" quedo aliased a "elemental_system" (un solo interruptor;
+    ' elemental_system=0 => veneno ancestral/legacy). Reversible: borrar la linea alias.
+    If featureName = "new_poison_system" Then featureName = "elemental_system"
     If FeatureToggles.Exists(featureName) Then
         IsFeatureEnabled = FeatureToggles.Item(featureName)
     Else
