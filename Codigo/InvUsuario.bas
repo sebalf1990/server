@@ -1337,6 +1337,14 @@ Dim Ropaje                      As Integer
                 .invent.Object(Slot).Equipped = 1
                 .invent.EquippedAmuletAccesoryObjIndex = .invent.Object(Slot).ObjIndex
                 .invent.EquippedAmuletAccesorySlot = Slot
+                ' CP3 (20.002 Step 7): equipar un orbe elemental anula el encantamiento del arma (exclusividad)
+                If modElementalCombat.ElementalSystemEnabled() Then
+                    If modElementalCombat.HasElementalOrbEquipped(UserIndex) Then
+                        Call modElementalCombat.ClearEnchantedWeapon(UserIndex, "El orbe anula el encantamiento de tu arma.")
+                        If .flags.PoisonedWeaponObjIndex > 0 Then Call ClearPoisonedWeapon(UserIndex, "El orbe anula el veneno de tu arma.")
+                        If .flags.PoisonedAmmoObjIndex > 0 Then Call ClearPoisonedAmmo(UserIndex, "El orbe anula el veneno de tus flechas.", "orbe")
+                    End If
+                End If
                 Select Case obj.EfectoMagico
                     Case e_MagicItemEffect.eModifyAttributes    'Modif la fuerza, agilidad, carisma, etc
                         .Stats.UserAtributosBackUP(obj.QueAtributo) = .Stats.UserAtributosBackUP(obj.QueAtributo) + obj.CuantoAumento
@@ -1794,7 +1802,7 @@ Sub UseInvItem(ByVal UserIndex As Integer, ByVal Slot As Byte, ByVal ByClick As 
         ' --- Encantar Arma elemental (TOGGLE32): aceite/orbe con payload encantan el arma equipada ---
         If modElementalCombat.ElementalSystemEnabled() And obj.EnchantWeaponDurationMs <> 0 Then
             Dim ewMsg As String
-            If Not modElementalCombat.CanEnchantWeapon(.invent.EquippedWeaponObjIndex, obj.Elemental, ewMsg) Then
+            If Not modElementalCombat.CanEnchantWeapon(UserIndex, .invent.EquippedWeaponObjIndex, obj.Elemental, ewMsg) Then
                 Call WriteConsoleMsg(UserIndex, ewMsg, e_FontTypeNames.FONTTYPE_INFO)
                 Exit Sub
             End If
@@ -1803,16 +1811,10 @@ Sub UseInvItem(ByVal UserIndex As Integer, ByVal Slot As Byte, ByVal ByClick As 
                 Call WriteConsoleMsg(UserIndex, "Tu arma ya esta encantada.", e_FontTypeNames.FONTTYPE_INFO)
                 Exit Sub
             End If
-            .flags.EnchantWeaponObjIndex = .invent.EquippedWeaponObjIndex
-            .flags.EnchantWeaponSource = obj.Elemental
-            .flags.EnchantWeaponCargas = obj.CargasQueOtorga
+            Call modElementalCombat.SetEnchantedWeapon(UserIndex, .invent.EquippedWeaponObjIndex, obj.Elemental, obj.CargasQueOtorga, obj.EnchantWeaponDurationMs)
             If obj.EnchantWeaponDurationMs < 0 Then
-                .flags.EnchantWeaponPermanent = 1
-                .flags.EnchantWeaponDeadline = 0
                 Call WriteConsoleMsg(UserIndex, "Encantaste tu arma de forma permanente.", e_FontTypeNames.FONTTYPE_FIGHT)
             Else
-                .flags.EnchantWeaponPermanent = 0
-                .flags.EnchantWeaponDeadline = AddMod32(GetTickCountRaw(), obj.EnchantWeaponDurationMs)
                 Call WriteConsoleMsg(UserIndex, "Encantaste tu arma (" & (obj.EnchantWeaponDurationMs \ 1000) & "s).", e_FontTypeNames.FONTTYPE_FIGHT)
             End If
             Call QuitarUserInvItem(UserIndex, Slot, 1)
@@ -2238,6 +2240,11 @@ Sub UseInvItem(ByVal UserIndex As Integer, ByVal Slot As Byte, ByVal ByClick As 
                     Case e_PotionType.AppliesPoisonToWeapon
                         ' --- Sistema venenos (TOGGLE26): vial contextual arma/flechas ---
                         If Not IsFeatureEnabled("new_poison_system") Then Exit Sub
+                        ' CP3 (20.002 Step 7): el orbe elemental equipado anula/bloquea el untado de veneno
+                        If modElementalCombat.HasElementalOrbEquipped(UserIndex) Then
+                            Call WriteConsoleMsg(UserIndex, "No podes untar veneno con un orbe equipado.", e_FontTypeNames.FONTTYPE_INFO)
+                            Exit Sub
+                        End If
                         If obj.FamiliaVeneno < 1 Or obj.FamiliaVeneno > 3 Or obj.CargasQueOtorga <= 0 Then
                             Call WriteConsoleMsg(UserIndex, "El vial de veneno no esta configurado correctamente.", e_FontTypeNames.FONTTYPE_INFO)
                             Exit Sub

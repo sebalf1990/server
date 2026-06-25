@@ -1631,7 +1631,7 @@ Sub HechizoEstadoUsuario(ByVal UserIndex As Integer, ByRef b As Boolean)
         Dim ewWpn As Integer
         ewWpn = UserList(targetUserIndex).invent.EquippedWeaponObjIndex
         Dim ewMsgH As String
-        If Not modElementalCombat.CanEnchantWeapon(ewWpn, Hechizos(h).Elemental, ewMsgH) Then
+        If Not modElementalCombat.CanEnchantWeapon(targetUserIndex, ewWpn, Hechizos(h).Elemental, ewMsgH) Then
             Call WriteConsoleMsg(UserIndex, ewMsgH, e_FontTypeNames.FONTTYPE_INFO)
             b = False
             Exit Sub
@@ -1642,13 +1642,7 @@ Sub HechizoEstadoUsuario(ByVal UserIndex As Integer, ByRef b As Boolean)
             b = False
             Exit Sub
         End If
-        With UserList(targetUserIndex).flags
-            .EnchantWeaponObjIndex = ewWpn
-            .EnchantWeaponDeadline = AddMod32(GetTickCountRaw(), Hechizos(h).EnchantWeaponDurationMs)
-            .EnchantWeaponSource = Hechizos(h).Elemental
-            .EnchantWeaponPermanent = 0
-            .EnchantWeaponCargas = Hechizos(h).CargasQueOtorga
-        End With
+        Call modElementalCombat.SetEnchantedWeapon(targetUserIndex, ewWpn, Hechizos(h).Elemental, Hechizos(h).CargasQueOtorga, Hechizos(h).EnchantWeaponDurationMs)
         Call InfoHechizo(UserIndex)
         Call WriteConsoleMsg(targetUserIndex, "Tu arma fue encantada (" & (Hechizos(h).EnchantWeaponDurationMs \ 1000) & "s).", e_FontTypeNames.FONTTYPE_FIGHT)
         If targetUserIndex <> UserIndex Then Call WriteConsoleMsg(UserIndex, "Encantaste el arma de " & UserList(targetUserIndex).name & ".", e_FontTypeNames.FONTTYPE_FIGHT)
@@ -1657,6 +1651,12 @@ Sub HechizoEstadoUsuario(ByVal UserIndex As Integer, ByRef b As Boolean)
     End If
     ' --- Sistema venenos nuevo (TOGGLE26): TipoHechizoVeneno=1 unta arma/flechas del target ---
     If IsFeatureEnabled("new_poison_system") And Hechizos(h).TipoHechizoVeneno = 1 Then
+        ' CP3 (20.002 Step 7): el orbe elemental equipado del target anula/bloquea el untado de veneno
+        If modElementalCombat.HasElementalOrbEquipped(targetUserIndex) Then
+            Call WriteConsoleMsg(UserIndex, "El objetivo tiene un orbe equipado: no se puede untar veneno.", e_FontTypeNames.FONTTYPE_INFO)
+            b = False
+            Exit Sub
+        End If
         ' Target debe ser un usuario valido (self o aliado). No validamos hostilidad: aceptamos cualquier user.
         ' Si queres castear self con AutoLanzar=1 ya se controla en PuedeLanzar.
         If Hechizos(h).FamiliaVeneno < 1 Or Hechizos(h).FamiliaVeneno > 3 Or Hechizos(h).CargasQueOtorga <= 0 Then

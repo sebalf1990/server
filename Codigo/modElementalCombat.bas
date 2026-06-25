@@ -425,12 +425,21 @@ Public Function ElementalDamageUserVsTarget(ByVal UserIndex As Integer, ByVal ta
             End If
         End If
     End With
-    ' Orbe/amuleto equipado: su efecto elemental aplica mientras este equipado (el motor alcanza el orbe).
+    ' Orbe/amuleto equipado: aplica solo con arma MELEE base sin elemental propio (CP3 Step 7):
+    ' R5 no afecta arcos/proyectiles; R6 no se suma si el arma ya tiene elemental propio (vive el del arma).
     Dim orbIdx As Integer
     orbIdx = UserList(UserIndex).invent.EquippedAmuletAccesoryObjIndex
     If orbIdx > 0 Then
-        total = total + ResolveComponentsVsTarget(ObjData(orbIdx).Elemental, targetIsNpc, targetIndex, ctx & " orb")
-        total = total + FireProcs(ObjData(orbIdx).Elemental, eProcOnHit, targetIsNpc, targetIndex, UserIndex, eUser, ctx & " orb")
+        Dim orbAplica As Boolean
+        orbAplica = True
+        If WeaponObjIndex > 0 Then
+            If ObjData(WeaponObjIndex).Proyectil > 0 Then orbAplica = False
+            If ObjData(WeaponObjIndex).Elemental.CompCount > 0 Or ObjData(WeaponObjIndex).Elemental.ProcCount > 0 Then orbAplica = False
+        End If
+        If orbAplica Then
+            total = total + ResolveComponentsVsTarget(ObjData(orbIdx).Elemental, targetIsNpc, targetIndex, ctx & " orb")
+            total = total + FireProcs(ObjData(orbIdx).Elemental, eProcOnHit, targetIsNpc, targetIndex, UserIndex, eUser, ctx & " orb")
+        End If
     End If
     ' Procs onDamaged del defensor (thorns/aura). Solo NPC por ahora (thorns de user defensor = diferido).
     If targetIsNpc Then
@@ -561,7 +570,7 @@ End Function
 
 ' CP2 (20.002 Step 7): valida que un arma sea encantable (Subtipo=11) y acepte el tipo de la fuente
 ' (TiposElementalCompatibles, CSV; vacio = todos). Devuelve False + outMsg de rechazo.
-Public Function CanEnchantWeapon(ByVal WeaponObjIndex As Integer, ByRef src As t_ElementalSource, ByRef outMsg As String) As Boolean
+Public Function CanEnchantWeapon(ByVal UserIndex As Integer, ByVal WeaponObjIndex As Integer, ByRef src As t_ElementalSource, ByRef outMsg As String) As Boolean
     On Error GoTo ErrHandler
     outMsg = vbNullString
     If WeaponObjIndex <= 0 Then
@@ -570,6 +579,11 @@ Public Function CanEnchantWeapon(ByVal WeaponObjIndex As Integer, ByRef src As t
     End If
     If ObjData(WeaponObjIndex).Subtipo <> 11 Then
         outMsg = "Esa arma no se puede encantar."
+        Exit Function
+    End If
+    ' CP3 (20.002 Step 7): no se puede encantar con un orbe elemental equipado (exclusividad)
+    If HasElementalOrbEquipped(UserIndex) Then
+        outMsg = "No podes encantar el arma con un orbe equipado."
         Exit Function
     End If
     Dim csv As String
@@ -584,6 +598,30 @@ Public Function CanEnchantWeapon(ByVal WeaponObjIndex As Integer, ByRef src As t
     Exit Function
 ErrHandler:
     Call TraceError(Err.Number, Err.Description, "modElementalCombat.CanEnchantWeapon", Erl)
+End Function
+
+' CP3 (20.002 Step 7): setter unificado del encantamiento de arma (aceite/hechizo). Un solo punto de verdad.
+Public Sub SetEnchantedWeapon(ByVal UserIndex As Integer, ByVal WeaponObjIndex As Integer, ByRef src As t_ElementalSource, ByVal cargas As Integer, ByVal durationMs As Long)
+    With UserList(UserIndex).flags
+        .EnchantWeaponObjIndex = WeaponObjIndex
+        .EnchantWeaponSource = src
+        .EnchantWeaponCargas = cargas
+        If durationMs < 0 Then
+            .EnchantWeaponPermanent = 1
+            .EnchantWeaponDeadline = 0
+        Else
+            .EnchantWeaponPermanent = 0
+            .EnchantWeaponDeadline = AddMod32(GetTickCountRaw(), durationMs)
+        End If
+    End With
+End Sub
+
+' True si el user tiene un orbe elemental equipado (amuleto cuyo Elemental tiene componentes o procs).
+Public Function HasElementalOrbEquipped(ByVal UserIndex As Integer) As Boolean
+    Dim orbIdx As Integer
+    orbIdx = UserList(UserIndex).invent.EquippedAmuletAccesoryObjIndex
+    If orbIdx <= 0 Then Exit Function
+    HasElementalOrbEquipped = (ObjData(orbIdx).Elemental.CompCount > 0 Or ObjData(orbIdx).Elemental.ProcCount > 0)
 End Function
 
 ' Punto de entrada: camino NPC -> user (PvP elemental). El NPC atacante saca sus componentes/procs
