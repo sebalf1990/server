@@ -392,6 +392,70 @@ Private Function FireProcs(ByRef src As t_ElementalSource, ByVal trig As e_ProcT
     FireProcs = total
 End Function
 
+' === Espinas / Thorns (plan 20.002) ===
+' El DEFENSOR retalia al ATACANTE tras recibir un golpe (se llama POST-dano para conocer el dano neto).
+' Maneja procs onDamaged Kind=dmgBonus con el modelo configurable: fijo (Min-Max) o reflejo % de netDamage;
+' fisico o elemental; directo o resistido (elemental=resist del tipo; fisico-resistido=TP3); letal o no.
+' El applyState onDamaged (efectos) lo sigue disparando FireProcs en el on-hit. Anti-loop: aplica por
+' DoDamageOrHeal directo (e_dot), no re-dispara espinas.
+Public Sub ResolveThorns(ByRef defenderSrc As t_ElementalSource, ByVal defenderIndex As Integer, ByVal defenderType As e_ReferenceType, ByVal attackerIsNpc As Boolean, ByVal attackerIndex As Integer, ByVal netDamage As Long, ByVal logCtx As String)
+    On Error GoTo ErrHandler
+    If Not ElementalSystemEnabled() Then Exit Sub
+    If attackerIndex <= 0 Then Exit Sub
+    Dim i As Integer
+    For i = 1 To defenderSrc.ProcCount
+        If defenderSrc.Proc(i).Trigger = eProcOnDamaged And defenderSrc.Proc(i).Kind = eProcDamageBonus Then
+            Dim ch As Long
+            ch = defenderSrc.Proc(i).ChancePct
+            If ch < 0 Then ch = 0
+            If ch > 100 Then ch = 100
+            If ch >= 100 Or RandomNumber(1, 100) <= ch Then
+                Dim dmg As Long
+                If defenderSrc.Proc(i).ReflectPct > 0 Then
+                    dmg = (netDamage * defenderSrc.Proc(i).ReflectPct) \ 100
+                Else
+                    Dim c As t_DamageComponent
+                    c.DamageType = defenderSrc.Proc(i).DamageType
+                    c.MinDamage = defenderSrc.Proc(i).MinDamage
+                    c.MaxDamage = defenderSrc.Proc(i).MaxDamage
+                    dmg = RollDamageComponent(c)
+                End If
+                If defenderSrc.Proc(i).BypassResist = 0 And defenderSrc.Proc(i).Physical = 0 Then
+                    Dim rThorn As t_ElementalResist, nulT As Boolean
+                    rThorn = GetTargetResist(attackerIsNpc, attackerIndex, defenderSrc.Proc(i).DamageType)
+                    dmg = ApplyElementalResist(dmg, rThorn, defenderSrc.Proc(i).DamageType, nulT)
+                End If
+                If dmg > 0 Then Call ApplyThornsDamage(attackerIsNpc, attackerIndex, defenderIndex, defenderType, dmg, defenderSrc.Proc(i).Lethal, defenderSrc.Proc(i).Physical, defenderSrc.Proc(i).DamageType, logCtx)
+            End If
+        End If
+    Next i
+    Exit Sub
+ErrHandler:
+    Call TraceError(Err.Number, Err.Description, "modElementalCombat.ResolveThorns", Erl)
+End Sub
+
+' Aplica el dano de espina al ATACANTE (user o NPC). Letalidad: si lethal=0, cap a HP-1. Directo (e_dot).
+Private Sub ApplyThornsDamage(ByVal attackerIsNpc As Boolean, ByVal attackerIndex As Integer, ByVal defenderIndex As Integer, ByVal defenderType As e_ReferenceType, ByVal dmg As Long, ByVal lethal As Byte, ByVal physical As Byte, ByVal dmgType As e_ElementalDamageType, ByVal logCtx As String)
+    On Error GoTo ErrHandler
+    Dim col As Long
+    If physical = 1 Then col = vbRed Else col = DamageTypeColor(dmgType)
+    If attackerIsNpc Then
+        If lethal = 0 Then
+            If dmg >= NpcList(attackerIndex).Stats.MinHp Then dmg = NpcList(attackerIndex).Stats.MinHp - 1
+        End If
+        If dmg > 0 Then Call NPCs.DoDamageOrHeal(attackerIndex, defenderIndex, defenderType, -dmg, e_dot, 0, col)
+    Else
+        If lethal = 0 Then
+            If dmg >= UserList(attackerIndex).Stats.MinHp Then dmg = UserList(attackerIndex).Stats.MinHp - 1
+        End If
+        If dmg > 0 Then Call UserMod.DoDamageOrHeal(attackerIndex, defenderIndex, defenderType, -dmg, e_dot, 0, , , col)
+    End If
+    If dmg > 0 Then Call ElementalLog(logCtx & " THORNS dmg=" & dmg & IIf(physical = 1, " fisico", " " & DamageTypeName(dmgType)) & IIf(lethal = 0, " (no letal)", ""))
+    Exit Sub
+ErrHandler:
+    Call TraceError(Err.Number, Err.Description, "modElementalCombat.ApplyThornsDamage", Erl)
+End Sub
+
 ' ============================================================================
 ' Punto de entrada gateado: camino user -> target (NPC o USER). Generalizado en la
 ' Ola 5 para habilitar PvP. Devuelve el dano elemental EXTRA (ya resistido por tipo).
@@ -441,14 +505,13 @@ Public Function ElementalDamageUserVsTarget(ByVal UserIndex As Integer, ByVal ta
             total = total + FireProcs(ObjData(orbIdx).Elemental, eProcOnHit, targetIsNpc, targetIndex, UserIndex, eUser, ctx & " orb")
         End If
     End If
-    ' Procs onDamaged del defensor (thorns/aura). Solo NPC por ahora (thorns de user defensor = diferido).
+    ' Procs onDamaged del defensor: applyState (efectos) del NPC. El DANO (dmgBonus) lo aplica ResolveThorns
+    ' POST-dano (HP sink real, plan 20.002 espinas). Aca solo se disparan los efectos.
     If targetIsNpc Then
         Dim t As Integer
         t = NpcList(targetIndex).Numero
         If t > 0 Then
-            Dim retal As Long
-            retal = FireProcs(NpcInfoCache(t).Elemental, eProcOnDamaged, False, UserIndex, targetIndex, eNpc, ctx & " thorns")
-            If retal > 0 Then Call ElementalLog(ctx & " thorns retaliation=" & retal & " [HP sink Ola1]")
+            Call FireProcs(NpcInfoCache(t).Elemental, eProcOnDamaged, False, UserIndex, targetIndex, eNpc, ctx & " thorns")
         End If
     End If
     ' Color del numero elemental: tipo primario del arma base; si no tiene, del encantamiento.
@@ -716,6 +779,10 @@ Public Sub ParseElementalSourceFromIni(ByRef Leer As clsIniManager, ByVal sect A
         src.Proc(i).MinDamage = val(Leer.GetValue(sect, p & "Min"))
         src.Proc(i).MaxDamage = val(Leer.GetValue(sect, p & "Max"))
         src.Proc(i).EotId = val(Leer.GetValue(sect, p & "Eot"))
+        src.Proc(i).ReflectPct = val(Leer.GetValue(sect, p & "ReflectPct"))
+        src.Proc(i).Physical = val(Leer.GetValue(sect, p & "Physical"))
+        src.Proc(i).BypassResist = val(Leer.GetValue(sect, p & "BypassResist"))
+        src.Proc(i).Lethal = val(Leer.GetValue(sect, p & "Lethal"))
     Next i
     src.ProcCount = n
 End Sub

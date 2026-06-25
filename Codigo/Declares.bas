@@ -1763,6 +1763,11 @@ Public Type t_ElementalProc
     MinDamage As Long           ' eProcDamageBonus
     MaxDamage As Long           ' eProcDamageBonus
     EotId As Integer            ' eProcApplyState (preset EffectsOverTime.dat) -- Ola 1
+    ' --- Espinas / Thorns (plan 20.002): config del proc onDamaged ---
+    ReflectPct As Long          ' 0 = fijo (Min/Max); >0 = reflejo % del dano neto recibido
+    Physical As Byte            ' 1 = dano fisico; 0 = elemental (usa DamageType)
+    BypassResist As Byte        ' 1 = directo; 0 = resistido (armadura si fisico, resist de tipo si elemental)
+    Lethal As Byte              ' 1 = puede matar; 0 = deja al atacante en 1 HP
 End Type
 
 Public Type t_ElementalResist

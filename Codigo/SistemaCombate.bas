@@ -479,6 +479,8 @@ Private Sub UserDamageNpc(ByVal UserIndex As Integer, ByVal NpcIndex As Integer,
         Dim elemColor As Long
         Dim npcAlive As Boolean
         npcAlive = True
+        Dim hpAntesN As Long
+        hpAntesN = NpcList(NpcIndex).Stats.MinHp
         elemDmg = modElementalCombat.ElementalDamageUserVsNpc(UserIndex, NpcIndex, .invent.EquippedWeaponObjIndex, .invent.EquippedMunitionObjIndex, elemColor)
         If elemDmg > 0 Then
             If NPCs.DoDamageOrHeal(NpcIndex, UserIndex, eUser, -elemDmg, e_dot, .invent.EquippedWeaponObjIndex, elemColor) = eDead Then npcAlive = False
@@ -515,7 +517,17 @@ Private Sub UserDamageNpc(ByVal UserIndex As Integer, ByVal NpcIndex As Integer,
             If IsFeatureEnabled("new_poison_system") And ObjInd > 0 Then
                 Call TryPoisonNpcWithWeapon(UserIndex, NpcIndex, ObjInd)
             End If
+        Else
+            npcAlive = False
         End If
+        End If
+        ' Espinas (plan 20.002): el NPC defensor retalia POST-dano, solo si sobrevivio (decision A)
+        If npcAlive Then
+            Dim tThorns As Integer
+            tThorns = NpcList(NpcIndex).Numero
+            Dim netDmgN As Long
+            netDmgN = hpAntesN - NpcList(NpcIndex).Stats.MinHp
+            If tThorns > 0 And netDmgN > 0 Then Call modElementalCombat.ResolveThorns(NpcInfoCache(tThorns).Elemental, NpcIndex, eNpc, False, UserIndex, netDmgN, "U" & UserIndex & "->N" & NpcIndex)
         End If
     End With
     Exit Sub
