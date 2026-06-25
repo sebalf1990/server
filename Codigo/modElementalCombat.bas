@@ -464,6 +464,128 @@ Public Function ElementalDamageUserVsNpc(ByVal UserIndex As Integer, ByVal NpcIn
     ElementalDamageUserVsNpc = ElementalDamageUserVsTarget(UserIndex, True, NpcIndex, WeaponObjIndex, MunitionObjIndex, outColor)
 End Function
 
+Public Sub OnEnchantedWeaponSwing(ByVal UserIndex As Integer)
+    On Error GoTo ErrHandler
+    If Not ElementalSystemEnabled() Then Exit Sub
+    With UserList(UserIndex).flags
+        If .EnchantWeaponObjIndex <= 0 Then Exit Sub
+        ' El arma equipada debe coincidir con la encantada
+        If UserList(UserIndex).invent.EquippedWeaponObjIndex <> .EnchantWeaponObjIndex Then Exit Sub
+        ' Permanente: no expira ni consume cargas
+        If .EnchantWeaponPermanent = 1 Then Exit Sub
+        ' Expiracion por tiempo (igual que el veneno: se chequea al swingear)
+        If .EnchantWeaponDeadline <> 0 Then
+            If DeadlinePassed(GetTickCountRaw(), .EnchantWeaponDeadline) Then
+                Call ClearEnchantedWeapon(UserIndex, "El encantamiento de tu arma se ha disipado.")
+                Exit Sub
+            End If
+        End If
+        ' Consumo de cargas (0 = sin limite de cargas, solo tiempo/permanente)
+        If .EnchantWeaponCargas > 0 Then
+            .EnchantWeaponCargas = .EnchantWeaponCargas - 1
+            If .EnchantWeaponCargas <= 0 Then
+                Call ClearEnchantedWeapon(UserIndex, "El encantamiento de tu arma se ha agotado.")
+            End If
+        End If
+    End With
+    Exit Sub
+ErrHandler:
+    Call TraceError(Err.Number, Err.Description, "modElementalCombat.OnEnchantedWeaponSwing", Erl)
+End Sub
+
+' Tick desde el game loop: expira el encantamiento por tiempo aunque el user no pegue (paridad con el veneno).
+Public Sub CheckEnchantedWeaponTick(ByVal UserIndex As Integer)
+    On Error GoTo ErrHandler
+    If Not ElementalSystemEnabled() Then Exit Sub
+    With UserList(UserIndex).flags
+        If .EnchantWeaponObjIndex <= 0 Then Exit Sub
+        If .EnchantWeaponPermanent = 1 Then Exit Sub
+        If .EnchantWeaponDeadline = 0 Then Exit Sub
+        If DeadlinePassed(GetTickCountRaw(), .EnchantWeaponDeadline) Then
+            Call ClearEnchantedWeapon(UserIndex, "El encantamiento de tu arma se ha disipado.")
+        End If
+    End With
+    Exit Sub
+ErrHandler:
+    Call TraceError(Err.Number, Err.Description, "modElementalCombat.CheckEnchantedWeaponTick", Erl)
+End Sub
+
+' Limpia el cache del encantamiento elemental del arma (cargas agotadas / tiempo expirado).
+Public Sub ClearEnchantedWeapon(ByVal UserIndex As Integer, Optional ByVal msg As String = "")
+    On Error GoTo ErrHandler
+    If UserIndex <= 0 Then Exit Sub
+    With UserList(UserIndex).flags
+        If .EnchantWeaponObjIndex = 0 And .EnchantWeaponCargas = 0 And .EnchantWeaponPermanent = 0 Then Exit Sub
+        Dim emptySrc As t_ElementalSource
+        .EnchantWeaponObjIndex = 0
+        .EnchantWeaponDeadline = 0
+        .EnchantWeaponPermanent = 0
+        .EnchantWeaponCargas = 0
+        .EnchantWeaponSource = emptySrc
+    End With
+    If LenB(msg) > 0 Then Call WriteConsoleMsg(UserIndex, msg, e_FontTypeNames.FONTTYPE_INFO)
+    Exit Sub
+ErrHandler:
+    Call TraceError(Err.Number, Err.Description, "modElementalCombat.ClearEnchantedWeapon", Erl)
+End Sub
+
+' True si el arma indicada tiene un encantamiento elemental ACTIVO (permanente, con cargas, o sin expirar).
+Public Function IsWeaponEnchantedActive(ByVal UserIndex As Integer, ByVal WeaponObjIndex As Integer) As Boolean
+    On Error GoTo ErrHandler
+    If UserIndex <= 0 Or WeaponObjIndex <= 0 Then Exit Function
+    With UserList(UserIndex).flags
+        If .EnchantWeaponObjIndex <> WeaponObjIndex Then Exit Function
+        If .EnchantWeaponPermanent = 1 Then
+            IsWeaponEnchantedActive = True
+        ElseIf .EnchantWeaponCargas > 0 Then
+            IsWeaponEnchantedActive = True
+        ElseIf .EnchantWeaponDeadline <> 0 Then
+            IsWeaponEnchantedActive = Not DeadlinePassed(GetTickCountRaw(), .EnchantWeaponDeadline)
+        End If
+    End With
+    Exit Function
+ErrHandler:
+    Call TraceError(Err.Number, Err.Description, "modElementalCombat.IsWeaponEnchantedActive", Erl)
+End Function
+
+' Tipo primario de una fuente elemental (componente primario, o proc primario si no hay componente).
+Private Function PrimaryElementalType(ByRef src As t_ElementalSource) As Integer
+    If src.CompCount > 0 Then
+        PrimaryElementalType = src.Comp(1).DamageType
+    ElseIf src.ProcCount > 0 Then
+        PrimaryElementalType = src.Proc(1).DamageType
+    Else
+        PrimaryElementalType = eDmgNone
+    End If
+End Function
+
+' CP2 (20.002 Step 7): valida que un arma sea encantable (Subtipo=11) y acepte el tipo de la fuente
+' (TiposElementalCompatibles, CSV; vacio = todos). Devuelve False + outMsg de rechazo.
+Public Function CanEnchantWeapon(ByVal WeaponObjIndex As Integer, ByRef src As t_ElementalSource, ByRef outMsg As String) As Boolean
+    On Error GoTo ErrHandler
+    outMsg = vbNullString
+    If WeaponObjIndex <= 0 Then
+        outMsg = "No hay un arma equipada para encantar."
+        Exit Function
+    End If
+    If ObjData(WeaponObjIndex).Subtipo <> 11 Then
+        outMsg = "Esa arma no se puede encantar."
+        Exit Function
+    End If
+    Dim csv As String
+    csv = ObjData(WeaponObjIndex).TiposElementalCompatibles
+    If LenB(csv) > 0 Then
+        If InStr("," & csv & ",", "," & CStr(PrimaryElementalType(src)) & ",") = 0 Then
+            outMsg = "El arma no acepta este tipo de encantamiento."
+            Exit Function
+        End If
+    End If
+    CanEnchantWeapon = True
+    Exit Function
+ErrHandler:
+    Call TraceError(Err.Number, Err.Description, "modElementalCombat.CanEnchantWeapon", Erl)
+End Function
+
 ' Punto de entrada: camino NPC -> user (PvP elemental). El NPC atacante saca sus componentes/procs
 ' de NpcInfoCache. Devuelve el dano elemental EXTRA (ya resistido por el tipo del defensor user).
 Public Function ElementalDamageNpcVsUser(ByVal NpcIndex As Integer, ByVal VictimaIndex As Integer, ByRef outColor As Long) As Long

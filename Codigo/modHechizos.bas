@@ -1630,8 +1630,15 @@ Sub HechizoEstadoUsuario(ByVal UserIndex As Integer, ByRef b As Boolean)
     If modElementalCombat.ElementalSystemEnabled() And Hechizos(h).EnchantWeaponDurationMs > 0 Then
         Dim ewWpn As Integer
         ewWpn = UserList(targetUserIndex).invent.EquippedWeaponObjIndex
-        If ewWpn <= 0 Then
-            Call WriteConsoleMsg(UserIndex, "El objetivo no tiene arma equipada.", e_FontTypeNames.FONTTYPE_INFO)
+        Dim ewMsgH As String
+        If Not modElementalCombat.CanEnchantWeapon(ewWpn, Hechizos(h).Elemental, ewMsgH) Then
+            Call WriteConsoleMsg(UserIndex, ewMsgH, e_FontTypeNames.FONTTYPE_INFO)
+            b = False
+            Exit Sub
+        End If
+        ' CP1 fix (paridad veneno): rechazar si el arma del objetivo ya tiene encantamiento activo
+        If modElementalCombat.IsWeaponEnchantedActive(targetUserIndex, ewWpn) Then
+            Call WriteConsoleMsg(UserIndex, "El arma del objetivo ya esta encantada.", e_FontTypeNames.FONTTYPE_INFO)
             b = False
             Exit Sub
         End If
@@ -1640,6 +1647,7 @@ Sub HechizoEstadoUsuario(ByVal UserIndex As Integer, ByRef b As Boolean)
             .EnchantWeaponDeadline = AddMod32(GetTickCountRaw(), Hechizos(h).EnchantWeaponDurationMs)
             .EnchantWeaponSource = Hechizos(h).Elemental
             .EnchantWeaponPermanent = 0
+            .EnchantWeaponCargas = Hechizos(h).CargasQueOtorga
         End With
         Call InfoHechizo(UserIndex)
         Call WriteConsoleMsg(targetUserIndex, "Tu arma fue encantada (" & (Hechizos(h).EnchantWeaponDurationMs \ 1000) & "s).", e_FontTypeNames.FONTTYPE_FIGHT)

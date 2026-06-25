@@ -2541,6 +2541,7 @@ Public Type t_ObjData
     ' Comun a armas (Subtipo=10/11), viales (TipoPocion=24) y pociones curativas (TipoPocion=25)
     FamiliaVeneno As Byte               ' 0=ninguna, 1=Menor, 2=Hemo, 3=Neuro
     FamiliasCompatibles As String       ' CSV para armas envenenables Subtipo=11 (ej "1,2,3")
+    TiposElementalCompatibles As String ' CP2 (20.002 Step 7): CSV de tipos que acepta el arma Subtipo=11 (ej "2,3"); vacio = todos
     ChanceAplicarPct As Long
     TickIntervaloMs As Long
     DuracionMs As Long
@@ -2878,6 +2879,7 @@ Public Type t_UserFlags
     EnchantWeaponObjIndex As Integer
     EnchantWeaponDeadline As Long
     EnchantWeaponPermanent As Byte
+    EnchantWeaponCargas As Integer      ' CP1 (20.002 Step 7): 0 = sin limite de cargas (solo tiempo/permanente)
     EnchantWeaponSource As t_ElementalSource
     ' Untado de municion (TOGGLE26): cache independiente para el stack de flechas equipado.
     PoisonedAmmoObjIndex As Integer

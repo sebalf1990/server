@@ -1793,12 +1793,19 @@ Sub UseInvItem(ByVal UserIndex As Integer, ByVal Slot As Byte, ByVal ByClick As 
         .flags.TargetObjInvSlot = Slot
         ' --- Encantar Arma elemental (TOGGLE32): aceite/orbe con payload encantan el arma equipada ---
         If modElementalCombat.ElementalSystemEnabled() And obj.EnchantWeaponDurationMs <> 0 Then
-            If .invent.EquippedWeaponObjIndex <= 0 Then
-                Call WriteConsoleMsg(UserIndex, "Necesitas un arma equipada para encantar.", e_FontTypeNames.FONTTYPE_INFO)
+            Dim ewMsg As String
+            If Not modElementalCombat.CanEnchantWeapon(.invent.EquippedWeaponObjIndex, obj.Elemental, ewMsg) Then
+                Call WriteConsoleMsg(UserIndex, ewMsg, e_FontTypeNames.FONTTYPE_INFO)
+                Exit Sub
+            End If
+            ' CP1 fix (paridad veneno): rechazar re-encantar si el arma ya tiene encantamiento activo
+            If modElementalCombat.IsWeaponEnchantedActive(UserIndex, .invent.EquippedWeaponObjIndex) Then
+                Call WriteConsoleMsg(UserIndex, "Tu arma ya esta encantada.", e_FontTypeNames.FONTTYPE_INFO)
                 Exit Sub
             End If
             .flags.EnchantWeaponObjIndex = .invent.EquippedWeaponObjIndex
             .flags.EnchantWeaponSource = obj.Elemental
+            .flags.EnchantWeaponCargas = obj.CargasQueOtorga
             If obj.EnchantWeaponDurationMs < 0 Then
                 .flags.EnchantWeaponPermanent = 1
                 .flags.EnchantWeaponDeadline = 0

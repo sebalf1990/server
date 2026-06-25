@@ -964,6 +964,8 @@ Public Sub UsuarioAtaca(ByVal UserIndex As Integer)
         ' Sistema venenos (TOGGLE26): decremento de cargas + expiracion al swing, acierte o no.
         ' Va aca para incluir swings al aire (sin target).
         Call OnPoisonedWeaponSwing(UserIndex)
+        ' CP1 (20.002 Step 7): mismo punto, consumo de cargas del encantamiento elemental
+        Call modElementalCombat.OnEnchantedWeaponSwing(UserIndex)
         If .Counters.Trabajando Then
             Call WriteMacroTrabajoToggle(UserIndex, False)
         End If

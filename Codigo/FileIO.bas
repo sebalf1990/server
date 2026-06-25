@@ -1173,6 +1173,7 @@ Sub LoadOBJData()
             ' --- Sistema de venenos nuevo (TOGGLE26 new_poison_system) ---
             .FamiliaVeneno = val(Leer.GetValue(ObjKey, "FamiliaVeneno"))
             .FamiliasCompatibles = Leer.GetValue(ObjKey, "FamiliasCompatibles")
+            .TiposElementalCompatibles = Leer.GetValue(ObjKey, "TiposElementalCompatibles")
             .ChanceAplicarPct = val(Leer.GetValue(ObjKey, "ChanceAplicarPct"))
             .TickIntervaloMs = val(Leer.GetValue(ObjKey, "TickIntervaloMs"))
             .DuracionMs = val(Leer.GetValue(ObjKey, "DuracionMs"))
