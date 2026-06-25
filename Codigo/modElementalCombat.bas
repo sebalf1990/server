@@ -420,10 +420,20 @@ Public Sub ResolveThorns(ByRef defenderSrc As t_ElementalSource, ByVal defenderI
                     c.MaxDamage = defenderSrc.Proc(i).MaxDamage
                     dmg = RollDamageComponent(c)
                 End If
-                If defenderSrc.Proc(i).BypassResist = 0 And defenderSrc.Proc(i).Physical = 0 Then
-                    Dim rThorn As t_ElementalResist, nulT As Boolean
-                    rThorn = GetTargetResist(attackerIsNpc, attackerIndex, defenderSrc.Proc(i).DamageType)
-                    dmg = ApplyElementalResist(dmg, rThorn, defenderSrc.Proc(i).DamageType, nulT)
+                If defenderSrc.Proc(i).BypassResist = 0 Then
+                    If defenderSrc.Proc(i).Physical = 0 Then
+                        ' Elemental resistido: por la resist del tipo del atacante.
+                        Dim rThorn As t_ElementalResist, nulT As Boolean
+                        rThorn = GetTargetResist(attackerIsNpc, attackerIndex, defenderSrc.Proc(i).DamageType)
+                        dmg = ApplyElementalResist(dmg, rThorn, defenderSrc.Proc(i).DamageType, nulT)
+                    Else
+                        ' Fisico resistido (TP3): por la defensa/armadura del atacante (reusa la mitigacion fisica).
+                        If attackerIsNpc Then
+                            dmg = dmg * NPCs.GetPhysicDamageReduction(NpcList(attackerIndex))
+                        Else
+                            dmg = dmg * UserMod.GetPhysicDamageReduction(UserList(attackerIndex))
+                        End If
+                    End If
                 End If
                 If dmg > 0 Then Call ApplyThornsDamage(attackerIsNpc, attackerIndex, defenderIndex, defenderType, dmg, defenderSrc.Proc(i).Lethal, defenderSrc.Proc(i).Physical, defenderSrc.Proc(i).DamageType, logCtx)
             End If
