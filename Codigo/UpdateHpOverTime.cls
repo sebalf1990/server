@@ -96,7 +96,7 @@ Public Sub Setup(ByVal SourceIndex As Integer, _
         Modifiers = .EffectModifiers
         SecondTargetModifier = 1 - .SecondaryTargetModifier
         If DotInfo.TargetRef.RefType = eUser And EffectOverTime(DotInfo.EotId).ClientEffectTypeId > 0 Then Call WriteSendSkillCdUpdate(TargetIndex, .ClientEffectTypeId, Id, _
-                .TickTime * TargetTicks, .TickTime * TargetTicks, .buffType)
+                .TickTime * TargetTicks, .TickTime * TargetTicks, .buffType, StacksActuales)
     End With
     EffectBonus = 1
     If IsValidRef(Source) Then
@@ -177,10 +177,12 @@ Public Sub IBaseEffectOverTime_Update(ByVal DeltaTime As Long)
         TimeSinceLastDecay = TimeSinceLastDecay + DeltaTime
         If TimeSinceLastDecay >= DotDecayMs Then
             TimeSinceLastDecay = 0
-            StacksActuales = StacksActuales - 1
-            If StacksActuales <= 0 Then
-                DotInfo.RemoveEffect = True
-                Exit Sub
+            ' Decay baja stack pero NUNCA llega a 0 (piso en 1, como el veneno Hemo).
+            ' Solo el fin de los ticks (TickCount >= TargetTicks) termina el efecto.
+            If StacksActuales > 1 Then
+                StacksActuales = StacksActuales - 1
+                If DotInfo.TargetRef.RefType = eUser And EffectOverTime(DotInfo.EotId).ClientEffectTypeId > 0 Then _
+                    Call WriteUpdatePoisonStacks(DotInfo.TargetRef.ArrayIndex, DotInfo.UniqueId, StacksActuales)
             End If
         End If
     End If
@@ -217,7 +219,7 @@ Public Function IBaseEffectOverTime_Reset(ByVal SourceUserId As Integer, ByVal S
     End If
     If DotInfo.TargetRef.RefType = eUser And EffectOverTime(DotInfo.EotId).ClientEffectTypeId > 0 Then
         Call WriteSendSkillCdUpdate(DotInfo.TargetRef.ArrayIndex, EffectOverTime(DotInfo.EotId).ClientEffectTypeId, DotInfo.UniqueId, (TickTime * TargetTicks) - _
-                TimeSinceLastTick, TickTime * TargetTicks, EffectOverTime(DotInfo.EotId).buffType)
+                TimeSinceLastTick, TickTime * TargetTicks, EffectOverTime(DotInfo.EotId).buffType, StacksActuales)
     End If
 End Function
 
