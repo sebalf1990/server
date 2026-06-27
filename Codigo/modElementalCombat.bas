@@ -126,6 +126,11 @@ Public Function DamageTypeColor(ByVal t As e_ElementalDamageType) As Long
     If DamageTypeColor = 0 Then DamageTypeColor = vbWhite
 End Function
 
+' Plan 20.002 Checkpoint B: particula de impacto del tipo (DamageTypes.dat DefaultParticle). 0 = ninguna.
+Public Function DamageTypeDefaultParticle(ByVal t As e_ElementalDamageType) As Integer
+    If t >= 1 And t <= MAX_DAMAGE_TYPE_ID Then DamageTypeDefaultParticle = DamageTypeReg(t).DefaultParticle
+End Function
+
 ' Nombre del tipo elemental cuyo color de numero coincide (para mensajes de consola, plan 20.002 TP4).
 ' Devuelve "" si el color no corresponde a ningun tipo (ej dano fisico) -> el call-site usa el mensaje generico.
 Public Function DamageTypeNameFromColor(ByVal numberColor As Long) As String
@@ -326,6 +331,20 @@ End Function
 ' ============================================================================
 ' Resolucion de componentes y procs
 ' ============================================================================
+' Plan 20.002 Checkpoint B: dispara el burst de impacto del tipo sobre el target (si DefaultParticle>0).
+Private Sub SendImpactParticle(ByVal targetIsNpc As Boolean, ByVal targetIndex As Integer, ByVal damageType As e_ElementalDamageType)
+    Const FxTime As Long = 30 ' tunable: duracion del burst de impacto
+    Dim part As Integer
+    part = DamageTypeDefaultParticle(damageType)
+    If part <= 0 Then Exit Sub
+    If targetIndex <= 0 Then Exit Sub
+    If targetIsNpc Then
+        Call SendData(SendTarget.ToNPCAliveArea, targetIndex, PrepareMessageParticleFX(NpcList(targetIndex).Char.charindex, part, FxTime, False, , NpcList(targetIndex).pos.x, NpcList(targetIndex).pos.y))
+    Else
+        Call SendData(SendTarget.ToPCAliveArea, targetIndex, PrepareMessageParticleFX(UserList(targetIndex).Char.charindex, part, FxTime, False, , UserList(targetIndex).pos.x, UserList(targetIndex).pos.y))
+    End If
+End Sub
+
 Private Function ResolveComponentsVsTarget(ByRef src As t_ElementalSource, ByVal targetIsNpc As Boolean, ByVal targetIndex As Integer, ByVal logCtx As String) As Long
     Dim total As Long, i As Integer
     For i = 1 To src.CompCount
@@ -337,6 +356,7 @@ Private Function ResolveComponentsVsTarget(ByRef src As t_ElementalSource, ByVal
             Dim nullified As Boolean, finalDmg As Long
             finalDmg = ApplyElementalResist(raw, r, src.Comp(i).DamageType, nullified)
             total = total + finalDmg
+            If finalDmg > 0 Then Call SendImpactParticle(targetIsNpc, targetIndex, src.Comp(i).DamageType)
             Call ElementalLog(logCtx & " comp " & DamageTypeName(src.Comp(i).DamageType) & " raw=" & raw & " final=" & finalDmg & IIf(nullified, " [nullified]", "") & IIf(r.Immune <> 0, " [immune]", ""))
         End If
     Next i
