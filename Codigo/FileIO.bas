@@ -1236,6 +1236,7 @@ Sub LoadOBJData()
             Call modElementalCombat.ParseElementalSourceFromIni(Leer, ObjKey, .Elemental)
             Call modElementalCombat.ParseElementalResistFromIni(Leer, ObjKey, .ElementalResist)
             .EnchantWeaponDurationMs = val(Leer.GetValue(ObjKey, "EnchantWeaponDurationMs"))
+            .EnchantAmmoDurationMs = val(Leer.GetValue(ObjKey, "EnchantAmmoDurationMs"))
             If val(Leer.GetValue(ObjKey, "Bindable")) > 0 Then Call SetMask(.ObjFlags, e_ObjFlags.e_Bindable)
             If val(Leer.GetValue(ObjKey, "UseOnSafeAreaOnly")) > 0 Then Call SetMask(.ObjFlags, e_ObjFlags.e_UseOnSafeAreaOnly)
             Dim i As Integer

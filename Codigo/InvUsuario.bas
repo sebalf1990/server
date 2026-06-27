@@ -1822,6 +1822,28 @@ Sub UseInvItem(ByVal UserIndex As Integer, ByVal Slot As Byte, ByVal ByClick As 
             Exit Sub
         End If
 
+        ' --- Encantar Flechas elemental (TOGGLE32, 20.002 CP1 ammo): aceite con payload encanta las flechas equipadas ---
+        If modElementalCombat.ElementalSystemEnabled() And obj.EnchantAmmoDurationMs <> 0 Then
+            Dim eaMsg As String
+            If Not modElementalCombat.CanEnchantAmmo(UserIndex, .invent.EquippedMunitionObjIndex, obj.Elemental, eaMsg) Then
+                Call WriteConsoleMsg(UserIndex, eaMsg, e_FontTypeNames.FONTTYPE_INFO)
+                Exit Sub
+            End If
+            If modElementalCombat.IsAmmoEnchantedActive(UserIndex, .invent.EquippedMunitionObjIndex) Then
+                Call WriteConsoleMsg(UserIndex, "Tus flechas ya estan encantadas.", e_FontTypeNames.FONTTYPE_INFO)
+                Exit Sub
+            End If
+            Call modElementalCombat.SetEnchantedAmmo(UserIndex, .invent.EquippedMunitionObjIndex, obj.Elemental, obj.CargasQueOtorga, obj.EnchantAmmoDurationMs)
+            If obj.EnchantAmmoDurationMs < 0 Then
+                Call WriteConsoleMsg(UserIndex, "Encantaste tus flechas de forma permanente.", e_FontTypeNames.FONTTYPE_FIGHT)
+            Else
+                Call WriteConsoleMsg(UserIndex, "Encantaste tus flechas (" & (obj.EnchantAmmoDurationMs \ 1000) & "s).", e_FontTypeNames.FONTTYPE_FIGHT)
+            End If
+            Call QuitarUserInvItem(UserIndex, Slot, 1)
+            Call UpdateUserInv(False, UserIndex, Slot)
+            Exit Sub
+        End If
+
         If obj.ProfesionId > 0 Then
             If obj.OBJType = e_OBJType.otUseOnce Then
                 Call UsarManualProfesion(UserIndex, Slot)

@@ -2611,6 +2611,7 @@ Public Type t_ObjData
     Elemental As t_ElementalSource
     ElementalResist As t_ElementalResistSet
     EnchantWeaponDurationMs As Long  ' >0 = al usar el item encanta el arma N ms; <0 = permanente (demo)
+    EnchantAmmoDurationMs As Long    ' >0 = al usar el item encanta las flechas equipadas N ms; <0 = permanente (20.002 CP1)
 End Type
 
 '[Pablo ToxicWaste]
@@ -2887,6 +2888,12 @@ Public Type t_UserFlags
     EnchantWeaponPermanent As Byte
     EnchantWeaponCargas As Integer      ' CP1 (20.002 Step 7): 0 = sin limite de cargas (solo tiempo/permanente)
     EnchantWeaponSource As t_ElementalSource
+    ' --- Encantar Flechas elemental (TOGGLE32, 20.002 CP1 ammo): cache del stack de flechas encantado ---
+    EnchantedAmmoObjIndex As Integer
+    EnchantedAmmoDeadline As Long
+    EnchantedAmmoPermanent As Byte
+    EnchantedAmmoCargas As Integer
+    EnchantedAmmoSource As t_ElementalSource
     ' Untado de municion (TOGGLE26): cache independiente para el stack de flechas equipado.
     PoisonedAmmoObjIndex As Integer
     PoisonedAmmoFamilia As Byte

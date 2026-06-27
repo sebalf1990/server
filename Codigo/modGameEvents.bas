@@ -65,6 +65,7 @@ Public Sub MaybeRunGameEvents()
                         If .flags.PoisonedWeaponObjIndex > 0 Then Call CheckPoisonedWeaponTick(iUserIndex)
                         ' CP1 (20.002 Step 7): timer/expiracion del encantamiento elemental (sin pegar)
                         If .flags.EnchantWeaponObjIndex > 0 Then Call modElementalCombat.CheckEnchantedWeaponTick(iUserIndex)
+                        If .flags.EnchantedAmmoObjIndex > 0 Then Call modElementalCombat.CheckEnchantedAmmoTick(iUserIndex)
                     End If
                     If .flags.Meditando Then Call DoMeditar(iUserIndex)
                     If .flags.Mimetizado <> 0 Then Call EfectoMimetismo(iUserIndex)

@@ -2702,6 +2702,7 @@ Private Sub HandleWorkLeftClick(ByVal UserIndex As Integer)
                             'Take 1 arrow away - we do it AFTER hitting, since if Ammo Slot is 0 it gives a rt9 and kicks players
                             If consumirMunicion Then
                                 Call OnPoisonedAmmoSwing(UserIndex, .Object(DummyInt).ObjIndex)
+                                Call OnEnchantedAmmoSwing(UserIndex, .Object(DummyInt).ObjIndex)
                             End If
                             If consumirMunicion And Not IsConsumableFreeZone(UserIndex) Then
                                 Call QuitarUserInvItem(UserIndex, DummyInt, 1, True, "stack_agotado", _

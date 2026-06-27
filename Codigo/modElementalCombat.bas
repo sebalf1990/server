@@ -573,6 +573,15 @@ Public Function ElementalDamageUserVsTarget(ByVal UserIndex As Integer, ByVal ta
         If ObjData(WeaponObjIndex).Proyectil > 0 Then
             total = total + ResolveComponentsVsTarget(ObjData(MunitionObjIndex).Elemental, targetIsNpc, targetIndex, ctx & " ammo")
             total = total + FireProcs(ObjData(MunitionObjIndex).Elemental, eProcOnHit, targetIsNpc, targetIndex, UserIndex, eUser, ctx & " ammo")
+            ' Encantamiento temporal de las flechas (aceite/hechizo de flechas). Aditivo. (20.002 CP1 ammo)
+            With UserList(UserIndex).flags
+                If .EnchantedAmmoObjIndex > 0 And .EnchantedAmmoObjIndex = MunitionObjIndex Then
+                    If .EnchantedAmmoPermanent = 1 Or Not DeadlinePassed(GetTickCountRaw(), .EnchantedAmmoDeadline) Then
+                        total = total + ResolveComponentsVsTarget(.EnchantedAmmoSource, targetIsNpc, targetIndex, ctx & " ammoench")
+                        total = total + FireProcs(.EnchantedAmmoSource, eProcOnHit, targetIsNpc, targetIndex, UserIndex, eUser, ctx & " ammoench")
+                    End If
+                End If
+            End With
         End If
     End If
     ' Encantamiento temporal del arma (hechizo Encantar Arma). Aditivo al elemental base.
@@ -619,6 +628,11 @@ Public Function ElementalDamageUserVsTarget(ByVal UserIndex As Integer, ByVal ta
     End If
     If outColor = vbWhite And orbIdx > 0 Then
         If ObjData(orbIdx).Elemental.CompCount > 0 Then outColor = DamageTypeColor(ObjData(orbIdx).Elemental.Comp(1).DamageType)
+    End If
+    If outColor = vbWhite And MunitionObjIndex > 0 Then
+        With UserList(UserIndex).flags
+            If .EnchantedAmmoObjIndex = MunitionObjIndex And .EnchantedAmmoSource.CompCount > 0 Then outColor = DamageTypeColor(.EnchantedAmmoSource.Comp(1).DamageType)
+        End With
     End If
     ElementalDamageUserVsTarget = total
     Exit Function
@@ -773,6 +787,139 @@ Public Sub SetEnchantedWeapon(ByVal UserIndex As Integer, ByVal WeaponObjIndex A
         End If
     End With
 End Sub
+
+' ============================================================================
+' Encantar Flechas elemental (20.002 CP1 ammo) - espejo de EnchantWeapon para la municion
+' ============================================================================
+Public Function CanEnchantAmmo(ByVal UserIndex As Integer, ByVal AmmoObjIndex As Integer, ByRef src As t_ElementalSource, ByRef outMsg As String) As Boolean
+    On Error GoTo ErrHandler
+    outMsg = vbNullString
+    If AmmoObjIndex <= 0 Then
+        outMsg = "Equipa flechas para encantarlas."
+        Exit Function
+    End If
+    If ObjData(AmmoObjIndex).OBJType <> e_OBJType.otArrows Then
+        outMsg = "Solo se pueden encantar flechas."
+        Exit Function
+    End If
+    Dim csv As String
+    csv = ObjData(AmmoObjIndex).TiposElementalCompatibles
+    If LenB(csv) > 0 Then
+        If InStr("," & csv & ",", "," & CStr(PrimaryElementalType(src)) & ",") = 0 Then
+            outMsg = "Esas flechas no aceptan este tipo de encantamiento."
+            Exit Function
+        End If
+    End If
+    CanEnchantAmmo = True
+    Exit Function
+ErrHandler:
+    Call TraceError(Err.Number, Err.Description, "modElementalCombat.CanEnchantAmmo", Erl)
+End Function
+
+' Setter del encantamiento de flechas (aceite/hechizo). durationMs<0 = permanente.
+Public Sub SetEnchantedAmmo(ByVal UserIndex As Integer, ByVal AmmoObjIndex As Integer, ByRef src As t_ElementalSource, ByVal cargas As Integer, ByVal durationMs As Long)
+    With UserList(UserIndex).flags
+        .EnchantedAmmoObjIndex = AmmoObjIndex
+        .EnchantedAmmoSource = src
+        .EnchantedAmmoCargas = cargas
+        If durationMs < 0 Then
+            .EnchantedAmmoPermanent = 1
+            .EnchantedAmmoDeadline = 0
+        Else
+            .EnchantedAmmoPermanent = 0
+            .EnchantedAmmoDeadline = AddMod32(GetTickCountRaw(), durationMs)
+        End If
+    End With
+    ' Icono de estado en el HUD del tirador (espejo del veneno WritePoisonedAmmoIcon). Effect57 = Flechas Encantadas.
+    Dim iconDur As Long
+    If durationMs < 0 Then iconDur = -1 Else iconDur = durationMs
+    Call WriteSendSkillCdUpdate(UserIndex, 57, CLng(AmmoObjIndex), iconDur, iconDur, eDebuff, cargas)
+End Sub
+
+' Consumo al disparar: 1 carga por flecha disparada (espejo de OnEnchantedWeaponSwing).
+Public Sub OnEnchantedAmmoSwing(ByVal UserIndex As Integer, ByVal AmmoObjIndex As Integer)
+    On Error GoTo ErrHandler
+    If Not ElementalSystemEnabled() Then Exit Sub
+    With UserList(UserIndex).flags
+        If .EnchantedAmmoObjIndex <= 0 Then Exit Sub
+        If .EnchantedAmmoObjIndex <> AmmoObjIndex Then Exit Sub
+        If .EnchantedAmmoPermanent = 1 Then Exit Sub
+        If .EnchantedAmmoDeadline <> 0 Then
+            If DeadlinePassed(GetTickCountRaw(), .EnchantedAmmoDeadline) Then
+                Call ClearEnchantedAmmo(UserIndex, "El encantamiento de tus flechas se ha disipado.")
+                Exit Sub
+            End If
+        End If
+        If .EnchantedAmmoCargas > 0 Then
+            .EnchantedAmmoCargas = .EnchantedAmmoCargas - 1
+            If .EnchantedAmmoCargas <= 0 Then
+                Call ClearEnchantedAmmo(UserIndex, "El encantamiento de tus flechas se ha agotado.")
+            Else
+                Call WriteUpdatePoisonStacks(UserIndex, .EnchantedAmmoObjIndex, .EnchantedAmmoCargas)
+            End If
+        End If
+    End With
+    Exit Sub
+ErrHandler:
+    Call TraceError(Err.Number, Err.Description, "modElementalCombat.OnEnchantedAmmoSwing", Erl)
+End Sub
+
+' Tick del game loop: expira por tiempo aunque el user no dispare.
+Public Sub CheckEnchantedAmmoTick(ByVal UserIndex As Integer)
+    On Error GoTo ErrHandler
+    If Not ElementalSystemEnabled() Then Exit Sub
+    With UserList(UserIndex).flags
+        If .EnchantedAmmoObjIndex <= 0 Then Exit Sub
+        If .EnchantedAmmoPermanent = 1 Then Exit Sub
+        If .EnchantedAmmoDeadline = 0 Then Exit Sub
+        If DeadlinePassed(GetTickCountRaw(), .EnchantedAmmoDeadline) Then
+            Call ClearEnchantedAmmo(UserIndex, "El encantamiento de tus flechas se ha disipado.")
+        End If
+    End With
+    Exit Sub
+ErrHandler:
+    Call TraceError(Err.Number, Err.Description, "modElementalCombat.CheckEnchantedAmmoTick", Erl)
+End Sub
+
+Public Sub ClearEnchantedAmmo(ByVal UserIndex As Integer, Optional ByVal msg As String = "")
+    On Error GoTo ErrHandler
+    If UserIndex <= 0 Then Exit Sub
+    Dim oldObj As Integer
+    With UserList(UserIndex).flags
+        If .EnchantedAmmoObjIndex = 0 And .EnchantedAmmoCargas = 0 And .EnchantedAmmoPermanent = 0 Then Exit Sub
+        oldObj = .EnchantedAmmoObjIndex
+        Dim emptySrc As t_ElementalSource
+        .EnchantedAmmoObjIndex = 0
+        .EnchantedAmmoDeadline = 0
+        .EnchantedAmmoPermanent = 0
+        .EnchantedAmmoCargas = 0
+        .EnchantedAmmoSource = emptySrc
+    End With
+    ' Apaga el icono de estado del tirador (Effect57).
+    If oldObj > 0 Then Call WriteSendSkillCdUpdate(UserIndex, 57, CLng(oldObj), 0, 0, eDebuff, 0)
+    If LenB(msg) > 0 Then Call WriteConsoleMsg(UserIndex, msg, e_FontTypeNames.FONTTYPE_INFO)
+    Exit Sub
+ErrHandler:
+    Call TraceError(Err.Number, Err.Description, "modElementalCombat.ClearEnchantedAmmo", Erl)
+End Sub
+
+Public Function IsAmmoEnchantedActive(ByVal UserIndex As Integer, ByVal AmmoObjIndex As Integer) As Boolean
+    On Error GoTo ErrHandler
+    If UserIndex <= 0 Or AmmoObjIndex <= 0 Then Exit Function
+    With UserList(UserIndex).flags
+        If .EnchantedAmmoObjIndex <> AmmoObjIndex Then Exit Function
+        If .EnchantedAmmoPermanent = 1 Then
+            IsAmmoEnchantedActive = True
+        ElseIf .EnchantedAmmoCargas > 0 Then
+            IsAmmoEnchantedActive = True
+        ElseIf .EnchantedAmmoDeadline <> 0 Then
+            IsAmmoEnchantedActive = Not DeadlinePassed(GetTickCountRaw(), .EnchantedAmmoDeadline)
+        End If
+    End With
+    Exit Function
+ErrHandler:
+    Call TraceError(Err.Number, Err.Description, "modElementalCombat.IsAmmoEnchantedActive", Erl)
+End Function
 
 ' True si el user tiene un orbe elemental equipado (amuleto cuyo Elemental tiene componentes o procs).
 Public Function HasElementalOrbEquipped(ByVal UserIndex As Integer) As Boolean
