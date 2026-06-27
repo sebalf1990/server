@@ -758,6 +758,11 @@ Public Function CanEnchantWeapon(ByVal UserIndex As Integer, ByVal WeaponObjInde
         outMsg = "No podes encantar el arma con un orbe equipado."
         Exit Function
     End If
+    ' Exclusividad (CP2): no encantar un arma ya untada con veneno (untado activo).
+    If UserList(UserIndex).flags.PoisonedWeaponObjIndex = WeaponObjIndex And UserList(UserIndex).flags.PoisonedWeaponCargas > 0 Then
+        outMsg = "Tu arma ya esta untada con veneno."
+        Exit Function
+    End If
     Dim csv As String
     csv = ObjData(WeaponObjIndex).TiposElementalCompatibles
     If LenB(csv) > 0 Then
@@ -800,6 +805,16 @@ Public Function CanEnchantAmmo(ByVal UserIndex As Integer, ByVal AmmoObjIndex As
     End If
     If ObjData(AmmoObjIndex).OBJType <> e_OBJType.otArrows Then
         outMsg = "Solo se pueden encantar flechas."
+        Exit Function
+    End If
+    ' Exclusividad (CP2): no encantar flechas con veneno propio (nativo).
+    If ObjData(AmmoObjIndex).FlechaVenenoFamilia > 0 Then
+        outMsg = "Esas flechas ya tienen veneno propio."
+        Exit Function
+    End If
+    ' Exclusividad (CP2): no encantar flechas ya untadas con veneno (untado activo).
+    If UserList(UserIndex).flags.PoisonedAmmoObjIndex = AmmoObjIndex And UserList(UserIndex).flags.PoisonedAmmoCargas > 0 Then
+        outMsg = "Esas flechas ya estan untadas con veneno."
         Exit Function
     End If
     Dim csv As String

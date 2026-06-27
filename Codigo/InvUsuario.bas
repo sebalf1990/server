@@ -2306,6 +2306,10 @@ Sub UseInvItem(ByVal UserIndex As Integer, ByVal Slot As Byte, ByVal ByClick As 
                                 Exit Sub
                             End If
 
+                            If modElementalCombat.IsAmmoEnchantedActive(UserIndex, equipAmmo) Then
+                                Call WriteConsoleMsg(UserIndex, "Tus flechas ya estan encantadas.", e_FontTypeNames.FONTTYPE_INFO)
+                                Exit Sub
+                            End If
                             .flags.PoisonedAmmoObjIndex = equipAmmo
                             .flags.PoisonedAmmoFamilia = obj.FamiliaVeneno
                             .flags.PoisonedAmmoCargas = obj.CargasQueOtorga
@@ -2360,6 +2364,10 @@ Sub UseInvItem(ByVal UserIndex As Integer, ByVal Slot As Byte, ByVal ByClick As 
                         ' Si el arma ya esta untada con MISMA familia, rechazar (no se superpone)
                         If .flags.PoisonedWeaponObjIndex = equipWpn And .flags.PoisonedWeaponCargas > 0 Then
                             Call WriteConsoleMsg(UserIndex, "Tu arma ya esta untada con veneno.", e_FontTypeNames.FONTTYPE_INFO)
+                            Exit Sub
+                        End If
+                        If modElementalCombat.IsWeaponEnchantedActive(UserIndex, equipWpn) Then
+                            Call WriteConsoleMsg(UserIndex, "Tu arma ya esta encantada.", e_FontTypeNames.FONTTYPE_INFO)
                             Exit Sub
                         End If
                         ' Aplicar untado

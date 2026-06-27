@@ -1704,6 +1704,11 @@ Sub HechizoEstadoUsuario(ByVal UserIndex As Integer, ByRef b As Boolean)
                 Exit Sub
             End If
 
+            If modElementalCombat.IsAmmoEnchantedActive(targetUserIndex, equipAmmo) Then
+                Call WriteConsoleMsg(UserIndex, "Las flechas del objetivo ya estan encantadas.", e_FontTypeNames.FONTTYPE_INFO)
+                b = False
+                Exit Sub
+            End If
             With UserList(targetUserIndex).flags
                 .PoisonedAmmoObjIndex = equipAmmo
                 .PoisonedAmmoFamilia = Hechizos(h).FamiliaVeneno
@@ -1764,6 +1769,11 @@ Sub HechizoEstadoUsuario(ByVal UserIndex As Integer, ByRef b As Boolean)
         ' Si ya esta untada con MISMA arma activa y cargas restantes, rechazar
         If UserList(targetUserIndex).flags.PoisonedWeaponObjIndex = equipWpn And UserList(targetUserIndex).flags.PoisonedWeaponCargas > 0 Then
             Call WriteConsoleMsg(UserIndex, "El arma del objetivo ya esta envenenada.", e_FontTypeNames.FONTTYPE_INFO)
+            b = False
+            Exit Sub
+        End If
+        If modElementalCombat.IsWeaponEnchantedActive(targetUserIndex, equipWpn) Then
+            Call WriteConsoleMsg(UserIndex, "El arma del objetivo ya esta encantada.", e_FontTypeNames.FONTTYPE_INFO)
             b = False
             Exit Sub
         End If
