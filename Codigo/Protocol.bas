@@ -954,8 +954,18 @@ End Function
             Call KickConnection(ConnectionID)
             Exit Sub
         End If
+        If Not AccountBridge_AllowIngameRegistration() Then
+            Call WriteErrorMsg(UserIndex, "El registro se hace desde la web: " & AccountBridge_RegisterUrl())
+            Call CloseSocket(UserIndex)
+            Exit Sub
+        End If
         If (username = "" Or Password = "" Or LenB(Password) <= 3) Then
             Call WriteErrorMsg(UserIndex, "Parametros incorrectos")
+            Call CloseSocket(UserIndex)
+            Exit Sub
+        End If
+        If Not CheckMailString(username) Then
+            Call WriteErrorMsg(UserIndex, "El email ingresado no es valido")
             Call CloseSocket(UserIndex)
             Exit Sub
         End If
@@ -964,13 +974,13 @@ End Function
         salt = RandomString(32)
         Dim pwHash As String
         pwHash = Sha256Hex(salt & Password)
-        Set Result = Query("INSERT INTO account (email, password, salt, validate_code) VALUES (?,?,?,?)", LCase(username), pwHash, salt, "123")
+        Set Result = Query("INSERT INTO account (email, password, salt, validate_code, validated) VALUES (?,?,?,?,1)", LCase(username), pwHash, salt, "123")
         If (Result Is Nothing) Then
             Call WriteErrorMsg(UserIndex, "Ya hay una cuenta asociada con ese email")
             Call CloseSocket(UserIndex)
             Exit Sub
         End If
-        Set Result = Query("SELECT id FROM account WHERE email=?", username)
+        Set Result = Query("SELECT id FROM account WHERE email=?", LCase$(username))
         UserList(UserIndex).AccountID = Result!Id
         Dim Personajes() As t_PersonajeCuenta
         Call WriteAccountCharacterList(UserIndex, Personajes, 0)
@@ -998,24 +1008,43 @@ Private Sub HandleLoginAccount(ByVal ConnectionID As Long)
         Exit Sub
     End If
     Dim Result As ADODB.Recordset
-    Set Result = Query("SELECT * FROM account WHERE UPPER(email)=UPPER(?)", username)
-    If (Result.EOF) Then
-        Call WriteErrorMsg(UserIndex, "Usuario o Contraseña erronea.")
-        Call CloseSocket(UserIndex)
-        Exit Sub
-    End If
     Dim storedPw As String
     Dim storedSalt As String
     Dim pwOk As Boolean
-    storedPw = Result!password & ""
-    storedSalt = Result!salt & ""
-    If (Len(storedPw) = 64 And Len(storedSalt) = 32 And storedSalt <> storedPw) Then
-        pwOk = (LCase$(storedPw) = Sha256Hex(storedSalt & Password))
-    Else
-        pwOk = (storedPw = Password)
+    Dim attempt As Integer
+    For attempt = 1 To 2
+        Set Result = Query("SELECT * FROM account WHERE UPPER(email)=UPPER(?)", username)
+        pwOk = False
+        If Not (Result Is Nothing) Then
+            If Not Result.EOF Then
+                storedPw = Result!password & ""
+                storedSalt = Result!salt & ""
+                If (Len(storedPw) = 64 And Len(storedSalt) = 32 And storedSalt <> storedPw) Then
+                    pwOk = (LCase$(storedPw) = Sha256Hex(storedSalt & Password))
+                Else
+                    pwOk = (storedPw = Password)
+                End If
+            End If
+        End If
+        If pwOk Then Exit For
+        ' Cuenta no encontrada o password no matchea: puede haber una operacion
+        ' del bridge (alta/reset) todavia sin aplicar. Forzamos un poll y
+        ' reintentamos UNA sola vez antes de rechazar (pull-on-login-attempt).
+        If attempt = 1 Then Call AccountBridge_Poll
+    Next attempt
+    If Not pwOk Then
+        If Result Is Nothing Then
+            Call WriteErrorMsg(UserIndex, "Usuario o Contraseña erronea.")
+        ElseIf Result.EOF Then
+            Call WriteErrorMsg(UserIndex, "Usuario o Contraseña erronea.")
+        Else
+            Call WriteErrorMsg(UserIndex, "Usuario o clave erronea.")
+        End If
+        Call CloseSocket(UserIndex)
+        Exit Sub
     End If
-    If (Not pwOk) Then
-        Call WriteErrorMsg(UserIndex, "Usuario o clave erronea.")
+    If Result!deleted Then
+        Call WriteErrorMsg(UserIndex, "Esta cuenta fue eliminada.")
         Call CloseSocket(UserIndex)
         Exit Sub
     End If

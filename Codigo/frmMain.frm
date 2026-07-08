@@ -908,6 +908,7 @@ Private Sub Minuto_Timer()
         Call Automatic_Event_Timer
     End If
     Call dump_stats
+    Call AccountBridge_Poll
     Call PerformTimeLimitCheck(PerformanceTimer, "Minuto_Timer", 500)
     Exit Sub
 ErrHandler:

@@ -82,6 +82,7 @@ Module=AO20CryptoSysWrapper; Codigo\AO20CryptoSysWrapper.bas
 Module=basCryptoSys; Codigo\basCryptoSys.bas
 Module=ModShopAO20; Codigo\ModShopAO20.bas
 Module=ModPatreonBridge; Codigo\ModPatreonBridge.bas
+Module=ModAccountBridge; Codigo\ModAccountBridge.bas
 Module=UnitTesting; Codigo\UnitTesting.bas
 Module=Logging; Codigo\Logging.bas
 Class=Instruments; Codigo\Instrumentation.cls
