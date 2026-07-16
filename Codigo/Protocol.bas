@@ -1048,6 +1048,11 @@ Private Sub HandleLoginAccount(ByVal ConnectionID As Long)
         Call CloseSocket(UserIndex)
         Exit Sub
     End If
+    If Result!is_banned Then
+        Call WriteErrorMsg(UserIndex, "Esta cuenta se encuentra baneada.")
+        Call CloseSocket(UserIndex)
+        Exit Sub
+    End If
     UserList(UserIndex).AccountID = Result!Id
     If (Len(storedPw) <> 64) Then
         Dim migSalt As String
