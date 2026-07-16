@@ -771,9 +771,17 @@ End Sub
 Public Function EnterAccountDatabase(ByVal UserIndex As Integer, ByVal CuentaEmail As String) As Boolean
     On Error GoTo ErrorHandler
     Dim RS As ADODB.Recordset
-    Set RS = Query("SELECT id from account WHERE email = ?", UCase$(CuentaEmail))
+    Set RS = Query("SELECT id, deleted, is_banned from account WHERE email = ?", UCase$(CuentaEmail))
     If Connection.State = adStateClosed Then
         Call WriteShowMessageBox(UserIndex, 1784, vbNullString) 'Msg1784=Ha ocurrido un error interno en el servidor. ¡Estamos tratando de resolverlo!
+        Exit Function
+    End If
+    If RS!deleted Then
+        Call WriteErrorMsg(UserIndex, "Esta cuenta fue eliminada.")
+        Exit Function
+    End If
+    If RS!is_banned Then
+        Call WriteErrorMsg(UserIndex, "Esta cuenta se encuentra baneada.")
         Exit Function
     End If
     UserList(UserIndex).AccountID = RS!Id
