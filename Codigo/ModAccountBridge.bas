@@ -546,6 +546,26 @@ End Function
 Private Function ApplyMaoLock(ByVal charId As Long, ByVal sellerAcc As Long) As String
     On Error GoTo ApplyMaoLock_Err
 
+    ' GM gap (16.002 addendum): los personajes de GMs no se publican. El rol
+    ' NO esta persistido en la tabla user (se resuelve por NOMBRE contra las
+    ' listas de Administradores via EsGmChar), asi que se chequea aca antes
+    ' del lock. La web, al recibir este detail code en el ack, cancela el
+    ' listing automaticamente (auto-cancel del driver del bridge).
+    Dim rsPre As ADODB.Recordset
+    Set rsPre = Query("SELECT name FROM user WHERE id = ?;", charId)
+    If rsPre Is Nothing Then
+        ApplyMaoLock = "error;unknown_error"
+        Exit Function
+    End If
+    If rsPre.EOF Then
+        ApplyMaoLock = "error;char_not_found"
+        Exit Function
+    End If
+    If EsGmChar(CStr(rsPre!name)) Then
+        ApplyMaoLock = "error;gm_character_blocked"
+        Exit Function
+    End If
+
     Call Query("UPDATE user SET is_locked_in_mao = 1 WHERE id = ? AND account_id = ? AND is_locked_in_mao = 0;", charId, sellerAcc)
 
     Dim rs As ADODB.Recordset
