@@ -935,11 +935,9 @@ Public Function HandleIncomingData(ByVal ConnectionID As Long, ByVal Message As 
 End Function
 
 #If PYMMO = 0 Then
-    Private Function Sha256Hex(ByVal s As String) As String
-        Dim b() As Byte
-        b = StrConv(s, vbFromUnicode)
-        Sha256Hex = LCase$(hashHexFromBytes(b, API_HASH_SHA256))
-    End Function
+    ' El hashing de passwords se removio en el plan 29.001: el contrato pasa a
+    ' argon2id y la unica implementacion vive en la web. El server pregunta por
+    ' HTTP (ver AccountBridge_VerifyLogin) en vez de computar y comparar.
 
     Private Sub HandleCreateAccount(ByVal ConnectionID As Long)
         On Error GoTo HandleCreateAccount_Err:
@@ -954,6 +952,9 @@ End Function
             Call KickConnection(ConnectionID)
             Exit Sub
         End If
+        ' Este toggle ya no habilita nada (plan 29.001): con o sin el, el alta
+        ' in-game corta mas abajo, porque el hash argon2id lo computa solo la
+        ' web. Se conserva el chequeo para que el mensaje siga siendo el mismo.
         If Not AccountBridge_AllowIngameRegistration() Then
             Call WriteErrorMsg(UserIndex, "El registro se hace desde la web: " & AccountBridge_RegisterUrl())
             Call CloseSocket(UserIndex)
@@ -969,17 +970,15 @@ End Function
             Call CloseSocket(UserIndex)
             Exit Sub
         End If
+        ' El alta in-game no puede crear credenciales (plan 29.001): el hash es
+        ' argon2id y lo computa unicamente la web. Dejar que este camino escriba
+        ' una password produciria una cuenta que despues nadie puede verificar,
+        ' asi que se corta explicitamente. Para reactivar el alta hay que
+        ' delegarla al endpoint web, igual que se delego el login.
+        Call WriteErrorMsg(UserIndex, "El registro se hace desde la web: " & AccountBridge_RegisterUrl())
+        Call CloseSocket(UserIndex)
+        Exit Sub
         Dim Result As ADODB.Recordset
-        Dim salt As String
-        salt = RandomString(32)
-        Dim pwHash As String
-        pwHash = Sha256Hex(salt & Password)
-        Set Result = Query("INSERT INTO account (email, password, salt, validate_code, validated) VALUES (?,?,?,?,1)", LCase(username), pwHash, salt, "123")
-        If (Result Is Nothing) Then
-            Call WriteErrorMsg(UserIndex, "Ya hay una cuenta asociada con ese email")
-            Call CloseSocket(UserIndex)
-            Exit Sub
-        End If
         Set Result = Query("SELECT id FROM account WHERE email=?", LCase$(username))
         UserList(UserIndex).AccountID = Result!Id
         Dim Personajes() As t_PersonajeCuenta
@@ -1007,63 +1006,58 @@ Private Sub HandleLoginAccount(ByVal ConnectionID As Long)
         Call CloseSocket(UserIndex)
         Exit Sub
     End If
-    Dim Result As ADODB.Recordset
-    Dim storedPw As String
-    Dim storedSalt As String
-    Dim pwOk As Boolean
-    Dim attempt As Integer
+    ' Verificacion DELEGADA a la web (plan 29.001). El server ya no lee
+    ' account.password ni lo compara: pregunta por HTTP y actua segun la
+    ' respuesta. Con eso desaparecen los dos gates que decidian "hasheado vs
+    ' plaintext" por LONGITUD y el rehash perezoso que reescribia la fila.
+    Dim verifyResult As Long
+    Dim accountId    As Long
+    Dim isValidated  As Boolean
+    Dim isBanned     As Boolean
+    Dim isDeleted    As Boolean
+    Dim attempt      As Integer
+
     For attempt = 1 To 2
-        Set Result = Query("SELECT * FROM account WHERE UPPER(email)=UPPER(?)", username)
-        pwOk = False
-        If Not (Result Is Nothing) Then
-            If Not Result.EOF Then
-                storedPw = Result!password & ""
-                storedSalt = Result!salt & ""
-                If (Len(storedPw) = 64 And Len(storedSalt) = 32 And storedSalt <> storedPw) Then
-                    pwOk = (LCase$(storedPw) = Sha256Hex(storedSalt & Password))
-                Else
-                    pwOk = (storedPw = Password)
-                End If
-            End If
-        End If
-        If pwOk Then Exit For
-        ' Cuenta no encontrada o password no matchea: puede haber una operacion
-        ' del bridge (alta/reset) todavia sin aplicar. Forzamos un poll y
-        ' reintentamos UNA sola vez antes de rechazar (pull-on-login-attempt).
+        verifyResult = AccountBridge_VerifyLogin(username, Password, accountId, isValidated, isBanned, isDeleted)
+        If verifyResult <> VERIFY_LOGIN_REJECTED Then Exit For
+        ' Rechazo en el primer intento: puede haber un alta o un reset del
+        ' bridge todavia sin aplicar. La web valida contra ESTA misma base (la
+        ' lee en modo solo lectura), asi que si la op no se aplico todavia
+        ' tampoco la ve. Forzamos un poll y reintentamos UNA vez, igual que
+        ' hacia el camino viejo (pull-on-login-attempt).
         If attempt = 1 Then Call AccountBridge_Poll
     Next attempt
-    If Not pwOk Then
-        If Result Is Nothing Then
-            Call WriteErrorMsg(UserIndex, "Usuario o Contraseña erronea.")
-        ElseIf Result.EOF Then
-            Call WriteErrorMsg(UserIndex, "Usuario o Contraseña erronea.")
-        Else
-            Call WriteErrorMsg(UserIndex, "Usuario o clave erronea.")
-        End If
+
+    If verifyResult = VERIFY_LOGIN_ERROR Then
+        ' El servicio de cuentas no contesto. NO es una clave equivocada, y
+        ' decirle eso al jugador lo manda a resetear una password que esta bien.
+        Call WriteErrorMsg(UserIndex, "El servicio de cuentas no esta disponible en este momento. Proba de nuevo en unos minutos.")
         Call CloseSocket(UserIndex)
         Exit Sub
     End If
-    If Result!deleted Then
+
+    If verifyResult <> VERIFY_LOGIN_OK Then
+        Call WriteErrorMsg(UserIndex, "Usuario o clave erronea.")
+        Call CloseSocket(UserIndex)
+        Exit Sub
+    End If
+
+    If isDeleted Then
         Call WriteErrorMsg(UserIndex, "Esta cuenta fue eliminada.")
         Call CloseSocket(UserIndex)
         Exit Sub
     End If
-    If Result!is_banned Then
+
+    If isBanned Then
         Call WriteErrorMsg(UserIndex, "Esta cuenta se encuentra baneada.")
         Call CloseSocket(UserIndex)
         Exit Sub
     End If
-    UserList(UserIndex).AccountID = Result!Id
-    If (Len(storedPw) <> 64) Then
-        Dim migSalt As String
-        Dim migHash As String
-        migSalt = RandomString(32)
-        migHash = Sha256Hex(migSalt & Password)
-        Call Execute("UPDATE account SET password=?, salt=? WHERE id=?", migHash, migSalt, Result!Id)
-    End If
+
+    UserList(UserIndex).AccountID = accountId
     Dim Personajes(1 To 10) As t_PersonajeCuenta
     Dim count               As Long
-    count = GetPersonajesCuentaDatabase(Result!Id, Personajes)
+    count = GetPersonajesCuentaDatabase(accountId, Personajes)
     Call WriteAccountCharacterList(UserIndex, Personajes, count)
     Exit Sub
 LoginAccount_Err:
