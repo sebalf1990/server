@@ -25,6 +25,14 @@ Attribute VB_Name = "ModAccountBridge"
 '
 '
 '
+' Resultado de AccountBridge_VerifyLogin (plan 29.001).
+' Distinguir RECHAZADO de ERROR es lo que permite decirle al jugador "el
+' servicio de cuentas no esta disponible" en vez de "clave incorrecta" cuando
+' la web esta caida.
+Public Const VERIFY_LOGIN_OK As Long = 0
+Public Const VERIFY_LOGIN_REJECTED As Long = 1
+Public Const VERIFY_LOGIN_ERROR As Long = 2
+
 Option Explicit
 
 ' ---------------------------------------------------------------------------
@@ -287,7 +295,7 @@ Private Sub ApplyCreateAccountOp(ByVal opId As String, ByVal email As String, By
     On Error GoTo ApplyCreateAccountOp_Err
 
     Dim existing As ADODB.Recordset
-    Set existing = Query("SELECT id FROM account WHERE email = ?;", email)
+    Set existing = Query("SELECT id FROM account WHERE UPPER(email) = UPPER(?);", email)
     If Not (existing Is Nothing) Then
         If Not existing.EOF Then
             Call LogError("AccountBridge create_account op " & opId & ": la cuenta " & email & " ya existe, se trata como aplicada (idempotente).")
@@ -303,24 +311,32 @@ End Sub
 
 ' ---------------------------------------------------------------------------
 ' ApplySetPasswordOp  (PRIVATE helper)
-' Idempotente: si no existe cuenta con ese email, se considera aplicada (se
-' ackea igual, no se re-encola) y solo se logea un warning.
+' El email se compara case-insensitive, igual que el login (plan 29.001): antes
+' se comparaba exacto y una diferencia de mayusculas hacia que la op se
+' descartara EN SILENCIO tratandola como aplicada.
+' Si aun asi no existe la cuenta, se ackea (re-encolar no lo resolveria) pero se
+' logea como ERROR, no como warning: es una password que el jugador cambio y
+' que nunca llego.
 ' ---------------------------------------------------------------------------
 Private Sub ApplySetPasswordOp(ByVal opId As String, ByVal email As String, ByVal salt As String, ByVal pwHash As String)
     On Error GoTo ApplySetPasswordOp_Err
 
     Dim existing As ADODB.Recordset
-    Set existing = Query("SELECT id FROM account WHERE email = ?;", email)
+    Set existing = Query("SELECT id FROM account WHERE UPPER(email) = UPPER(?);", email)
     If existing Is Nothing Then
         Call LogError("ApplySetPasswordOp: SELECT fallo para email " & email & " - op " & opId)
         Exit Sub
     End If
     If existing.EOF Then
-        Call LogError("AccountBridge set_password op " & opId & ": no existe cuenta con email " & email & ", se trata como aplicada.")
+        ' NO es "aplicada": es una password que el jugador cambio y que nunca
+        ' llego a su cuenta. Se logea como ERROR (no como warning) para que
+        ' quede visible; el ack se hace igual porque re-encolarla tampoco la
+        ' resolveria sola, pero el operador tiene que enterarse.
+        Call LogError("ERROR AccountBridge set_password op " & opId & ": NO existe cuenta con email " & email & ". La password NO se aplico y la operacion se descarta.")
         Exit Sub
     End If
 
-    Call Query("UPDATE account SET password = ?, salt = ? WHERE email = ?;", pwHash, salt, email)
+    Call Query("UPDATE account SET password = ?, salt = ? WHERE UPPER(email) = UPPER(?);", pwHash, salt, email)
     Exit Sub
 ApplySetPasswordOp_Err:
     Call LogError("ApplySetPasswordOp error: " & Err.Description & " - op " & opId & " email " & email)
@@ -335,7 +351,7 @@ Private Sub ApplySetDeletedOp(ByVal opId As String, ByVal email As String, ByVal
     On Error GoTo ApplySetDeletedOp_Err
 
     Dim existing As ADODB.Recordset
-    Set existing = Query("SELECT id FROM account WHERE email = ?;", email)
+    Set existing = Query("SELECT id FROM account WHERE UPPER(email) = UPPER(?);", email)
     If existing Is Nothing Then
         Call LogError("ApplySetDeletedOp: SELECT fallo para email " & email & " - op " & opId)
         Exit Sub
@@ -345,7 +361,7 @@ Private Sub ApplySetDeletedOp(ByVal opId As String, ByVal email As String, ByVal
         Exit Sub
     End If
 
-    Call Query("UPDATE account SET deleted = ? WHERE email = ?;", deletedValue, email)
+    Call Query("UPDATE account SET deleted = ? WHERE UPPER(email) = UPPER(?);", deletedValue, email)
     Exit Sub
 ApplySetDeletedOp_Err:
     Call LogError("ApplySetDeletedOp error: " & Err.Description & " - op " & opId & " email " & email)
@@ -748,3 +764,112 @@ Private Sub AckMaoOps(ByVal Body As String)
 AckMaoOps_Err:
     Call LogError("AckMaoOps error: " & Err.Description)
 End Sub
+
+' ---------------------------------------------------------------------------
+' AccountBridge_VerifyLogin  (plan 29.001)
+' Verificacion de credenciales DELEGADA a la web.
+'
+' El server ya no hashea ni compara passwords. Desde que el contrato pasa a
+' argon2id hay una sola implementacion (Node) y este modulo solo pregunta;
+' antes habia dos implementaciones espejo que tenian que coincidir byte a byte.
+'
+' Request  : POST <BaseUrl>/api/bridge/verify-login
+'            X-Service-Token, Content-Type: text/plain
+'            body = email & vbLf & password   (dos lineas, sin escapes)
+' Respuesta: "OK;<account_id>;<validated>;<banned>;<deleted>" | "FAIL" | "ERR;<causa>"
+'
+' Devuelve VERIFY_LOGIN_OK / VERIFY_LOGIN_REJECTED / VERIFY_LOGIN_ERROR.
+' Cualquier problema de red, timeout o respuesta inesperada es ERROR, NUNCA
+' REJECTED: un servicio caido no debe parecer una clave equivocada.
+'
+' La password NO se loguea en ningun camino, ni siquiera en el de error.
+' ---------------------------------------------------------------------------
+Public Function AccountBridge_VerifyLogin(ByVal email As String, _
+                                          ByVal Password As String, _
+                                          ByRef outAccountId As Long, _
+                                          ByRef outValidated As Boolean, _
+                                          ByRef outBanned As Boolean, _
+                                          ByRef outDeleted As Boolean) As Long
+    On Error GoTo VerifyLogin_Err
+
+    ' La config del bridge es lazy y esta guardada por m_ConfigLoaded, asi que
+    ' TODO punto de entrada publico tiene que cargarla. Sin esto, el primer
+    ' login despues de arrancar el server encuentra m_Enabled = False y falla
+    ' con "servicio no disponible" hasta que el timer del minuto dispare el
+    ' primer AccountBridge_Poll.
+    Call LoadAccountBridgeConfig
+
+    AccountBridge_VerifyLogin = VERIFY_LOGIN_ERROR
+    outAccountId = 0
+    outValidated = False
+    outBanned = False
+    outDeleted = False
+
+    If Not m_Enabled Then
+        Call LogError("AccountBridge_VerifyLogin: el bridge esta deshabilitado, no se puede validar el login.")
+        Exit Function
+    End If
+
+    Dim http As MSXML2.ServerXMLHTTP60
+    Set http = New MSXML2.ServerXMLHTTP60
+    http.setTimeouts 2000, 2000, 3000, 3000
+
+    http.Open "POST", m_BaseUrl & "/api/bridge/verify-login", False
+    http.setRequestHeader "X-Service-Token", m_ServiceToken
+    http.setRequestHeader "Content-Type", "text/plain"
+    http.send email & vbLf & Password
+
+    If http.Status <> 200 Then
+        Call LogError("AccountBridge verify-login HTTP status " & http.Status)
+        Exit Function
+    End If
+
+    ' Trim$ saca espacios pero NO CR/LF, y de eso depende que "FAIL" matchee y
+    ' que el ultimo campo ("deleted") se lea bien. Si un proxy agregara un
+    ' salto, un rechazo se leeria como ERROR y una cuenta baneada entraria.
+    Dim body As String
+    Dim lastCh As String
+    body = Trim$(http.responseText)
+    Do While Len(body) > 0
+        lastCh = Right$(body, 1)
+        If lastCh = vbCr Or lastCh = vbLf Then
+            body = Left$(body, Len(body) - 1)
+        Else
+            Exit Do
+        End If
+    Loop
+
+    If body = "FAIL" Then
+        AccountBridge_VerifyLogin = VERIFY_LOGIN_REJECTED
+        Exit Function
+    End If
+
+    Dim parts() As String
+    parts = Split(body, ";")
+    If UBound(parts) < 4 Then
+        Call LogError("AccountBridge verify-login respuesta inesperada: " & body)
+        Exit Function
+    End If
+    If UCase$(Trim$(parts(0))) <> "OK" Then
+        Call LogError("AccountBridge verify-login respuesta inesperada: " & body)
+        Exit Function
+    End If
+
+    outAccountId = CLng(Val(parts(1)))
+    If outAccountId <= 0 Then
+        Call LogError("AccountBridge verify-login devolvio un account id invalido: " & body)
+        outAccountId = 0
+        Exit Function
+    End If
+
+    outValidated = (Trim$(parts(2)) = "1")
+    outBanned = (Trim$(parts(3)) = "1")
+    outDeleted = (Trim$(parts(4)) = "1")
+
+    AccountBridge_VerifyLogin = VERIFY_LOGIN_OK
+    Exit Function
+
+VerifyLogin_Err:
+    Call LogError("AccountBridge_VerifyLogin error: " & Err.Description)
+    AccountBridge_VerifyLogin = VERIFY_LOGIN_ERROR
+End Function
