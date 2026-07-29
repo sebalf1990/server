@@ -60,6 +60,12 @@ Private Const ACCOUNT_BRIDGE_POLL_MIN_INTERVAL_MS As Double = 5000
 Private m_LastPollTick  As Long
 Private m_HasPolledOnce As Boolean
 
+' ---- MAO bridge (mercado de personajes, plan 16.002): toggle e intervalo propios ----
+Private m_MaoEnabled       As Boolean
+Private Const MAO_BRIDGE_POLL_MIN_INTERVAL_MS As Double = 5000
+Private m_LastMaoPollTick  As Long
+Private m_HasPolledMaoOnce As Boolean
+
 ' ---------------------------------------------------------------------------
 ' LoadAccountBridgeConfig
 ' Reads [AccountBridge] section from Server.ini into module-level cache.
@@ -93,6 +99,10 @@ Private Sub LoadAccountBridgeConfig()
     ' Se puede volver a habilitar como fallback si la web cae.
     m_AllowIngameRegistration = (Trim$(ini.GetValue("AccountBridge", "AllowIngameRegistration")) = "1")
 
+    ' MAO (mercado de personajes, plan 16.002): OFF por defecto. Se prende en
+    ' Server.ini una vez que la web tenga /api/bridge/mao-ops vivo.
+    m_MaoEnabled = (Trim$(ini.GetValue("AccountBridge", "MaoEnabled")) = "1")
+
     m_ConfigLoaded = True
     Exit Sub
 
@@ -104,6 +114,7 @@ LoadAccountBridgeConfig_Err:
     m_RegisterUrl = "https://ao.muraliarevestimientos.com/registro"
     m_Enabled = False
     m_AllowIngameRegistration = False
+    m_MaoEnabled = False
     m_ConfigLoaded = True
 End Sub
 
@@ -366,4 +377,374 @@ Private Sub AckAccountOps(ByVal Ids As String)
     Exit Sub
 AckAccountOps_Err:
     Call LogError("AckAccountOps error: " & Err.Description & " - ids: " & Ids)
+End Sub
+
+' ===========================================================================
+' MAO bridge (Mercado de Personajes, plan 16.002)
+' Segundo canal de ops sobre el mismo [AccountBridge] (BaseUrl/ServiceToken),
+' con su propio toggle m_MaoEnabled. El server sigue siendo el UNICO escritor
+' de su SQLite (Arquitectura B); este canal solo aplica (pull) y confirma (ack).
+' Contrato del endpoint web (16.002 F2):
+'   GET  /api/bridge/mao-ops   X-Service-Token
+'        -> 200 text/plain: linea 1 "MAOPS;<n>", luego una op por linea:
+'           <op_id>;lock_character;<seller_account_id>;<char_id>
+'           <op_id>;unlock_character;<seller_account_id>;<char_id>
+'           <op_id>;transfer_character;<from_account_id>;<to_account_id>;<char_id>;<sale_transaction_id>
+'   POST /api/bridge/mao-ops/ack   X-Service-Token, Content-Type: text/plain
+'        body: una linea por op -> "<op_id>;ok" | "<op_id>;error;<detail_code>"
+'        -> 200 text/plain: OK;<acked_count>
+' Verificacion de escritura por READ-BACK de estado (no changes()/RecordsAffected):
+' el UPDATE es un compare-and-swap en el WHERE y luego se relee la fila por PK y
+' se interpreta su estado final. Verifica la post-condicion real y resuelve la
+' idempotencia gratis. El precio (ARS) vive SOLO en la web; el server no escribe
+' price_in_mao (decision 16.002 F0).
+' ===========================================================================
+
+' ---------------------------------------------------------------------------
+' MaoBridge_Poll  (PUBLIC entry point). Llamado desde Minuto_Timer. Guard de
+' intervalo propio. Fail-silent en toda la cadena.
+' ---------------------------------------------------------------------------
+Public Sub MaoBridge_Poll()
+    On Error GoTo MaoBridge_Poll_Err
+
+    Call LoadAccountBridgeConfig
+    If Not m_MaoEnabled Then Exit Sub
+
+    Dim nowTick As Long
+    nowTick = GetTickCountRaw()
+    If m_HasPolledMaoOnce Then
+        If TicksElapsed(m_LastMaoPollTick, nowTick) < MAO_BRIDGE_POLL_MIN_INTERVAL_MS Then Exit Sub
+    End If
+    m_LastMaoPollTick = nowTick
+    m_HasPolledMaoOnce = True
+
+    Dim http As MSXML2.ServerXMLHTTP60
+    Set http = New MSXML2.ServerXMLHTTP60
+    http.setTimeouts 2000, 2000, 3000, 3000
+
+    http.Open "GET", m_BaseUrl & "/api/bridge/mao-ops", False
+    http.setRequestHeader "X-Service-Token", m_ServiceToken
+    http.send
+
+    If http.Status <> 200 Then
+        Call LogError("MaoBridge poll GET failed. Status: " & http.Status)
+        Exit Sub
+    End If
+
+    Dim rawLines() As String
+    rawLines = Split(http.responseText, vbLf)
+    If UBound(rawLines) < 0 Then Exit Sub
+
+    Dim headerLine As String
+    headerLine = Trim$(rawLines(0))
+    If Len(headerLine) > 0 Then
+        If Right$(headerLine, 1) = vbCr Then headerLine = Left$(headerLine, Len(headerLine) - 1)
+    End If
+
+    Dim headerParts() As String
+    headerParts = Split(headerLine, ";")
+    If UBound(headerParts) < 1 Then Exit Sub
+    If UCase$(Trim$(headerParts(0))) <> "MAOPS" Then Exit Sub
+
+    Dim opCount As Long
+    opCount = CLng(Val(headerParts(1)))
+    If opCount <= 0 Then Exit Sub
+
+    Dim ackBody As String
+    ackBody = ""
+
+    Dim i As Long
+    For i = 1 To UBound(rawLines)
+        Dim oneLine As String
+        oneLine = Trim$(rawLines(i))
+        If Len(oneLine) > 0 Then
+            If Right$(oneLine, 1) = vbCr Then oneLine = Left$(oneLine, Len(oneLine) - 1)
+        End If
+        If Len(oneLine) > 0 Then
+            Dim ackLine As String
+            ackLine = ApplyMaoOp(oneLine)
+            If Len(ackLine) > 0 Then
+                If Len(ackBody) > 0 Then ackBody = ackBody & vbLf
+                ackBody = ackBody & ackLine
+            End If
+        End If
+    Next i
+
+    If Len(ackBody) > 0 Then Call AckMaoOps(ackBody)
+
+    Exit Sub
+MaoBridge_Poll_Err:
+    Call LogError("MaoBridge_Poll error: " & Err.Description)
+End Sub
+
+' ---------------------------------------------------------------------------
+' ApplyMaoOp  (PRIVATE). Parsea "op_id;tipo;campos..." y despacha. Devuelve la
+' linea de ack ("<op_id>;ok" | "<op_id>;error;<detail>") o "" si la linea esta
+' malformada (no se ackea). OJO: el contrato manda <seller/from>;<char/to>; las
+' funciones reciben charId primero, por eso el mapeo posicional explicito.
+' ---------------------------------------------------------------------------
+Private Function ApplyMaoOp(ByVal OpLine As String) As String
+    On Error GoTo ApplyMaoOp_Err
+    ApplyMaoOp = ""
+
+    Dim opId As String
+    opId = ""
+
+    Dim parts() As String
+    parts = Split(OpLine, ";")
+    If UBound(parts) < 2 Then
+        Call LogError("MaoBridge op malformada (faltan campos): " & OpLine)
+        Exit Function
+    End If
+
+    Dim opType As String
+    opId = Trim$(parts(0))
+    opType = LCase$(Trim$(parts(1)))
+
+    Select Case opType
+        Case "lock_character"
+            If UBound(parts) < 3 Then
+                Call LogError("MaoBridge op lock_character malformada: " & OpLine)
+                Exit Function
+            End If
+            ApplyMaoOp = opId & ";" & ApplyMaoLock(CLng(parts(3)), CLng(parts(2)))
+
+        Case "unlock_character"
+            If UBound(parts) < 3 Then
+                Call LogError("MaoBridge op unlock_character malformada: " & OpLine)
+                Exit Function
+            End If
+            ApplyMaoOp = opId & ";" & ApplyMaoUnlock(CLng(parts(3)), CLng(parts(2)))
+
+        Case "transfer_character"
+            If UBound(parts) < 5 Then
+                Call LogError("MaoBridge op transfer_character malformada: " & OpLine)
+                Exit Function
+            End If
+            ApplyMaoOp = opId & ";" & ApplyMaoTransfer(CLng(parts(4)), CLng(parts(2)), CLng(parts(3)), Trim$(parts(5)))
+
+        Case Else
+            Call LogError("MaoBridge op con tipo desconocido: " & OpLine)
+    End Select
+
+    Exit Function
+ApplyMaoOp_Err:
+    Call LogError("ApplyMaoOp error: " & Err.Description & " - Line: " & OpLine)
+    If Len(opId) > 0 Then
+        ApplyMaoOp = opId & ";error;unknown_error"
+    Else
+        ApplyMaoOp = ""
+    End If
+End Function
+
+' ---------------------------------------------------------------------------
+' ApplyMaoLock  (PRIVATE)  -> "ok" | "error;<detail>". CAS: bloquea solo si el
+' pj es del vendedor y no estaba bloqueado; relee por PK y verifica el estado
+' final (idempotente). Si el pj esta online, lo kickea para que no pueda vaciar
+' el inventario mientras esta publicado.
+' ---------------------------------------------------------------------------
+Private Function ApplyMaoLock(ByVal charId As Long, ByVal sellerAcc As Long) As String
+    On Error GoTo ApplyMaoLock_Err
+
+    ' GM gap (16.002 addendum): los personajes de GMs no se publican. El rol
+    ' NO esta persistido en la tabla user (se resuelve por NOMBRE contra las
+    ' listas de Administradores via EsGmChar), asi que se chequea aca antes
+    ' del lock. La web, al recibir este detail code en el ack, cancela el
+    ' listing automaticamente (auto-cancel del driver del bridge).
+    Dim rsPre As ADODB.Recordset
+    Set rsPre = Query("SELECT name FROM user WHERE id = ?;", charId)
+    If rsPre Is Nothing Then
+        ApplyMaoLock = "error;unknown_error"
+        Exit Function
+    End If
+    If rsPre.EOF Then
+        ApplyMaoLock = "error;char_not_found"
+        Exit Function
+    End If
+    If EsGmChar(CStr(rsPre!name)) Then
+        ApplyMaoLock = "error;gm_character_blocked"
+        Exit Function
+    End If
+
+    Call Query("UPDATE user SET is_locked_in_mao = 1 WHERE id = ? AND account_id = ? AND is_locked_in_mao = 0;", charId, sellerAcc)
+
+    Dim rs As ADODB.Recordset
+    Set rs = Query("SELECT name, account_id, is_locked_in_mao FROM user WHERE id = ?;", charId)
+    If rs Is Nothing Then
+        ApplyMaoLock = "error;unknown_error"
+        Exit Function
+    End If
+    If rs.EOF Then
+        ApplyMaoLock = "error;char_not_found"
+        Exit Function
+    End If
+    If CLng(rs!account_id) <> sellerAcc Then
+        ApplyMaoLock = "error;owner_mismatch"
+        Exit Function
+    End If
+    If Not CBool(rs!is_locked_in_mao) Then
+        ApplyMaoLock = "error;unknown_error"
+        Exit Function
+    End If
+
+    Dim charName As String
+    charName = CStr(rs!name)
+    Dim uref As t_UserReference
+    uref = NameIndex(charName)
+    If IsValidUserRef(uref) Then
+        Call modNetwork.Kick(UserList(uref.ArrayIndex).ConnectionDetails.ConnID, "Tu personaje fue publicado en el mercado.")
+    End If
+
+    ApplyMaoLock = "ok"
+    Exit Function
+ApplyMaoLock_Err:
+    Call LogError("ApplyMaoLock error: " & Err.Description & " - char " & charId & " seller " & sellerAcc)
+    ApplyMaoLock = "error;unknown_error"
+End Function
+
+' ---------------------------------------------------------------------------
+' ApplyMaoUnlock  (PRIVATE)  -> "ok". Idempotente (0 filas = ya desbloqueado o
+' no es del seller = ok).
+' ---------------------------------------------------------------------------
+Private Function ApplyMaoUnlock(ByVal charId As Long, ByVal sellerAcc As Long) As String
+    On Error GoTo ApplyMaoUnlock_Err
+
+    Call Query("UPDATE user SET is_locked_in_mao = 0, price_in_mao = 0 WHERE id = ? AND account_id = ?;", charId, sellerAcc)
+
+    ApplyMaoUnlock = "ok"
+    Exit Function
+ApplyMaoUnlock_Err:
+    Call LogError("ApplyMaoUnlock error: " & Err.Description & " - char " & charId & " seller " & sellerAcc)
+    ApplyMaoUnlock = "error;unknown_error"
+End Function
+
+' ---------------------------------------------------------------------------
+' ApplyMaoTransfer  (PRIVATE)  -> "ok" | "error;<detail>". Reparenta el pj al
+' comprador de forma atomica y verificada. Valida en orden: existe / ya
+' transferido (idempotente) / sigue bloqueado / es del vendedor / no online /
+' cuenta destino existe-no borrada-no baneada / cupo / colision de nombre.
+' NO toca clan (guild_index) ni matrimonio (spouse). saleTxId solo trazabilidad.
+' ---------------------------------------------------------------------------
+Private Function ApplyMaoTransfer(ByVal charId As Long, ByVal fromAcc As Long, ByVal toAcc As Long, ByVal saleTxId As String) As String
+    On Error GoTo ApplyMaoTransfer_Err
+
+    Dim rs As ADODB.Recordset
+    Set rs = Query("SELECT name, account_id, is_locked_in_mao FROM user WHERE id = ?;", charId)
+    If rs Is Nothing Then
+        ApplyMaoTransfer = "error;unknown_error"
+        Exit Function
+    End If
+    If rs.EOF Then
+        ApplyMaoTransfer = "error;char_not_found"
+        Exit Function
+    End If
+
+    If CLng(rs!account_id) = toAcc And Not CBool(rs!is_locked_in_mao) Then
+        ApplyMaoTransfer = "ok"
+        Exit Function
+    End If
+    If Not CBool(rs!is_locked_in_mao) Then
+        ApplyMaoTransfer = "error;not_locked"
+        Exit Function
+    End If
+    If CLng(rs!account_id) <> fromAcc Then
+        ApplyMaoTransfer = "error;owner_mismatch"
+        Exit Function
+    End If
+
+    Dim charName As String
+    charName = CStr(rs!name)
+
+    Dim uref As t_UserReference
+    uref = NameIndex(charName)
+    If IsValidUserRef(uref) Then
+        ApplyMaoTransfer = "error;char_online"
+        Exit Function
+    End If
+
+    Dim rsAcc As ADODB.Recordset
+    Set rsAcc = Query("SELECT deleted, is_banned FROM account WHERE id = ?;", toAcc)
+    If rsAcc Is Nothing Then
+        ApplyMaoTransfer = "error;unknown_error"
+        Exit Function
+    End If
+    If rsAcc.EOF Then
+        ApplyMaoTransfer = "error;target_deleted"
+        Exit Function
+    End If
+    If CBool(rsAcc!deleted) Then
+        ApplyMaoTransfer = "error;target_deleted"
+        Exit Function
+    End If
+    If CBool(rsAcc!is_banned) Then
+        ApplyMaoTransfer = "error;target_banned"
+        Exit Function
+    End If
+
+    Dim cap As Long
+    cap = MaxCharacterForTier(GetPatronTierFromAccountID(toAcc))
+    If cap > MAX_PERSONAJES Then cap = MAX_PERSONAJES
+    If GetPersonajesCountByIDDatabase(toAcc) >= cap Then
+        ApplyMaoTransfer = "error;target_over_cap"
+        Exit Function
+    End If
+
+    Dim rsName As ADODB.Recordset
+    Set rsName = Query("SELECT 1 FROM user WHERE account_id = ? AND name = ? COLLATE NOCASE AND id <> ?;", toAcc, charName, charId)
+    If rsName Is Nothing Then
+        ApplyMaoTransfer = "error;unknown_error"
+        Exit Function
+    End If
+    If Not rsName.EOF Then
+        ApplyMaoTransfer = "error;name_conflict"
+        Exit Function
+    End If
+
+    Call Query("UPDATE user SET account_id = ?, is_locked_in_mao = 0, price_in_mao = 0 WHERE id = ? AND is_locked_in_mao = 1 AND account_id = ?;", toAcc, charId, fromAcc)
+
+    Dim rsAfter As ADODB.Recordset
+    Set rsAfter = Query("SELECT account_id, is_locked_in_mao FROM user WHERE id = ?;", charId)
+    If rsAfter Is Nothing Then
+        ApplyMaoTransfer = "error;unknown_error"
+        Exit Function
+    End If
+    If rsAfter.EOF Then
+        ApplyMaoTransfer = "error;unknown_error"
+        Exit Function
+    End If
+    If CLng(rsAfter!account_id) = toAcc And Not CBool(rsAfter!is_locked_in_mao) Then
+        ApplyMaoTransfer = "ok"
+    Else
+        ApplyMaoTransfer = "error;unknown_error"
+    End If
+    Exit Function
+ApplyMaoTransfer_Err:
+    Call LogError("ApplyMaoTransfer error: " & Err.Description & " - char " & charId & " from " & fromAcc & " to " & toAcc & " tx " & saleTxId)
+    ApplyMaoTransfer = "error;unknown_error"
+End Function
+
+' ---------------------------------------------------------------------------
+' AckMaoOps  (PRIVATE). Confirma en la web las ops procesadas. Body = una linea
+' por op ("<op_id>;ok" | "<op_id>;error;<detail>") separadas por vbLf.
+' Content-Type text/plain explicito (sin el, express.text no parsea). Fail-silent.
+' ---------------------------------------------------------------------------
+Private Sub AckMaoOps(ByVal Body As String)
+    On Error GoTo AckMaoOps_Err
+
+    Dim http As MSXML2.ServerXMLHTTP60
+    Set http = New MSXML2.ServerXMLHTTP60
+    http.setTimeouts 2000, 2000, 3000, 3000
+
+    http.Open "POST", m_BaseUrl & "/api/bridge/mao-ops/ack", False
+    http.setRequestHeader "X-Service-Token", m_ServiceToken
+    http.setRequestHeader "Content-Type", "text/plain"
+    http.send Body
+
+    If http.Status <> 200 Then
+        Call LogError("MaoBridge ack POST failed. Status: " & http.Status)
+    End If
+
+    Exit Sub
+AckMaoOps_Err:
+    Call LogError("AckMaoOps error: " & Err.Description)
 End Sub

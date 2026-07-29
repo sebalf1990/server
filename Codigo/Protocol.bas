@@ -7959,43 +7959,12 @@ End Sub
 
 Private Sub HandlePublicarPersonajeMAO(ByVal UserIndex As Integer)
     On Error GoTo HandlePublicarPersonajeMAO_Err:
+    ' MAO plan 16.002: la publicacion se hace desde la web (op lock_character
+    ' del bridge), no in-game. Se drena el Int32 del precio que envia el cliente
+    ' (para no desalinear el buffer del packet) y se redirige al jugador a la web.
     Dim Valor As Long
     Valor = reader.ReadInt32
-    If Valor <= MinimumPriceMao Then
-        'Msg1281= El valor de venta del personaje debe ser mayor que $¬1
-        Call WriteLocaleMsg(UserIndex, MSG_VALOR_VENTA_PERSONAJE_DEBE_MAYOR, e_FontTypeNames.FONTTYPE_INFO, MinimumPriceMao)
-        Exit Sub
-    End If
-    With UserList(UserIndex)
-        ' Para recibir el ID del user
-        Dim RS As ADODB.Recordset
-        Set RS = Query("select is_locked_in_mao from user where id = ?;", .Id)
-        If EsGM(UserIndex) Then
-            'Msg1282= No podes vender un gm.
-            Call WriteLocaleMsg(UserIndex, MSG_NO_PODES_VENDER_GM, e_FontTypeNames.FONTTYPE_INFO)
-            Exit Sub
-        End If
-        If CBool(RS!is_locked_in_mao) Then
-            'Msg1283= El personaje ya está publicado.
-            Call WriteLocaleMsg(UserIndex, MSG_PERSONAJE_PUBLICADO, e_FontTypeNames.FONTTYPE_INFO)
-            Exit Sub
-        End If
-        If .Stats.ELV < MinimumLevelMao Then
-            'Msg1284= No puedes publicar un personaje menor a nivel ¬1
-            Call WriteLocaleMsg(UserIndex, MSG_NO_PUEDES_PUBLICAR_PERSONAJE_MENOR_NIVEL, e_FontTypeNames.FONTTYPE_INFO, MinimumLevelMao)
-            Exit Sub
-        End If
-        If .Stats.GLD < GoldPriceMao Then
-            'Msg1291= El costo para vender tu personajes es de ¬1 monedas de oro, no tienes esa cantidad.
-            Call WriteLocaleMsg(UserIndex, MSG_NO_COSTO_VENDER_PERSONAJES_MONEDAS_ORO_TIENES_ESA_CANTIDAD, e_FontTypeNames.FONTTYPE_INFOBOLD, GoldPriceMao)
-            Exit Sub
-        Else
-            .Stats.GLD = .Stats.GLD - GoldPriceMao
-            Call WriteUpdateGold(UserIndex)
-        End If
-        Call Execute("update user set price_in_mao = ?, is_locked_in_mao = 1 where id = ?;", Valor, .Id)
-        Call modNetwork.Kick(UserList(UserIndex).ConnectionDetails.ConnID, "El personaje fue publicado.")
-    End With
+    Call WriteConsoleMsg(UserIndex, "El mercado de personajes se maneja desde la web. Publica tu personaje desde tu cuenta en el sitio oficial.", e_FontTypeNames.FONTTYPE_INFO)
     Exit Sub
 HandlePublicarPersonajeMAO_Err:
     Call TraceError(Err.Number, Err.Description, "Protocol.HandlePublicarPersonajeMAO", Erl)
