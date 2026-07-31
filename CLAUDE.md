@@ -9,8 +9,4 @@ Antes de trabajar en el servidor, leer:
 3. `C:\AO20\ia\memory\reglas-operativas.md`
 4. Plan canonico activo en `C:\AO20\ia\plans\`
 
-Reglas criticas:
-- No compilar el cliente por CLI.
-- Editar `.bas`, `.cls` y `.frm` solo con cp1252.
-- Conservar CRLF en `.dat` e `.ini`.
-- Registrar cambios significativos en plan y changelog.
+Reglas criticas: fuente unica en `C:\AO20\ia\memory\reglas-operativas.md`. No se repiten acá para no volver a desactualizarse.
