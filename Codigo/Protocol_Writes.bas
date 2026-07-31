@@ -46,6 +46,14 @@ End Function
         On Error GoTo WriteAccountCharacterList_Err
         Call Writer.WriteInt16(ServerPacketID.eAccountCharacterList)
         Call Writer.WriteInt(count)
+        ' Plan 30.001: el cupo de la cuenta viaja con la lista para que el cliente
+        ' pueda avisar ANTES de que el jugador llene el formulario de creacion.
+        ' Antes frmConnect lo tenia hardcodeado en 10 y por eso nunca frenaba.
+        ' El server sigue siendo la barrera real: esto es solo para avisar antes.
+        Dim maxChars As Long
+        maxChars = MaxCharacterForTier(GetPatronTierFromAccountID(UserList(UserIndex).AccountID))
+        If maxChars > MAX_PERSONAJES Then maxChars = MAX_PERSONAJES
+        Call Writer.WriteInt(maxChars)
         Dim i As Long
         For i = 1 To count
             With Personajes(i)

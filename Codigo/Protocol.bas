@@ -1505,9 +1505,27 @@ Private Sub HandleLoginNewChar(ByVal UserIndex As Integer)
 
         End If
 
-        'Check if we reached MAX_PERSONAJES for this account after updateing the UserList(userindex).AccountID in the if above
-        If GetPersonajesCountByIDDatabase(UserList(UserIndex).AccountID) >= MAX_PERSONAJES Then
-            Call CloseSocket(UserIndex)
+        ' Plan 30.001: el cupo del TIER limita lo que se consigue gratis, o sea
+        ' crear. Comprar en el mercado NO lo limita el tier, solo el techo
+        ' absoluto (ver ApplyMaoTransfer en ModAccountBridge.bas): esa compra ya
+        ' fue pagada. Antes los dos limites estaban CRUZADOS - se podian crear 10
+        ' sin mirar el tier, y en cambio recibir uno comprado rebotaba con
+        ' target_over_cap por el cupo del tier, despues de que el comprador pago.
+        Dim maxPjForTier As Long
+        maxPjForTier = MaxCharacterForTier(GetPatronTierFromAccountID(UserList(UserIndex).AccountID))
+        If maxPjForTier > MAX_PERSONAJES Then maxPjForTier = MAX_PERSONAJES
+        Dim pjActuales As Byte
+        pjActuales = GetPersonajesCountByIDDatabase(UserList(UserIndex).AccountID)
+        If pjActuales >= maxPjForTier Then
+            ' El aviso lleva el cupo real y cuantos tiene: Msg1779 usa los
+            ' placeholders 1 y 2, separados por Chr$(172), que es el separador de
+            ' campos que espera Locale_Parse_ServerMessage en el cliente.
+            Call WriteShowMessageBox(UserIndex, MSG_UPGRADE_ACCOUNT_TO_CREATE_MORE_CHARS, _
+                                     maxPjForTier & Chr$(172) & pjActuales)
+            ' NO se cierra el socket. Antes el cliente mostraba el aviso y acto
+            ' seguido "Ha ocurrido un error al conectar con el servidor", con lo
+            ' cual un bloqueo esperado se leia como una falla del juego. Queda en
+            ' la pantalla de creacion y el jugador puede volver atras.
             Exit Sub
         End If
         

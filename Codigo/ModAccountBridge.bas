@@ -109,7 +109,17 @@ Private Sub LoadAccountBridgeConfig()
 
     ' MAO (mercado de personajes, plan 16.002): OFF por defecto. Se prende en
     ' Server.ini una vez que la web tenga /api/bridge/mao-ops vivo.
-    m_MaoEnabled = (Trim$(ini.GetValue("AccountBridge", "MaoEnabled")) = "1")
+    ' Plan 30.001: Server.ini esta gitignoreado y no hay plantilla versionada, asi
+    ' que un deploy nuevo NO trae esta clave y el canal quedaba apagado en
+    ' silencio mientras la web cobraba igual. Ahora se avisa por log (una sola vez
+    ' por ejecucion, porque m_ConfigLoaded corta la relectura) y ademas el poll
+    ' publica el valor en el header X-Game-Mao-Enabled para que la web no cobre.
+    Dim maoRaw As String
+    maoRaw = Trim$(ini.GetValue("AccountBridge", "MaoEnabled"))
+    m_MaoEnabled = (maoRaw = "1")
+    If LenB(maoRaw) = 0 Then
+        Call LogError("AccountBridge: falta la clave MaoEnabled en la seccion [AccountBridge] de Server.ini. El canal del Mercado de Personajes queda APAGADO.")
+    End If
 
     m_ConfigLoaded = True
     Exit Sub
@@ -125,6 +135,85 @@ LoadAccountBridgeConfig_Err:
     m_MaoEnabled = False
     m_ConfigLoaded = True
 End Sub
+
+' Cupo de personajes de un tier, topeado igual que en ApplyMaoTransfer para que
+' la web vea exactamente el numero que el server va a aplicar.
+Private Function CapForTier(ByVal tier As e_TipoUsuario) As Long
+    CapForTier = MaxCharacterForTier(tier)
+    If CapForTier > MAX_PERSONAJES Then CapForTier = MAX_PERSONAJES
+End Function
+
+' Publica la tabla de cupos por tier para que la web NO la hardcodee (plan
+' 30.001, ola 0). Viaja como header del GET del poll que ya se hace, asi que no
+' agrega ni una llamada ni un endpoint. Formato:
+'   "normal=4,aventurero=6,heroe=8,leyenda=10"
+' El server es la unica autoridad del cupo: si estos numeros cambian, la web se
+' entera en el proximo poll sin tocar codigo web.
+Private Function BuildCharCapsHeader() As String
+    BuildCharCapsHeader = "normal=" & CapForTier(e_TipoUsuario.tNormal) & _
+                          ",aventurero=" & CapForTier(e_TipoUsuario.tAventurero) & _
+                          ",heroe=" & CapForTier(e_TipoUsuario.tHeroe) & _
+                          ",leyenda=" & CapForTier(e_TipoUsuario.tLeyenda) & _
+                          ",max=" & MAX_PERSONAJES
+End Function
+
+' Testigo de compilacion (plan 30.001). Devuelve con que constantes salio
+' este binario. No cambia ningun comportamiento: solo arma un string.
+' Existe para poder AUDITAR el .exe sin adivinar - los literales de VB6
+' quedan en el binario en UTF-16 y tools/audit-server-binary.py los lee.
+' Motivo: se cambio el cupo de personajes por tier, el binario no lo
+' aplicaba, y no habia forma de saber que constantes se habian usado.
+Public Function BuildStamp() As String
+    Dim s As String
+    s = "AO20STAMP_INICIO;"
+    #If DEBUGGING Then
+        s = s & "STAMP_DEBUGGING=1;"
+    #Else
+        s = s & "STAMP_DEBUGGING=0;"
+    #End If
+    #If PYMMO = 1 Then
+        s = s & "STAMP_PYMMO=1;"
+    #Else
+        s = s & "STAMP_PYMMO=0;"
+    #End If
+    #If UsarQueSocket Then
+        s = s & "STAMP_UsarQueSocket=1;"
+    #Else
+        s = s & "STAMP_UsarQueSocket=0;"
+    #End If
+    #If ConUpTime Then
+        s = s & "STAMP_ConUpTime=1;"
+    #Else
+        s = s & "STAMP_ConUpTime=0;"
+    #End If
+    #If Lac Then
+        s = s & "STAMP_Lac=1;"
+    #Else
+        s = s & "STAMP_Lac=0;"
+    #End If
+    #If AntiExternos Then
+        s = s & "STAMP_AntiExternos=1;"
+    #Else
+        s = s & "STAMP_AntiExternos=0;"
+    #End If
+    #If UNLOCK_CPU Then
+        s = s & "STAMP_UNLOCK_CPU=1;"
+    #Else
+        s = s & "STAMP_UNLOCK_CPU=0;"
+    #End If
+    #If DIRECT_PLAY Then
+        s = s & "STAMP_DIRECT_PLAY=1;"
+    #Else
+        s = s & "STAMP_DIRECT_PLAY=0;"
+    #End If
+    #If BATTLESERVER = 1 Then
+        s = s & "STAMP_BATTLESERVER=1;"
+    #Else
+        s = s & "STAMP_BATTLESERVER=0;"
+    #End If
+    s = s & "AO20STAMP_FIN"
+    BuildStamp = s
+End Function
 
 ' ---------------------------------------------------------------------------
 ' AccountBridge_AllowIngameRegistration  (PUBLIC)
@@ -174,6 +263,8 @@ Public Sub AccountBridge_Poll()
 
     http.Open "GET", m_BaseUrl & "/api/bridge/account-ops", False
     http.setRequestHeader "X-Service-Token", m_ServiceToken
+    http.setRequestHeader "X-Game-Char-Caps", BuildCharCapsHeader()
+    http.setRequestHeader "X-Game-Mao-Enabled", IIf(m_MaoEnabled, "1", "0")
     http.send
 
     If http.Status <> 200 Then
@@ -697,10 +788,11 @@ Private Function ApplyMaoTransfer(ByVal charId As Long, ByVal fromAcc As Long, B
         Exit Function
     End If
 
-    Dim cap As Long
-    cap = MaxCharacterForTier(GetPatronTierFromAccountID(toAcc))
-    If cap > MAX_PERSONAJES Then cap = MAX_PERSONAJES
-    If GetPersonajesCountByIDDatabase(toAcc) >= cap Then
+    ' Plan 30.001: una compra del mercado NO la limita el cupo del tier, solo el
+    ' techo absoluto. El cupo del tier limita crear (ver HandleLoginNewChar en
+    ' Protocol.bas); esta transferencia ya fue pagada, asi que un comprador de
+    ' cuenta gratuita no puede rebotar por su tier despues de haber pagado.
+    If GetPersonajesCountByIDDatabase(toAcc) >= MAX_PERSONAJES Then
         ApplyMaoTransfer = "error;target_over_cap"
         Exit Function
     End If

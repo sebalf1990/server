@@ -497,21 +497,25 @@ End Sub
 ''' </summary>
 ''' <param name="tier">The user tier.</param>
 ''' <returns>The maximum number of characters allowed.</returns>
+' Plan 30.001: el cupo YA NO cuelga de #If DEBUGGING.
+' Antes la rama DEBUGGING devolvia 10 fijo ignorando el tier, y como el binario
+' se compila con DEBUGGING = 1 (ver docs/flags-de-compilacion-vb6.md) el cupo por
+' tier NUNCA se aplicaba: cualquier cuenta gratuita podia crear 10 personajes y
+' el beneficio de la suscripcion existia en el codigo pero no en el binario.
+' Una regla de negocio no debe colgar de un flag de debug: asi quedaba imposible
+' de probar en desarrollo. Si en desarrollo hacen falta mas personajes, se le
+' pone un tier alto a la cuenta (account.is_active_patron), no se puentea la regla.
 Public Function MaxCharacterForTier(ByVal tier As e_TipoUsuario)
-    #If DEBUGGING Then
-        MaxCharacterForTier = 10
-    #Else
-        Select Case tier
-            Case e_TipoUsuario.tAventurero
-                MaxCharacterForTier = 3
-            Case e_TipoUsuario.tHeroe
-                MaxCharacterForTier = 5
-            Case e_TipoUsuario.tLeyenda
-                MaxCharacterForTier = 10
-            Case Else
-                MaxCharacterForTier = 1
-        End Select
-    #End If
+    Select Case tier
+        Case e_TipoUsuario.tAventurero
+            MaxCharacterForTier = 6
+        Case e_TipoUsuario.tHeroe
+            MaxCharacterForTier = 8
+        Case e_TipoUsuario.tLeyenda
+            MaxCharacterForTier = 10
+        Case Else
+            MaxCharacterForTier = 4
+    End Select
 End Function
 
 Public Function GetPatronTierFromAccountID(ByVal account_id) As e_TipoUsuario
