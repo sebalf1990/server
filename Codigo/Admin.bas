@@ -370,13 +370,54 @@ UnBan_Err:
     Call TraceError(Err.Number, Err.Description, "Admin.UnBan", Erl)
 End Sub
 
-Public Function UserDarPrivilegioLevel(ByVal name As String) As e_PlayerType
+' ---------------------------------------------------------------------------
+' UserDarPrivilegioLevel
+'
+' LA WEB ES LA FUENTE DE LOS PRIVILEGIOS (plan 31.001, ola 5, decision D6).
+'
+' Antes el rango salia de cruzar el NOMBRE del personaje contra las secciones
+' [Admines]/[Dioses]/[SemiDioses]/[Consejeros] de Server.ini. Eso no tenia
+' ningun vinculo con la cuenta: dos listas independientes -quien entra al
+' panel de la web y quien es GM en el juego- que nadie podia cruzar.
+'
+' Con el bridge prendido el rango sale del mapa que la web mando en el login
+' de ESA cuenta (UserList(UserIndex).GmCharsBridge). El vinculo cuenta-rango
+' es estructural: no hace falta preguntarse de quien es un personaje, porque
+' el mapa YA es de la cuenta que se autentico. Sin entrada para ese nombre, el
+' resultado es User.
+'
+' SERVER.INI QUEDA SOLO COMO FALLBACK DE DEV LOCAL (bridge apagado). Con el
+' bridge prendido NO se consulta, y es a proposito: si se consultara, un
+' Server.ini viejo olvidado en la VM podria ELEVAR a alguien que la web ya no
+' considera GM, y el punto de esta ola es que haya una sola lista.
+'
+' UserIndex es OPCIONAL porque hay llamadores que preguntan por un personaje
+' que NO esta conectado (Penas.Ban, los comandos de GM sobre alguien offline).
+' Esos siguen cayendo en Server.ini: el mapa de una cuenta solo existe mientras
+' esa cuenta tiene una sesion abierta. Consecuencia conocida y aceptada: con el
+' bridge prendido, comparar privilegios contra un GM OFFLINE devuelve User.
+' Se acepta porque el unico efecto es que la comparacion no lo proteja estando
+' desconectado; estando conectado, .flags.Privilegios ya tiene el valor bueno.
+' ---------------------------------------------------------------------------
+Public Function UserDarPrivilegioLevel(ByVal name As String, _
+                                       Optional ByVal UserIndex As Integer = 0) As e_PlayerType
     On Error GoTo UserDarPrivilegioLevel_Err
     '***************************************************
     'Author: Unknown
     'Last Modification: 03/02/07
     'Last Modified By: Juan Martín Sotuyo Dodero (Maraxus)
     '***************************************************
+    ' Default explicito: si algo falla y salta al manejador de error, el valor
+    ' devuelto tiene que ser un e_PlayerType valido y el mas bajo, no un 0 que
+    ' no corresponde a ningun miembro del enum.
+    UserDarPrivilegioLevel = e_PlayerType.User
+    If UserIndex > 0 Then
+        If AccountBridge_Enabled() Then
+            UserDarPrivilegioLevel = AccountBridge_PrivilegiosDePersonaje( _
+                    UserList(UserIndex).GmCharsBridge, name)
+            Exit Function
+        End If
+    End If
     If EsAdmin(name) Then
         UserDarPrivilegioLevel = e_PlayerType.Admin
     ElseIf EsDios(name) Then
@@ -484,7 +525,15 @@ Public Function CompararPrivilegios(ByVal Izquierda As e_PlayerType, ByVal Derec
     '**************************************************************************************************************************
     On Error GoTo CompararPrivilegios_Err
     Dim PrivilegiosGM As e_PlayerType
-    PrivilegiosGM = e_PlayerType.Admin Or e_PlayerType.Dios Or e_PlayerType.SemiDios Or e_PlayerType.Consejero Or e_PlayerType.RoleMaster
+    ' ROLEMASTER FUERA DE LA MASCARA (plan 31.001, ola 5).
+    ' Estaba adentro y alteraba la jerarquia por accidente: los valores de
+    ' e_PlayerType son bits (RoleMaster = &H2) y esta funcion compara los
+    ' numeros enteros resultantes, asi que un Consejero con RM (4 Or 2 = 6) le
+    ' ganaba a un Consejero sin RM (4). O sea que el flag de rol -que no es un
+    ' escalon de autoridad, es un rol de evento- desempataba a dos GMs del mismo
+    ' rango. Sacarlo deja la comparacion sobre lo unico que si es jerarquia:
+    ' Consejero < SemiDios < Dios < Admin.
+    PrivilegiosGM = e_PlayerType.Admin Or e_PlayerType.Dios Or e_PlayerType.SemiDios Or e_PlayerType.Consejero
     ' Obtenemos el rango de los 2 personajes.
     Izquierda = (Izquierda And PrivilegiosGM)
     Derecha = (Derecha And PrivilegiosGM)

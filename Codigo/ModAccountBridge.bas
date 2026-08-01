@@ -226,6 +226,113 @@ Public Function AccountBridge_AllowIngameRegistration() As Boolean
 End Function
 
 ' ---------------------------------------------------------------------------
+' AccountBridge_Enabled  (PUBLIC)
+'
+' Si el bridge esta prendido, la web es la FUENTE de los privilegios de GM y
+' Server.ini no se consulta (plan 31.001, ola 5). Si esta apagado -dev local-,
+' manda Server.ini como siempre. Es una sola pregunta y por eso vive aca: que
+' Admin.bas tenga que saber como se lee la config del bridge seria repetir el
+' criterio en dos lugares, y el dia que uno cambie el otro miente.
+' ---------------------------------------------------------------------------
+Public Function AccountBridge_Enabled() As Boolean
+    Call LoadAccountBridgeConfig
+    AccountBridge_Enabled = m_Enabled
+End Function
+
+' ---------------------------------------------------------------------------
+' AccountBridge_PrivilegiosDePersonaje  (PUBLIC)
+'
+' Traduce el mapa que mando la web en el login de la cuenta al valor de
+' e_PlayerType que le corresponde a UN personaje (plan 31.001, ola 5, D6).
+'
+' gmChars: "NOMBRE=rango[+rm],NOMBRE2=rango" (o vacio)
+' rangos  : consejero | semidios | dios | admin
+' flag    : +rm / +rolemaster, ADITIVO (e_PlayerType.RoleMaster es un bit
+'           aparte, no un escalon: un RoleMaster es ademas alguna otra cosa)
+'
+' SIN ENTRADA PARA ESE NOMBRE, DEVUELVE User. Ese es todo el modelo: el mapa
+' es de la cuenta que acaba de autenticarse, asi que un nombre que no esta no
+' es GM y no hay ninguna lista global donde equivocarse. Si alguien escribio
+' mal el nombre en la config de la web, el mapa igual le llega a SU cuenta y
+' nunca matchea: el GM entra como jugador raso. La falla de un typo NUNCA es
+' que un jugador entre como GM.
+'
+' Cualquier error de parseo cae en User y se logea: un mapa raro no puede ni
+' elevar ni romper el login.
+' ---------------------------------------------------------------------------
+Public Function AccountBridge_PrivilegiosDePersonaje(ByVal gmChars As String, _
+                                                     ByVal charName As String) As e_PlayerType
+    On Error GoTo PrivilegiosDePersonaje_Err
+
+    Dim buscado  As String
+    Dim entradas() As String
+    Dim partes() As String
+    Dim i        As Long
+
+    AccountBridge_PrivilegiosDePersonaje = e_PlayerType.User
+
+    If LenB(Trim$(gmChars)) = 0 Then Exit Function
+    buscado = UCase$(Trim$(charName))
+    If LenB(buscado) = 0 Then Exit Function
+
+    entradas = Split(gmChars, ",")
+    For i = 0 To UBound(entradas)
+        partes = Split(entradas(i), "=")
+        If UBound(partes) = 1 Then
+            If UCase$(Trim$(partes(0))) = buscado Then
+                AccountBridge_PrivilegiosDePersonaje = RangoDesdeTexto(partes(1))
+                Exit Function
+            End If
+        End If
+    Next i
+    Exit Function
+
+PrivilegiosDePersonaje_Err:
+    Call LogError("AccountBridge_PrivilegiosDePersonaje error: " & Err.Description)
+    AccountBridge_PrivilegiosDePersonaje = e_PlayerType.User
+End Function
+
+' ---------------------------------------------------------------------------
+' RangoDesdeTexto  (PRIVATE)
+'
+' "dios" -> Dios ; "consejero+rm" -> Consejero Or RoleMaster.
+'
+' Un rango que no se reconoce devuelve User, NO el escalon mas bajo de GM:
+' la web ya descarta lo que no entiende (staffGmChars.ts), asi que si algo
+' raro llego hasta aca es un desajuste de version entre las dos puntas, y ahi
+' la respuesta correcta es no dar privilegios.
+' ---------------------------------------------------------------------------
+Private Function RangoDesdeTexto(ByVal token As String) As e_PlayerType
+    Dim partes() As String
+    Dim rango    As e_PlayerType
+    Dim i        As Long
+
+    RangoDesdeTexto = e_PlayerType.User
+    partes = Split(LCase$(Trim$(token)), "+")
+
+    Select Case Trim$(partes(0))
+        Case "admin"
+            rango = e_PlayerType.Admin
+        Case "dios"
+            rango = e_PlayerType.Dios
+        Case "semidios"
+            rango = e_PlayerType.SemiDios
+        Case "consejero"
+            rango = e_PlayerType.Consejero
+        Case Else
+            Exit Function
+    End Select
+
+    For i = 1 To UBound(partes)
+        If Trim$(partes(i)) = "rm" Or Trim$(partes(i)) = "rolemaster" Then
+            rango = rango Or e_PlayerType.RoleMaster
+        End If
+    Next i
+
+    RangoDesdeTexto = rango
+End Function
+
+' ---------------------------------------------------------------------------
 ' AccountBridge_RegisterUrl  (PUBLIC)
 ' URL de registro que se muestra cuando el alta in-game esta deshabilitada.
 ' ---------------------------------------------------------------------------
@@ -868,7 +975,22 @@ End Sub
 ' Request  : POST <BaseUrl>/api/bridge/verify-login
 '            X-Service-Token, Content-Type: text/plain
 '            body = email & vbLf & password   (dos lineas, sin escapes)
-' Respuesta: "OK;<account_id>;<validated>;<banned>;<deleted>" | "FAIL" | "ERR;<causa>"
+' Respuesta: "OK;<account_id>;<validated>;<banned>;<deleted>;<gmmap>"
+'            | "FAIL" | "ERR;<causa>"
+'
+' EL SEXTO CAMPO (plan 31.001, ola 5): el mapa de personajes GM de la cuenta,
+' con formato "NOMBRE=rango[+rm],NOMBRE2=rango" o vacio. Es el MAPA COMPLETO
+' y no el rango del que entra porque esto pasa cuando se autentica la CUENTA:
+' el jugador todavia no eligio personaje. El rango se resuelve despues, al
+' conectar (ver Admin.UserDarPrivilegioLevel).
+'
+' El nombre de un personaje solo puede tener letras A-Z y espacios
+' (TCP.ValidarNombre, TCP.bas:1545), asi que ni ';' ni ',' ni '=' pueden
+' aparecer adentro: el campo no necesita escapes y no puede inyectar campos
+' falsos en la respuesta.
+'
+' Un campo AUSENTE (web vieja) se lee como mapa VACIO, nunca como error: sin
+' mapa no hay privilegios, que es la direccion segura.
 '
 ' Devuelve VERIFY_LOGIN_OK / VERIFY_LOGIN_REJECTED / VERIFY_LOGIN_ERROR.
 ' Cualquier problema de red, timeout o respuesta inesperada es ERROR, NUNCA
@@ -881,7 +1003,8 @@ Public Function AccountBridge_VerifyLogin(ByVal email As String, _
                                           ByRef outAccountId As Long, _
                                           ByRef outValidated As Boolean, _
                                           ByRef outBanned As Boolean, _
-                                          ByRef outDeleted As Boolean) As Long
+                                          ByRef outDeleted As Boolean, _
+                                          ByRef outGmChars As String) As Long
     On Error GoTo VerifyLogin_Err
 
     ' La config del bridge es lazy y esta guardada por m_ConfigLoaded, asi que
@@ -896,6 +1019,7 @@ Public Function AccountBridge_VerifyLogin(ByVal email As String, _
     outValidated = False
     outBanned = False
     outDeleted = False
+    outGmChars = vbNullString
 
     If Not m_Enabled Then
         Call LogError("AccountBridge_VerifyLogin: el bridge esta deshabilitado, no se puede validar el login.")
@@ -957,6 +1081,15 @@ Public Function AccountBridge_VerifyLogin(ByVal email As String, _
     outValidated = (Trim$(parts(2)) = "1")
     outBanned = (Trim$(parts(3)) = "1")
     outDeleted = (Trim$(parts(4)) = "1")
+
+    ' Mapa de personajes GM (plan 31.001, ola 5). OPCIONAL A PROPOSITO: si la
+    ' web es vieja y no lo manda, UBound se queda en 4 y el mapa queda vacio.
+    ' Eso NO es un error: significa que esta cuenta no tiene privilegios de GM,
+    ' que es la respuesta segura cuando no se sabe. Un login jamas puede fallar
+    ' por este campo.
+    If UBound(parts) >= 5 Then
+        outGmChars = Trim$(parts(5))
+    End If
 
     AccountBridge_VerifyLogin = VERIFY_LOGIN_OK
     Exit Function

@@ -245,9 +245,20 @@ Public Function ConnectUser_Check(ByVal UserIndex As Integer, ByVal name As Stri
                 End If
             End If
         #End If
-        .flags.Privilegios = UserDarPrivilegioLevel(name)
-        If EsRolesMaster(name) Then
-            .flags.Privilegios = .flags.Privilegios Or e_PlayerType.RoleMaster
+        ' EL RANGO SE RESUELVE ACA, AL CONECTAR EL PERSONAJE (plan 31.001, ola 5).
+        ' Se pasa UserIndex porque es lo que le permite a UserDarPrivilegioLevel
+        ' mirar el mapa que la web mando en el login de ESTA cuenta. Sin el, la
+        ' funcion no tiene forma de saber de que cuenta es el personaje y cae al
+        ' fallback de Server.ini.
+        .flags.Privilegios = UserDarPrivilegioLevel(name, UserIndex)
+        ' El bit de RoleMaster: por el camino del bridge YA VIENE adentro del
+        ' mapa (el flag +rm), asi que volver a consultarlo aca leeria un
+        ' Server.ini que en produccion esta vacio y no agregaria nada. Por el
+        ' camino de fallback sigue saliendo de [RolesMasters], igual que siempre.
+        If Not AccountBridge_Enabled() Then
+            If EsRolesMaster(name) Then
+                .flags.Privilegios = .flags.Privilegios Or e_PlayerType.RoleMaster
+            End If
         End If
         If Not EsGM(UserIndex) And ServerSoloGMs > 0 Then
             failureReason = "Server restricted to administrators."

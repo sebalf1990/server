@@ -1016,9 +1016,12 @@ Private Sub HandleLoginAccount(ByVal ConnectionID As Long)
     Dim isBanned     As Boolean
     Dim isDeleted    As Boolean
     Dim attempt      As Integer
+    ' Mapa de personajes GM de esta cuenta (plan 31.001, ola 5). Viene en la
+    ' misma respuesta del verify-login, vacio si la cuenta no tiene ninguno.
+    Dim gmChars      As String
 
     For attempt = 1 To 2
-        verifyResult = AccountBridge_VerifyLogin(username, Password, accountId, isValidated, isBanned, isDeleted)
+        verifyResult = AccountBridge_VerifyLogin(username, Password, accountId, isValidated, isBanned, isDeleted, gmChars)
         If verifyResult <> VERIFY_LOGIN_REJECTED Then Exit For
         ' Rechazo en el primer intento: puede haber un alta o un reset del
         ' bridge todavia sin aplicar. La web valida contra ESTA misma base (la
@@ -1055,6 +1058,12 @@ Private Sub HandleLoginAccount(ByVal ConnectionID As Long)
     End If
 
     UserList(UserIndex).AccountID = accountId
+    ' EL VINCULO CUENTA-RANGO, GUARDADO (plan 31.001, ola 5, decision D6).
+    ' Va pegado al AccountID porque son el mismo dato: quien es esta cuenta y
+    ' que personajes suyos son GM. El rango NO se aplica todavia -aca todavia
+    ' no se sabe con que personaje va a entrar-, se aplica al conectar, en
+    ' Modulo_UsUaRiOs.ConnectUser_Check via Admin.UserDarPrivilegioLevel.
+    UserList(UserIndex).GmCharsBridge = gmChars
     Dim Personajes(1 To 10) As t_PersonajeCuenta
     Dim count               As Long
     count = GetPersonajesCuentaDatabase(accountId, Personajes)
@@ -1435,6 +1444,16 @@ Private Sub HandleLoginNewChar(ByVal ConnectionID As Long)
         Exit Sub
     End If
 
+    ' ANTI-ROBO DE NOMBRE DE GM (obsoleto en el camino nuevo, plan 31.001 ola 5).
+    ' Existe porque los privilegios salian de una lista de NOMBRES en Server.ini:
+    ' sin este chequeo, cualquiera se creaba un personaje llamado igual que un GM
+    ' y heredaba su rango. Con el bridge prendido el vinculo pasa a ser
+    ' ESTRUCTURAL -el rango viaja adentro del login de la cuenta duena, no hay
+    ' lista global de nombres que robar-, asi que este chequeo ya no protege nada
+    ' ahi. Se conserva porque sigue siendo la unica proteccion del camino de
+    ' fallback (bridge apagado, dev local, privilegios desde Server.ini).
+    ' NOTA: este bloque vive dentro de #If PYMMO = 1, y este proyecto compila con
+    ' PYMMO = 0, asi que hoy NO entra al binario. Ver docs/flags-de-compilacion-vb6.md.
     If EsGmChar(username) Then
         If AdministratorAccounts(UCase$(username)) <> UCase$(CuentaEmail) Then
             Call WriteShowMessageBox(UserIndex, MSG_USERNAME_ALREADY_TAKEN, vbNullString)

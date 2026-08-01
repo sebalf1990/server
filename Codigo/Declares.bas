@@ -3138,6 +3138,16 @@ Public Type t_User
     Id As Long
     Trabajo As t_UserTrabajo
     AccountID As Long
+    ' Mapa de personajes GM de esta cuenta, tal como lo mando la web en la
+    ' respuesta del verify-login (plan 31.001, ola 5). Formato:
+    '   "NOMBRE=rango[+rm],NOMBRE2=rango"   (vacio = la cuenta no tiene GMs)
+    ' Se llena en HandleLoginAccount, junto con AccountID, y se consulta
+    ' recien al conectar el personaje (UserDarPrivilegioLevel). Es String y
+    ' no un Dictionary a proposito: el slot de UserList se reusa entre
+    ' jugadores, y un objeto colgado de un UDT reusado es una fuga esperando
+    ' a pasar. Se limpia en ResetBasicUserInfo, en la misma linea de vida
+    ' que AccountID.
+    GmCharsBridge As String
     Grupo As Tgrupo
     showName As Boolean 'Permite que los GMs oculten su nick con el comando /SHOWNAME
     Char As t_Char 'Define la apariencia
