@@ -372,6 +372,11 @@ Public Sub LoadQuests()
             .RequiredOBJs = val(reader.GetValue("QUEST" & i, "RequiredOBJs"))
             .Trabajador = IIf(val(reader.GetValue("QUEST" & i, "Trabajador")) = 1, True, False)
             .RequiredProfession = val(reader.GetValue("QUEST" & i, "RequiredProfession"))
+            ' Plan 04.001: un id fuera de 17..23 dejaria la quest imposible y en silencio.
+            If .RequiredProfession <> 0 And (.RequiredProfession < PROF_MIN_ID Or .RequiredProfession > PROF_MAX_ID) Then
+                Call LogError("LoadQuests: QUEST" & i & " RequiredProfession invalido (" & .RequiredProfession & "), se ignora")
+                .RequiredProfession = 0
+            End If
             .TalkTo = val(reader.GetValue("QUEST" & i, "TalkTo"))
             If .RequiredOBJs > 0 Then
                 ReDim .RequiredOBJ(1 To .RequiredOBJs)
