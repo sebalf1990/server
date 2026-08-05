@@ -209,11 +209,19 @@ Public Sub DoNavega(ByVal UserIndex As Integer, ByRef Barco As t_ObjData, ByVal 
     On Error GoTo DoNavega_Err
     With UserList(UserIndex)
         If .invent.EquippedShipObjIndex <> .invent.Object(Slot).ObjIndex Then
+            ' Plan 04.001: con profesiones activas, el pescador profesional hereda el
+            ' acceso naval que tenia la clase Trabajador (galera y descuento de skill).
+            Dim NavegaConOficio As Boolean
+            If IsFeatureEnabled("professions_learnable") Then
+                NavegaConOficio = TieneProfesionAprendida(UserIndex, e_Skill.Pescar)
+            Else
+                NavegaConOficio = (.clase = e_Class.Trabajador)
+            End If
             If Not EsGM(UserIndex) Then
                 Select Case Barco.Subtipo
                     Case 2  'Galera
-                        If .clase <> e_Class.Trabajador And .clase <> e_Class.Pirat Then
-                            'Msg1025= ¡Solo Piratas y trabajadores pueden usar galera!
+                        If Not NavegaConOficio And .clase <> e_Class.Pirat Then
+                            'Msg1025= ¡Solo Piratas y pescadores pueden usar galera!
                             Call WriteLocaleMsg(UserIndex, MSG_SOLO_PIRATAS_TRABAJADORES_PUEDEN_USAR_GALERA, e_FontTypeNames.FONTTYPE_INFO)
                             Exit Sub
                         End If
@@ -226,7 +234,7 @@ Public Sub DoNavega(ByVal UserIndex As Integer, ByRef Barco As t_ObjData, ByVal 
                 End Select
             End If
             Dim SkillNecesario As Byte
-            SkillNecesario = IIf(.clase = e_Class.Trabajador Or .clase = e_Class.Pirat, Barco.MinSkill \ 2, Barco.MinSkill)
+            SkillNecesario = IIf(NavegaConOficio Or .clase = e_Class.Pirat, Barco.MinSkill \ 2, Barco.MinSkill)
             ' Tiene el skill necesario?
             If .Stats.UserSkills(e_Skill.Navegacion) < SkillNecesario Then
                 Call WriteLocaleMsg(UserIndex, MSG_NECESITAS_MENOS_PUNTOS_NAVEGACION_PODER_USAR, e_FontTypeNames.FONTTYPE_INFO, SkillNecesario & "¬" & IIf(Barco.Subtipo = 0, "traje", "barco"))  ' Msg1448=Necesitas al menos ¬1 puntos en navegación para poder usar este ¬2

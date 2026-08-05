@@ -1164,6 +1164,9 @@ Public Sub HandleEditChar(ByVal UserIndex As Integer)
                 If LoopC > NUMCLASES Then
                     ' Msg543=Clase desconocida. Intente nuevamente.
                     Call WriteLocaleMsg(UserIndex, MSG_CLASE_DESCONOCIDA_INTENTE_NUEVAMENTE, e_FontTypeNames.FONTTYPE_INFO)
+                ElseIf IsFeatureEnabled("professions_learnable") And LoopC = e_Class.Trabajador Then
+                    ' Plan 04.001: la clase Trabajador esta deprecada con profesiones activas.
+                    Call WriteConsoleMsg(UserIndex, "La clase Trabajador esta deprecada: con profesiones aprendibles no se asigna.", e_FontTypeNames.FONTTYPE_INFO)
                 Else
                     UserList(tUser.ArrayIndex).clase = LoopC
                 End If
