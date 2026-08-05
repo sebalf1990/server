@@ -7889,6 +7889,8 @@ Private Sub HandleResetChar(ByVal UserIndex As Integer)
                 Call WriteUpdateUserStats(User.ArrayIndex)
                 Call WriteLevelUp(User.ArrayIndex, .Stats.SkillPts)
             End With
+            ' Plan 04.001: /RESET tambien limpia profesiones y contador de olvidos.
+            Call ResetUserProfessions(User.ArrayIndex)
             'Msg1280= Personaje reseteado a nivel 1.
             Call WriteLocaleMsg(UserIndex, MSG_PERSONAJE_RESETEADO_NIVEL, e_FontTypeNames.FONTTYPE_INFO)
         End If

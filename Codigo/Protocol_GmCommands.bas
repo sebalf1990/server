@@ -1334,10 +1334,10 @@ Public Sub HandleEditChar(ByVal UserIndex As Integer)
                 End With
             Case e_EditOptions.eo_AprendeProfesion
                 If (.flags.Privilegios And (e_PlayerType.User Or e_PlayerType.Consejero Or e_PlayerType.SemiDios)) Then Exit Sub
-                Call AprenderProfesion(tUser.ArrayIndex, CInt(val(Arg1)))
+                Call AprenderProfesion(tUser.ArrayIndex, CInt(val(Arg1)), True)
             Case e_EditOptions.eo_OlvidaProfesion
                 If (.flags.Privilegios And (e_PlayerType.User Or e_PlayerType.Consejero Or e_PlayerType.SemiDios)) Then Exit Sub
-                Call OlvidarProfesion(tUser.ArrayIndex, CInt(val(Arg1)))
+                Call OlvidarProfesion(tUser.ArrayIndex, CInt(val(Arg1)), True)
             Case e_EditOptions.eo_FaccionStatus
                 If (.flags.Privilegios And (e_PlayerType.User Or e_PlayerType.Consejero Or e_PlayerType.SemiDios)) Then Exit Sub
                 tmpLong = val(Arg1)
