@@ -300,6 +300,16 @@ Public Function ProfesionDelItem(ByVal ObjIndex As Integer) As Integer
     On Error GoTo ProfesionDelItem_Err
     ProfesionDelItem = 0
     If ObjIndex <= 0 Then Exit Function
+    ' Manuales (otUseOnce) y pociones de olvido (otPotions) usan ProfesionId con OTRA
+    ' semantica: "ensena/olvida esta profesion", no "requiere esta profesion".
+    If ObjData(ObjIndex).OBJType = e_OBJType.otUseOnce Or ObjData(ObjIndex).OBJType = e_OBJType.otPotions Then Exit Function
+    ' Fuente primaria (plan 04.001): el campo ProfesionId de obj.dat. Cubre armaduras,
+    ' pergaminos de receta y items de oficio que el mapeo por Subtipo no alcanzaba.
+    If ObjData(ObjIndex).ProfesionId >= PROF_MIN_ID And ObjData(ObjIndex).ProfesionId <= PROF_MAX_ID Then
+        ProfesionDelItem = ObjData(ObjIndex).ProfesionId
+        Exit Function
+    End If
+    ' Fallback legacy: herramientas de trabajo por subtipo.
     If ObjData(ObjIndex).OBJType <> e_OBJType.otWorkingTools Then Exit Function
     Select Case ObjData(ObjIndex).Subtipo
         Case e_WorkingToolSubType.FishingRod, e_WorkingToolSubType.FishingNet, e_WorkingToolSubType.FishingLine

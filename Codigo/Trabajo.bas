@@ -802,6 +802,11 @@ End Function
 Public Sub HerreroConstruirItem(ByVal UserIndex As Integer, ByVal ItemIndex As Integer)
     On Error GoTo HerreroConstruirItem_Err
     If Not IntervaloPermiteTrabajarConstruir(UserIndex) Then Exit Sub
+    ' Plan 04.001: gate de ejecucion — eCraftBlacksmith llegaba directo sin validar profesion.
+    If Not TieneProfesionAprendida(UserIndex, e_Skill.Herreria) Then
+        Call WriteLocaleMsg(UserIndex, MSG_PROF_NO_APRENDIDA, e_FontTypeNames.FONTTYPE_INFO)
+        Exit Sub
+    End If
     If Not HayLugarEnInventario(UserIndex, ItemIndex, 1) Then
         ' Msg643=No tienes suficiente espacio en el inventario.
         Call WriteLocaleMsg(UserIndex, MSG_NO_TIENES_SUFICIENTE_ESPACIO_INVENTARIO, e_FontTypeNames.FONTTYPE_INFO)
@@ -899,6 +904,11 @@ End Function
 Public Sub CarpinteroConstruirItem(ByVal UserIndex As Integer, ByVal ItemIndex As Integer, ByVal Cantidad As Long, ByVal cantidad_maxima As Integer)
     On Error GoTo CarpinteroConstruirItem_Err
     If Not IntervaloPermiteTrabajarConstruir(UserIndex) Then Exit Sub
+    ' Plan 04.001: gate de ejecucion, no solo al equipar la herramienta.
+    If Not TieneProfesionAprendida(UserIndex, e_Skill.Carpinteria) Then
+        Call WriteLocaleMsg(UserIndex, MSG_PROF_NO_APRENDIDA, e_FontTypeNames.FONTTYPE_INFO)
+        Exit Sub
+    End If
     If UserList(UserIndex).flags.Privilegios And (e_PlayerType.Consejero Or e_PlayerType.SemiDios Or e_PlayerType.Dios) Then
         Exit Sub
     End If
@@ -958,6 +968,11 @@ End Sub
 
 Public Sub AlquimistaConstruirItem(ByVal UserIndex As Integer, ByVal ItemIndex As Integer)
     On Error GoTo AlquimistaConstruirItem_Err
+    ' Plan 04.001: gate de ejecucion, no solo al equipar la herramienta.
+    If Not TieneProfesionAprendida(UserIndex, e_Skill.Alquimia) Then
+        Call WriteLocaleMsg(UserIndex, MSG_PROF_NO_APRENDIDA, e_FontTypeNames.FONTTYPE_INFO)
+        Exit Sub
+    End If
     If Not UserList(UserIndex).Stats.MinSta > 0 Then
         'Msg2129=¡No tengo energía!
         Call SendData(SendTarget.ToIndex, UserIndex, PrepareLocalizedChatOverHead(MSG_NO_ENERGY, UserList(UserIndex).Char.charindex, vbWhite))
@@ -1017,6 +1032,11 @@ End Sub
 Public Sub SastreConstruirItem(ByVal UserIndex As Integer, ByVal ItemIndex As Integer)
     On Error GoTo SastreConstruirItem_Err
     If Not IntervaloPermiteTrabajarConstruir(UserIndex) Then Exit Sub
+    ' Plan 04.001: gate de ejecucion, no solo al equipar la herramienta.
+    If Not TieneProfesionAprendida(UserIndex, e_Skill.Sastreria) Then
+        Call WriteLocaleMsg(UserIndex, MSG_PROF_NO_APRENDIDA, e_FontTypeNames.FONTTYPE_INFO)
+        Exit Sub
+    End If
     If Not UserList(UserIndex).Stats.MinSta > 0 Then
         'Msg2129=¡No tengo energía!
         Call SendData(SendTarget.ToIndex, UserIndex, PrepareLocalizedChatOverHead(MSG_NO_ENERGY, UserList(UserIndex).Char.charindex, vbWhite))
