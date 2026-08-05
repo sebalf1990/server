@@ -1196,6 +1196,14 @@ Sub ResetUserFlags(ByVal UserIndex As Integer)
         .CurrentTeam = 0
         .jugando_captura_timer = 0
         .jugando_captura_muertes = 0
+        ' Plan 05.002 ola 2: el resto de los flags de evento se limpian ACA, con los del
+        ' CTF, y no repartidos por la rutina de desconexion. Sin esto quedaban pegados en
+        ' el slot de UserList, que se recicla: el proximo jugador que cayera en ese slot
+        ' heredaba la bandera dibujada sobre la cabeza, un equipo de reto o una sala.
+        .tiene_bandera = 0
+        .EquipoReto = 0
+        .SalaReto = 0
+        .EnTorneo = False
     End With
     Exit Sub
 ResetUserFlags_Err:

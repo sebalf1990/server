@@ -523,7 +523,8 @@ Public Sub CancelLobby(ByRef instance As t_Lobby)
     If instance.InscriptionPrice > 0 Then
         Dim i As Integer
         For i = 0 To instance.RegisteredPlayers - 1
-            Call GiveGoldToPlayer(instance, i, instance.InscriptionPrice)
+            ' Devuelve tambien a los desconectados (ver GiveGoldToPlayer).
+            Call RefundPlayer(instance, i)
         Next i
     End If
     Call ReturnAllPlayers(instance)
@@ -535,7 +536,14 @@ CancelLobby_Err:
 End Sub
 
 Public Function GiveGoldToPlayer(ByRef instance As t_Lobby, ByVal UserSlotIndex As Integer, ByVal amount As Long) As Boolean
+    ' Plan 05.002 ola 2 (clase A). Esta es la UNICA puerta por la que sale oro de un
+    ' evento: la usan el refund de cancelacion y el reparto de premios de los tres
+    ' escenarios. Antes solo pagaba si la referencia al usuario seguia viva, asi que un
+    ' jugador desconectado perdia su inscripcion Y su premio, en silencio.
+    ' Ahora, si esta offline, se le acredita en la base por su UserId, que es identidad
+    ' estable (el slot de UserList se recicla entre jugadores; el UserId no).
     On Error GoTo GiveMoneyToPlayer_Err
+    If amount <= 0 Then Exit Function
     If amount > instance.AvailableInscriptionMoney Then
         Call LogError("Instance is trying to give gold to " & instance.Players(UserSlotIndex).UserId & " but there is not enought gold collected")
         Exit Function
@@ -544,11 +552,42 @@ Public Function GiveGoldToPlayer(ByRef instance As t_Lobby, ByVal UserSlotIndex 
         Call AddGold(instance.Players(UserSlotIndex).User.ArrayIndex, amount)
         instance.AvailableInscriptionMoney = instance.AvailableInscriptionMoney - amount
         GiveGoldToPlayer = True
+    ElseIf instance.Players(UserSlotIndex).UserId > 0 Then
+        ' Offline: se escribe en la base. Es seguro justamente porque NO esta logueado; si
+        ' lo estuviera, el save del logout pisaria el valor con el de memoria.
+        Call Execute("UPDATE user SET gold = gold + ? WHERE id = ?;", amount, instance.Players(UserSlotIndex).UserId)
+        instance.AvailableInscriptionMoney = instance.AvailableInscriptionMoney - amount
+        Call LogInfoServidor("[Evento] Oro acreditado offline: user_id=" & instance.Players(UserSlotIndex).UserId & " monto=" & amount)
+        GiveGoldToPlayer = True
     End If
     Exit Function
 GiveMoneyToPlayer_Err:
     Call TraceError(Err.Number, Err.Description, "ModLobby.GiveGoldToPlayer", Erl)
 End Function
+
+Public Sub RefundPlayer(ByRef instance As t_Lobby, ByVal UserSlotIndex As Integer)
+    ' Plan 05.002 ola 2: devolver la inscripcion de UN slot. Todo camino de salida que deba
+    ' refundar pasa por aca, para que no se vuelva a reimplementar en cada flujo.
+    On Error GoTo RefundPlayer_Err
+    If instance.InscriptionPrice <= 0 Then Exit Sub
+    Call GiveGoldToPlayer(instance, UserSlotIndex, instance.InscriptionPrice)
+    Exit Sub
+RefundPlayer_Err:
+    Call TraceError(Err.Number, Err.Description, "ModLobby.RefundPlayer", Erl)
+End Sub
+
+Public Sub RemovePlayerFromEvent(ByRef instance As t_Lobby, ByVal UserSlotIndex As Integer, ByVal Refund As Boolean)
+    ' Plan 05.002 ola 2 (clase A): la salida de UN jugador de un evento, en un solo lugar.
+    ' OJO: ClearUserSocket compacta el array y decrementa RegisteredPlayers, asi que quien
+    ' itere sobre varios slots tiene que hacerlo HACIA ATRAS.
+    On Error GoTo RemovePlayerFromEvent_Err
+    If Refund Then Call RefundPlayer(instance, UserSlotIndex)
+    Call ReturnPlayer(instance, UserSlotIndex)
+    Call ClearUserSocket(instance, UserSlotIndex)
+    Exit Sub
+RemovePlayerFromEvent_Err:
+    Call TraceError(Err.Number, Err.Description, "ModLobby.RemovePlayerFromEvent", Erl)
+End Sub
 
 Public Sub ListPlayers(ByRef instance As t_Lobby, ByVal UserIndex As Integer)
     On Error GoTo ListPlayers_Err
@@ -666,6 +705,15 @@ End Sub
 
 Public Sub ForceReset(ByRef instance As t_Lobby)
     On Error GoTo ForceReset_Err
+    ' Plan 05.002 ola 2: antes tiraba el array de jugadores sin devolverlos ni refundar:
+    ' quedaban atrapados en el mapa instancia y el oro se perdia. Se recorre HACIA ATRAS
+    ' porque ClearUserSocket compacta el array.
+    Dim p As Integer
+    For p = instance.RegisteredPlayers - 1 To 0 Step -1
+        Call RemovePlayerFromEvent(instance, p, True)
+    Next p
+    ' NOTA: la liberacion del slot del pool (ReleaseLobby) y el contrato Reset completo de
+    ' los escenarios van en la ola 5, con el resto del residuo del R4.
     instance.MinLevel = 1
     instance.MaxLevel = 47
     instance.MaxPlayers = 0
@@ -687,9 +735,13 @@ ForceReset_Err:
 End Sub
 
 Public Sub RegisterDisconnectedUser(ByVal DisconnectedUserIndex As Integer)
+    ' Plan 05.002 ola 2: se iteraba LobbyList(i) usando el CONTADOR del heap como si fuera
+    ' el indice del lobby. Coincide solo mientras los lobbies activos sean {0..currentIndex}
+    ' sin huecos; apenas se libera uno del medio, el loop tocaba lobbies equivocados y se
+    ' salteaba el real, asi que la desconexion no se registraba en el evento del jugador.
     Dim i As Integer
     For i = 0 To ActiveLobby.currentIndex
-        Call RegisterDisconnectedUserOnLobby(LobbyList(i), DisconnectedUserIndex)
+        Call RegisterDisconnectedUserOnLobby(LobbyList(ActiveLobby.IndexInfo(i)), DisconnectedUserIndex)
     Next i
 End Sub
 
@@ -959,9 +1011,11 @@ SortTeams_Err:
 End Sub
 
 Public Function KickPlayer(ByRef instance As t_Lobby, ByVal Index As Integer) As t_response
+    ' Plan 05.002 ola 2: expulsar devuelve la inscripcion. SortTeams echa a los sobrantes
+    ' para que la division en equipos sea exacta; sin refund, al jugador le cobraban por un
+    ' evento que nunca jugo.
     On Error GoTo KickPlayer_Err
-    Call ReturnPlayer(instance, Index)
-    Call ClearUserSocket(instance, Index)
+    Call RemovePlayerFromEvent(instance, Index, True)
     Exit Function
 KickPlayer_Err:
     Call TraceError(Err.Number, Err.Description, "ModLobby.KickPlayer", Erl)

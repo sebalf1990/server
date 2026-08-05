@@ -403,6 +403,11 @@ Public Sub IBaseScenario_UserDie(ByVal UserIndex)
             RespawnInfo.Agility = .Stats.UserAtributos(2)
         End If
     End With
+    ' Plan 05.002 ola 2 (clase B): guardar la IDENTIDAD del slot, no solo su numero. El
+    ' slot de UserList se recicla entre jugadores: sin esto, si el muerto se desconecta
+    ' antes de revivir, el proximo que herede ese slot era teletransportado al arena,
+    ' revivido y le sobreescribian Fuerza/Agilidad. El campo ya existia sin usarse.
+    RespawnInfo.UserSlotIteration = UserList(UserIndex).VersionId
     Call PlayerRespawn.Add(UserIndex, RespawnInfo)
 End Sub
 
@@ -429,7 +434,11 @@ Private Sub RespawnPlayers()
     Keys = PlayerRespawn.Keys
     For Each key In Keys
         Set RespawnInfo = PlayerRespawn.Item(key)
-        If TicksElapsed(RespawnInfo.RespawnTime, currentTime) > PlayerRespawnTime Then
+        ' Plan 05.002 ola 2 (clase B): si el slot ya no es del mismo jugador, la entrada
+        ' quedo huerfana (murio y se desconecto). Se descarta sin tocar a quien lo herede.
+        If UserList(key).VersionId <> RespawnInfo.UserSlotIteration Then
+            Call PlayerRespawn.Remove(key)
+        ElseIf TicksElapsed(RespawnInfo.RespawnTime, currentTime) > PlayerRespawnTime Then
             Call Respawn(key)
             For i = 0 To RespawnInfo.EquipedElementCount - 1
                 Call EquiparInvItem(key, RespawnInfo.GetActiveSlot(i))
