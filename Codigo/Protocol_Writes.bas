@@ -4455,6 +4455,13 @@ Public Sub WriteProfessionsUpdate(ByVal UserIndex As Integer)
     Dim toggleOn As Boolean
     toggleOn = IsFeatureEnabled("professions_learnable")
     Call Writer.WriteInt16(ServerPacketID.eProfessionsUpdate)
+    ' Byte 1: el toggle esta activo (el cliente lo necesita para avisar temprano
+    ' al asignar puntos sin romper el modo legacy). Bytes 2-8: los 7 skills.
+    If toggleOn Then
+        Call Writer.WriteInt8(1)
+    Else
+        Call Writer.WriteInt8(0)
+    End If
     For i = PROF_MIN_ID To PROF_MAX_ID
         If toggleOn And TieneProfesionAprendida(UserIndex, i) Then
             Call Writer.WriteInt8(1)
