@@ -6572,11 +6572,10 @@ ErrHandler:
 End Sub
 
 Private Sub HandleComenzarTorneo(ByVal UserIndex As Integer)
+    ' TORNEO LEGACY ENTERRADO (2026-08-05). Ver ModTorneos.bas.
     On Error GoTo ErrHandler
     With UserList(UserIndex)
-        If EsGM(UserIndex) Then
-            Call ComenzarTorneoOk
-        End If
+        Call WriteConsoleMsg(UserIndex, "El sistema de torneos legacy fue retirado. Usa el sistema de eventos/lobby.", e_FontTypeNames.FONTTYPE_INFO)
     End With
     Exit Sub
 ErrHandler:

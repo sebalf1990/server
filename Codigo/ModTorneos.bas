@@ -27,6 +27,23 @@ Attribute VB_Name = "ModTorneos"
 '
 '
 '
+' ============================================================================
+' TORNEO LEGACY - ENTERRADO (decision del dueno 2026-08-05)
+'
+' Estaba muerto punta a punta: ParticiparTorneo NO la llamaba NADIE, asi que
+' el torneo anunciaba "escribi /PARTICIPAR" y ese comando rutea entero al
+' sistema de lobby (Protocol.HandleParticipar). Nunca fue inscribible.
+' Ademas HandleCrearTorneo no validaba nada del payload.
+'
+' El caso de uso lo cubre el sistema de lobby/escenarios (ModLobby +
+' CustomScenarios). Los tres handlers (crear/comenzar/cancelar) ahora
+' rechazan y logean; los IDs de paquete quedan como slots DEPRECADOS en el
+' enum a proposito: sacarlos correria todos los IDs siguientes y obligaria a
+' un lockstep perfecto cliente-server sin ningun beneficio.
+'
+' Este modulo queda como referencia historica: no lo llama nadie.
+' ============================================================================
+
 Public Type t_Torneo
     HayTorneoaActivo As Boolean
     NivelMinimo As Byte

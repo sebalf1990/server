@@ -3792,6 +3792,11 @@ Public Sub HandleCrearTorneo(ByVal UserIndex As Integer)
         y = reader.ReadInt8
         nombre = reader.ReadString8
         reglas = reader.ReadString8
+        ' TORNEO LEGACY ENTERRADO (2026-08-05): el payload se consume igual para
+        ' no desincronizar el stream, pero no se crea nada. Ver ModTorneos.bas.
+        Call WriteConsoleMsg(UserIndex, "El sistema de torneos legacy fue retirado: nunca fue inscribible (/PARTICIPAR va al lobby). Usa el sistema de eventos/lobby.", e_FontTypeNames.FONTTYPE_INFO)
+        Call LogGM(GetUserRealName(UserIndex), "Intento usar el torneo legacy (crear) - sistema retirado")
+        Exit Sub
         If EsGM(UserIndex) And ((.flags.Privilegios And e_PlayerType.Consejero) = 0) Then
             If IsFeatureEnabled("professions_learnable") And Trabajador > 0 Then
                 Call WriteConsoleMsg(UserIndex, "No se puede crear un torneo de Trabajador con profesiones aprendibles activas.", e_FontTypeNames.FONTTYPE_INFO)
@@ -3827,11 +3832,10 @@ ErrHandler:
 End Sub
 
 Public Sub HandleComenzarTorneo(ByVal UserIndex As Integer)
+    ' TORNEO LEGACY ENTERRADO (2026-08-05). Ver ModTorneos.bas.
     On Error GoTo ErrHandler
     With UserList(UserIndex)
-        If EsGM(UserIndex) Then
-            Call ComenzarTorneoOk
-        End If
+        Call WriteConsoleMsg(UserIndex, "El sistema de torneos legacy fue retirado. Usa el sistema de eventos/lobby.", e_FontTypeNames.FONTTYPE_INFO)
     End With
     Exit Sub
 ErrHandler:
@@ -3839,11 +3843,10 @@ ErrHandler:
 End Sub
 
 Public Sub HandleCancelarTorneo(ByVal UserIndex As Integer)
+    ' TORNEO LEGACY ENTERRADO (2026-08-05). Ver ModTorneos.bas.
     On Error GoTo ErrHandler
     With UserList(UserIndex)
-        If EsGM(UserIndex) Then
-            Call ResetearTorneo
-        End If
+        Call WriteConsoleMsg(UserIndex, "El sistema de torneos legacy fue retirado. Para cancelar un evento usa /CANCELAREVENTO.", e_FontTypeNames.FONTTYPE_INFO)
     End With
     Exit Sub
 ErrHandler:

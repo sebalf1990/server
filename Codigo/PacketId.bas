@@ -497,9 +497,9 @@ Public Enum ClientPacketID
     eCrearEvento
     eBanTemporal
     eCancelarExit
-    eCrearTorneo
-    eComenzarTorneo
-    eCancelarTorneo
+    eCrearTorneo            ' DEPRECADO 2026-08-05: torneo legacy enterrado, el handler rechaza
+    eComenzarTorneo         ' DEPRECADO 2026-08-05
+    eCancelarTorneo         ' DEPRECADO 2026-08-05
     eBusquedaTesoro
     eCompletarViaje
     eBovedaMoveItem
