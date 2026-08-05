@@ -1164,6 +1164,9 @@ Public Sub HandleEditChar(ByVal UserIndex As Integer)
                 If LoopC > NUMCLASES Then
                     ' Msg543=Clase desconocida. Intente nuevamente.
                     Call WriteLocaleMsg(UserIndex, MSG_CLASE_DESCONOCIDA_INTENTE_NUEVAMENTE, e_FontTypeNames.FONTTYPE_INFO)
+                ElseIf IsFeatureEnabled("professions_learnable") And LoopC = e_Class.Trabajador Then
+                    ' Plan 04.001: la clase Trabajador esta deprecada con profesiones activas.
+                    Call WriteConsoleMsg(UserIndex, "La clase Trabajador esta deprecada: con profesiones aprendibles no se asigna.", e_FontTypeNames.FONTTYPE_INFO)
                 Else
                     UserList(tUser.ArrayIndex).clase = LoopC
                 End If
@@ -1334,10 +1337,10 @@ Public Sub HandleEditChar(ByVal UserIndex As Integer)
                 End With
             Case e_EditOptions.eo_AprendeProfesion
                 If (.flags.Privilegios And (e_PlayerType.User Or e_PlayerType.Consejero Or e_PlayerType.SemiDios)) Then Exit Sub
-                Call AprenderProfesion(tUser.ArrayIndex, CInt(val(Arg1)))
+                Call AprenderProfesion(tUser.ArrayIndex, CInt(val(Arg1)), True)
             Case e_EditOptions.eo_OlvidaProfesion
                 If (.flags.Privilegios And (e_PlayerType.User Or e_PlayerType.Consejero Or e_PlayerType.SemiDios)) Then Exit Sub
-                Call OlvidarProfesion(tUser.ArrayIndex, CInt(val(Arg1)))
+                Call OlvidarProfesion(tUser.ArrayIndex, CInt(val(Arg1)), True)
             Case e_EditOptions.eo_FaccionStatus
                 If (.flags.Privilegios And (e_PlayerType.User Or e_PlayerType.Consejero Or e_PlayerType.SemiDios)) Then Exit Sub
                 tmpLong = val(Arg1)

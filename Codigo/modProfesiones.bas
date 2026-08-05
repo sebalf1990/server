@@ -102,16 +102,28 @@ Public Function TieneProfesionAprendida(ByVal UserIndex As Integer, ByVal Profes
         TieneProfesionAprendida = True
         Exit Function
     End If
-    Dim i As Byte
-    For i = 1 To PROF_MAX_SLOTS
-        If UserList(UserIndex).Professions(i) = ProfesionId Then
-            TieneProfesionAprendida = True
-            Exit Function
-        End If
-    Next i
+    ' Bypass total de staff (plan 04.001): un GM trabaja y usa toda herramienta siempre.
+    ' Los chequeos internos de aprender/olvidar usan TieneProfesionEnSlots (sin bypass).
+    If EsGM(UserIndex) Then
+        TieneProfesionAprendida = True
+        Exit Function
+    End If
+    TieneProfesionAprendida = TieneProfesionEnSlots(UserIndex, ProfesionId)
     Exit Function
 TieneProfesionAprendida_Err:
     Call TraceError(Err.Number, Err.Description, "modProfesiones.TieneProfesionAprendida", Erl)
+End Function
+
+Private Function TieneProfesionEnSlots(ByVal UserIndex As Integer, ByVal ProfesionId As Integer) As Boolean
+    ' Mira los slots reales, sin bypass de staff ni de toggle.
+    Dim i As Byte
+    TieneProfesionEnSlots = False
+    For i = 1 To PROF_MAX_SLOTS
+        If UserList(UserIndex).Professions(i) = ProfesionId Then
+            TieneProfesionEnSlots = True
+            Exit Function
+        End If
+    Next i
 End Function
 
 Public Function SlotsOcupados(ByVal UserIndex As Integer) As Byte
@@ -124,22 +136,28 @@ Public Function SlotsOcupados(ByVal UserIndex As Integer) As Byte
     SlotsOcupados = count
 End Function
 
-Public Function PuedeAprenderProfesion(ByVal UserIndex As Integer, ByVal ProfesionId As Integer) As Boolean
+Public Function PuedeAprenderProfesion(ByVal UserIndex As Integer, ByVal ProfesionId As Integer, Optional ByVal EsAccionDeStaff As Boolean = False) As Boolean
     On Error GoTo PuedeAprenderProfesion_Err
     PuedeAprenderProfesion = False
     If Not IsFeatureEnabled("professions_learnable") Then Exit Function
     If ProfesionId < PROF_MIN_ID Or ProfesionId > PROF_MAX_ID Then Exit Function
-    If TieneProfesionAprendida(UserIndex, ProfesionId) Then
-        Call WriteLocaleMsg(UserIndex, MSG_PROF_YA_APRENDIDA, e_FontTypeNames.FONTTYPE_INFO)
+    If TieneProfesionEnSlots(UserIndex, ProfesionId) Then
+        If Not EsAccionDeStaff Then Call WriteLocaleMsg(UserIndex, MSG_PROF_YA_APRENDIDA, e_FontTypeNames.FONTTYPE_INFO)
         Exit Function
     End If
-    If MaxOlvidosPorPersonaje > 0 And UserList(UserIndex).ProfessionForgotCount >= MaxOlvidosPorPersonaje And SlotsOcupados(UserIndex) >= MaxProfesionesAprendidas Then
-        Call WriteLocaleMsg(UserIndex, MSG_PROF_SLOT_BLOQUEADO_POR_OLVIDOS, e_FontTypeNames.FONTTYPE_INFO)
-        Exit Function
-    End If
-    If SlotsOcupados(UserIndex) >= MaxProfesionesAprendidas Then
-        Call WriteLocaleMsg(UserIndex, MSG_PROF_YA_TIENE_2, e_FontTypeNames.FONTTYPE_INFO)
-        Exit Function
+    ' GMs y acciones de staff exentos de los limites de config (plan 04.001).
+    ' El tope fisico PROF_MAX_SLOTS lo garantiza AprenderProfesion al buscar slot libre.
+    If Not (EsGM(UserIndex) Or EsAccionDeStaff) Then
+        ' El tope de olvidos frena el re-aprendizaje por si solo (antes exigia ademas
+        ' slots llenos, condicion que la guarda siguiente ya cubria: nunca disparaba).
+        If MaxOlvidosPorPersonaje > 0 And UserList(UserIndex).ProfessionForgotCount >= MaxOlvidosPorPersonaje Then
+            Call WriteLocaleMsg(UserIndex, MSG_PROF_SLOT_BLOQUEADO_POR_OLVIDOS, e_FontTypeNames.FONTTYPE_INFO)
+            Exit Function
+        End If
+        If SlotsOcupados(UserIndex) >= MaxProfesionesAprendidas Then
+            Call WriteLocaleMsg(UserIndex, MSG_PROF_YA_TIENE_2, e_FontTypeNames.FONTTYPE_INFO)
+            Exit Function
+        End If
     End If
     PuedeAprenderProfesion = True
     Exit Function
@@ -147,18 +165,20 @@ PuedeAprenderProfesion_Err:
     Call TraceError(Err.Number, Err.Description, "modProfesiones.PuedeAprenderProfesion", Erl)
 End Function
 
-Public Function PuedeOlvidarProfesion(ByVal UserIndex As Integer, ByVal ProfesionId As Integer) As Boolean
+Public Function PuedeOlvidarProfesion(ByVal UserIndex As Integer, ByVal ProfesionId As Integer, Optional ByVal EsAccionDeStaff As Boolean = False) As Boolean
     On Error GoTo PuedeOlvidarProfesion_Err
     PuedeOlvidarProfesion = False
     If Not IsFeatureEnabled("professions_learnable") Then Exit Function
     If ProfesionId < PROF_MIN_ID Or ProfesionId > PROF_MAX_ID Then Exit Function
-    If Not TieneProfesionAprendida(UserIndex, ProfesionId) Then
-        Call WriteLocaleMsg(UserIndex, MSG_PROF_NO_APRENDIDA, e_FontTypeNames.FONTTYPE_INFO)
+    If Not TieneProfesionEnSlots(UserIndex, ProfesionId) Then
+        If Not EsAccionDeStaff Then Call WriteLocaleMsg(UserIndex, MSG_PROF_NO_APRENDIDA, e_FontTypeNames.FONTTYPE_INFO)
         Exit Function
     End If
-    If MaxOlvidosPorPersonaje > 0 And UserList(UserIndex).ProfessionForgotCount >= MaxOlvidosPorPersonaje Then
-        Call WriteLocaleMsg(UserIndex, MSG_PROF_MAX_OLVIDOS_PERSONAJE, e_FontTypeNames.FONTTYPE_INFO)
-        Exit Function
+    If Not (EsGM(UserIndex) Or EsAccionDeStaff) Then
+        If MaxOlvidosPorPersonaje > 0 And UserList(UserIndex).ProfessionForgotCount >= MaxOlvidosPorPersonaje Then
+            Call WriteLocaleMsg(UserIndex, MSG_PROF_MAX_OLVIDOS_PERSONAJE, e_FontTypeNames.FONTTYPE_INFO)
+            Exit Function
+        End If
     End If
     PuedeOlvidarProfesion = True
     Exit Function
@@ -166,11 +186,11 @@ PuedeOlvidarProfesion_Err:
     Call TraceError(Err.Number, Err.Description, "modProfesiones.PuedeOlvidarProfesion", Erl)
 End Function
 
-Public Function AprenderProfesion(ByVal UserIndex As Integer, ByVal ProfesionId As Integer) As Boolean
+Public Function AprenderProfesion(ByVal UserIndex As Integer, ByVal ProfesionId As Integer, Optional ByVal EsAccionDeStaff As Boolean = False) As Boolean
     On Error GoTo AprenderProfesion_Err
     AprenderProfesion = False
     If Not IsFeatureEnabled("professions_learnable") Then Exit Function
-    If Not PuedeAprenderProfesion(UserIndex, ProfesionId) Then Exit Function
+    If Not PuedeAprenderProfesion(UserIndex, ProfesionId, EsAccionDeStaff) Then Exit Function
     Dim i As Byte
     Dim almacenada As Boolean
     almacenada = False
@@ -188,6 +208,7 @@ Public Function AprenderProfesion(ByVal UserIndex As Integer, ByVal ProfesionId 
     End If
     Call Execute("INSERT OR REPLACE INTO user_professions (user_id, profession_id, learned_at) VALUES (?, ?, ?);", UserList(UserIndex).Id, CInt(ProfesionId), CLng(GetTickCountRaw() \ 1000))
     Call RefrescarHerramientasInventario(UserIndex, ProfesionId)
+    Call WriteProfessionsUpdate(UserIndex)
     Call WriteLocaleMsg(UserIndex, MSG_PROF_APRENDIDA_OK, e_FontTypeNames.FONTTYPE_INFO, NombreProfesion(ProfesionId))
     AprenderProfesion = True
     Exit Function
@@ -195,11 +216,11 @@ AprenderProfesion_Err:
     Call TraceError(Err.Number, Err.Description, "modProfesiones.AprenderProfesion", Erl)
 End Function
 
-Public Function OlvidarProfesion(ByVal UserIndex As Integer, ByVal ProfesionId As Integer) As Boolean
+Public Function OlvidarProfesion(ByVal UserIndex As Integer, ByVal ProfesionId As Integer, Optional ByVal EsAccionDeStaff As Boolean = False) As Boolean
     On Error GoTo OlvidarProfesion_Err
     OlvidarProfesion = False
     If Not IsFeatureEnabled("professions_learnable") Then Exit Function
-    If Not PuedeOlvidarProfesion(UserIndex, ProfesionId) Then Exit Function
+    If Not PuedeOlvidarProfesion(UserIndex, ProfesionId, EsAccionDeStaff) Then Exit Function
     Dim i            As Byte
     For i = 1 To PROF_MAX_SLOTS
         If UserList(UserIndex).Professions(i) = ProfesionId Then
@@ -208,10 +229,17 @@ Public Function OlvidarProfesion(ByVal UserIndex As Integer, ByVal ProfesionId A
         End If
     Next i
     ' T5 (usuario 2026-06-03): olvidar quita el permiso pero CONSERVA el skill ya progresado.
-    UserList(UserIndex).ProfessionForgotCount = UserList(UserIndex).ProfessionForgotCount + 1
+    ' Las acciones de staff no queman el contador de olvidos del objetivo (plan 04.001).
+    If Not EsAccionDeStaff Then
+        ' Saturar en 255: el campo es Byte y el olvido numero 256 desbordaba (error 6).
+        If UserList(UserIndex).ProfessionForgotCount < 255 Then
+            UserList(UserIndex).ProfessionForgotCount = UserList(UserIndex).ProfessionForgotCount + 1
+        End If
+        Call Execute("UPDATE user SET profession_forgot_count = ? WHERE id = ?;", CLng(UserList(UserIndex).ProfessionForgotCount), UserList(UserIndex).Id)
+    End If
     Call Execute("DELETE FROM user_professions WHERE user_id = ? AND profession_id = ?;", UserList(UserIndex).Id, CInt(ProfesionId))
-    Call Execute("UPDATE user SET profession_forgot_count = ? WHERE id = ?;", CLng(UserList(UserIndex).ProfessionForgotCount), UserList(UserIndex).Id)
     Call RefrescarHerramientasInventario(UserIndex, ProfesionId)
+    Call WriteProfessionsUpdate(UserIndex)
     Call WriteLocaleMsg(UserIndex, MSG_PROF_OLVIDADA_OK, e_FontTypeNames.FONTTYPE_INFO, NombreProfesion(ProfesionId))
     OlvidarProfesion = True
     Exit Function
@@ -274,6 +302,16 @@ Public Function ProfesionDelItem(ByVal ObjIndex As Integer) As Integer
     On Error GoTo ProfesionDelItem_Err
     ProfesionDelItem = 0
     If ObjIndex <= 0 Then Exit Function
+    ' Manuales (otUseOnce) y pociones de olvido (otPotions) usan ProfesionId con OTRA
+    ' semantica: "ensena/olvida esta profesion", no "requiere esta profesion".
+    If ObjData(ObjIndex).OBJType = e_OBJType.otUseOnce Or ObjData(ObjIndex).OBJType = e_OBJType.otPotions Then Exit Function
+    ' Fuente primaria (plan 04.001): el campo ProfesionId de obj.dat. Cubre armaduras,
+    ' pergaminos de receta y items de oficio que el mapeo por Subtipo no alcanzaba.
+    If ObjData(ObjIndex).ProfesionId >= PROF_MIN_ID And ObjData(ObjIndex).ProfesionId <= PROF_MAX_ID Then
+        ProfesionDelItem = ObjData(ObjIndex).ProfesionId
+        Exit Function
+    End If
+    ' Fallback legacy: herramientas de trabajo por subtipo.
     If ObjData(ObjIndex).OBJType <> e_OBJType.otWorkingTools Then Exit Function
     Select Case ObjData(ObjIndex).Subtipo
         Case e_WorkingToolSubType.FishingRod, e_WorkingToolSubType.FishingNet, e_WorkingToolSubType.FishingLine
@@ -330,7 +368,8 @@ Public Sub UsarPocionOlvidoProfesion(ByVal UserIndex As Integer, ByVal Slot As B
     ProfesionId = ObjData(ObjIndex).ProfesionId
     If ProfesionId < PROF_MIN_ID Or ProfesionId > PROF_MAX_ID Then Exit Sub
     If Not PuedeOlvidarProfesion(UserIndex, ProfesionId) Then Exit Sub
-    Call OlvidarProfesion(UserIndex, ProfesionId)
+    ' La pocion solo se consume si el olvido se aplico de verdad (plan 04.001).
+    If Not OlvidarProfesion(UserIndex, ProfesionId) Then Exit Sub
     Call QuitarUserInvItem(UserIndex, Slot, 1)
     Call UpdateUserInv(False, UserIndex, Slot)
     Exit Sub
@@ -346,6 +385,13 @@ Private Sub RefrescarHerramientasInventario(ByVal UserIndex As Integer, ByVal Pr
         ObjIdx = UserList(UserIndex).invent.Object(slot).ObjIndex
         If ObjIdx > 0 Then
             If ProfesionDelItem(ObjIdx) = ProfesionId Then
+                ' Si perdio el permiso y la tiene equipada, desequipar (plan 04.001):
+                ' antes quedaba puesta y era imposible sacarla (CanUseObject la bloqueaba).
+                If UserList(UserIndex).invent.Object(slot).Equipped Then
+                    If Not TieneProfesionAprendida(UserIndex, ProfesionId) Then
+                        Call Desequipar(UserIndex, slot)
+                    End If
+                End If
                 Call WriteChangeInventorySlot(UserIndex, slot)
             End If
         End If
@@ -353,6 +399,37 @@ Private Sub RefrescarHerramientasInventario(ByVal UserIndex As Integer, ByVal Pr
     Exit Sub
 RefrescarHerramientasInventario_Err:
     Call TraceError(Err.Number, Err.Description, "modProfesiones.RefrescarHerramientasInventario", Erl)
+End Sub
+
+Public Sub ResetUserProfessions(ByVal UserIndex As Integer)
+    ' QA (plan 04.001): /RESET limpia slots, contador de olvidos y persistencia.
+    On Error GoTo ResetUserProfessions_Err
+    Dim i      As Byte
+    Dim ObjIdx As Integer
+    For i = 1 To PROF_MAX_SLOTS
+        UserList(UserIndex).Professions(i) = 0
+    Next i
+    UserList(UserIndex).ProfessionForgotCount = 0
+    Call Execute("DELETE FROM user_professions WHERE user_id = ?;", UserList(UserIndex).Id)
+    Call Execute("UPDATE user SET profession_forgot_count = 0 WHERE id = ?;", UserList(UserIndex).Id)
+    ' Desequipar y refrescar las herramientas que quedaron sin permiso.
+    For i = 1 To MAX_INVENTORY_SLOTS
+        ObjIdx = UserList(UserIndex).invent.Object(i).ObjIndex
+        If ObjIdx > 0 Then
+            If ProfesionDelItem(ObjIdx) > 0 Then
+                If UserList(UserIndex).invent.Object(i).Equipped Then
+                    If Not TieneProfesionAprendida(UserIndex, ProfesionDelItem(ObjIdx)) Then
+                        Call Desequipar(UserIndex, i)
+                    End If
+                End If
+                Call WriteChangeInventorySlot(UserIndex, i)
+            End If
+        End If
+    Next i
+    Call WriteProfessionsUpdate(UserIndex)
+    Exit Sub
+ResetUserProfessions_Err:
+    Call TraceError(Err.Number, Err.Description, "modProfesiones.ResetUserProfessions", Erl)
 End Sub
 
 Public Function HandleProfesionChatCommand(ByVal UserIndex As Integer, ByVal chat As String) As Boolean
@@ -389,14 +466,25 @@ Public Function HandleProfesionChatCommand(ByVal UserIndex As Integer, ByVal cha
         Call WriteConsoleMsg(UserIndex, "Usuario offline: " & targetName, e_FontTypeNames.FONTTYPE_INFO)
         Exit Function
     End If
+    ' Plan 04.001: operar sobre OTRO personaje exige Dios o Admin; sobre staff superior, solo Admin.
+    If tUserRef.ArrayIndex <> UserIndex Then
+        If (UserList(UserIndex).flags.Privilegios And (e_PlayerType.Dios Or e_PlayerType.Admin)) = 0 Then
+            Call WriteConsoleMsg(UserIndex, "Solo Dios o Admin pueden modificar profesiones de otro personaje.", e_FontTypeNames.FONTTYPE_INFO)
+            Exit Function
+        End If
+        If (UserList(tUserRef.ArrayIndex).flags.Privilegios And (e_PlayerType.Dios Or e_PlayerType.Admin)) <> 0 And (UserList(UserIndex).flags.Privilegios And e_PlayerType.Admin) = 0 Then
+            Call WriteConsoleMsg(UserIndex, "Solo un Admin puede modificar profesiones de un Dios o Admin.", e_FontTypeNames.FONTTYPE_INFO)
+            Exit Function
+        End If
+    End If
     If cmd = "APRENDE" Then
-        If AprenderProfesion(tUserRef.ArrayIndex, profId) Then
+        If AprenderProfesion(tUserRef.ArrayIndex, profId, True) Then
             Call WriteConsoleMsg(UserIndex, "Aprendio " & NombreProfesion(profId) & " para " & targetName, e_FontTypeNames.FONTTYPE_INFO)
         Else
             Call WriteConsoleMsg(UserIndex, "No se pudo aprender " & NombreProfesion(profId) & " para " & targetName & " (ya aprendida, slots llenos o limite de olvidos).", e_FontTypeNames.FONTTYPE_INFO)
         End If
     Else
-        If OlvidarProfesion(tUserRef.ArrayIndex, profId) Then
+        If OlvidarProfesion(tUserRef.ArrayIndex, profId, True) Then
             Call WriteConsoleMsg(UserIndex, "Olvido " & NombreProfesion(profId) & " para " & targetName, e_FontTypeNames.FONTTYPE_INFO)
         Else
             Call WriteConsoleMsg(UserIndex, "No se pudo olvidar " & NombreProfesion(profId) & " para " & targetName & " (no la tiene o limite de olvidos).", e_FontTypeNames.FONTTYPE_INFO)

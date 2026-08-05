@@ -209,11 +209,19 @@ Public Sub DoNavega(ByVal UserIndex As Integer, ByRef Barco As t_ObjData, ByVal 
     On Error GoTo DoNavega_Err
     With UserList(UserIndex)
         If .invent.EquippedShipObjIndex <> .invent.Object(Slot).ObjIndex Then
+            ' Plan 04.001: con profesiones activas, el pescador profesional hereda el
+            ' acceso naval que tenia la clase Trabajador (galera y descuento de skill).
+            Dim NavegaConOficio As Boolean
+            If IsFeatureEnabled("professions_learnable") Then
+                NavegaConOficio = TieneProfesionAprendida(UserIndex, e_Skill.Pescar)
+            Else
+                NavegaConOficio = (.clase = e_Class.Trabajador)
+            End If
             If Not EsGM(UserIndex) Then
                 Select Case Barco.Subtipo
                     Case 2  'Galera
-                        If .clase <> e_Class.Trabajador And .clase <> e_Class.Pirat Then
-                            'Msg1025= ¡Solo Piratas y trabajadores pueden usar galera!
+                        If Not NavegaConOficio And .clase <> e_Class.Pirat Then
+                            'Msg1025= ¡Solo Piratas y pescadores pueden usar galera!
                             Call WriteLocaleMsg(UserIndex, MSG_SOLO_PIRATAS_TRABAJADORES_PUEDEN_USAR_GALERA, e_FontTypeNames.FONTTYPE_INFO)
                             Exit Sub
                         End If
@@ -226,7 +234,7 @@ Public Sub DoNavega(ByVal UserIndex As Integer, ByRef Barco As t_ObjData, ByVal 
                 End Select
             End If
             Dim SkillNecesario As Byte
-            SkillNecesario = IIf(.clase = e_Class.Trabajador Or .clase = e_Class.Pirat, Barco.MinSkill \ 2, Barco.MinSkill)
+            SkillNecesario = IIf(NavegaConOficio Or .clase = e_Class.Pirat, Barco.MinSkill \ 2, Barco.MinSkill)
             ' Tiene el skill necesario?
             If .Stats.UserSkills(e_Skill.Navegacion) < SkillNecesario Then
                 Call WriteLocaleMsg(UserIndex, MSG_NECESITAS_MENOS_PUNTOS_NAVEGACION_PODER_USAR, e_FontTypeNames.FONTTYPE_INFO, SkillNecesario & "¬" & IIf(Barco.Subtipo = 0, "traje", "barco"))  ' Msg1448=Necesitas al menos ¬1 puntos en navegación para poder usar este ¬2
@@ -802,6 +810,11 @@ End Function
 Public Sub HerreroConstruirItem(ByVal UserIndex As Integer, ByVal ItemIndex As Integer)
     On Error GoTo HerreroConstruirItem_Err
     If Not IntervaloPermiteTrabajarConstruir(UserIndex) Then Exit Sub
+    ' Plan 04.001: gate de ejecucion — eCraftBlacksmith llegaba directo sin validar profesion.
+    If Not TieneProfesionAprendida(UserIndex, e_Skill.Herreria) Then
+        Call WriteLocaleMsg(UserIndex, MSG_PROF_NO_APRENDIDA, e_FontTypeNames.FONTTYPE_INFO)
+        Exit Sub
+    End If
     If Not HayLugarEnInventario(UserIndex, ItemIndex, 1) Then
         ' Msg643=No tienes suficiente espacio en el inventario.
         Call WriteLocaleMsg(UserIndex, MSG_NO_TIENES_SUFICIENTE_ESPACIO_INVENTARIO, e_FontTypeNames.FONTTYPE_INFO)
@@ -899,6 +912,11 @@ End Function
 Public Sub CarpinteroConstruirItem(ByVal UserIndex As Integer, ByVal ItemIndex As Integer, ByVal Cantidad As Long, ByVal cantidad_maxima As Integer)
     On Error GoTo CarpinteroConstruirItem_Err
     If Not IntervaloPermiteTrabajarConstruir(UserIndex) Then Exit Sub
+    ' Plan 04.001: gate de ejecucion, no solo al equipar la herramienta.
+    If Not TieneProfesionAprendida(UserIndex, e_Skill.Carpinteria) Then
+        Call WriteLocaleMsg(UserIndex, MSG_PROF_NO_APRENDIDA, e_FontTypeNames.FONTTYPE_INFO)
+        Exit Sub
+    End If
     If UserList(UserIndex).flags.Privilegios And (e_PlayerType.Consejero Or e_PlayerType.SemiDios Or e_PlayerType.Dios) Then
         Exit Sub
     End If
@@ -958,6 +976,11 @@ End Sub
 
 Public Sub AlquimistaConstruirItem(ByVal UserIndex As Integer, ByVal ItemIndex As Integer)
     On Error GoTo AlquimistaConstruirItem_Err
+    ' Plan 04.001: gate de ejecucion, no solo al equipar la herramienta.
+    If Not TieneProfesionAprendida(UserIndex, e_Skill.Alquimia) Then
+        Call WriteLocaleMsg(UserIndex, MSG_PROF_NO_APRENDIDA, e_FontTypeNames.FONTTYPE_INFO)
+        Exit Sub
+    End If
     If Not UserList(UserIndex).Stats.MinSta > 0 Then
         'Msg2129=¡No tengo energía!
         Call SendData(SendTarget.ToIndex, UserIndex, PrepareLocalizedChatOverHead(MSG_NO_ENERGY, UserList(UserIndex).Char.charindex, vbWhite))
@@ -1017,6 +1040,11 @@ End Sub
 Public Sub SastreConstruirItem(ByVal UserIndex As Integer, ByVal ItemIndex As Integer)
     On Error GoTo SastreConstruirItem_Err
     If Not IntervaloPermiteTrabajarConstruir(UserIndex) Then Exit Sub
+    ' Plan 04.001: gate de ejecucion, no solo al equipar la herramienta.
+    If Not TieneProfesionAprendida(UserIndex, e_Skill.Sastreria) Then
+        Call WriteLocaleMsg(UserIndex, MSG_PROF_NO_APRENDIDA, e_FontTypeNames.FONTTYPE_INFO)
+        Exit Sub
+    End If
     If Not UserList(UserIndex).Stats.MinSta > 0 Then
         'Msg2129=¡No tengo energía!
         Call SendData(SendTarget.ToIndex, UserIndex, PrepareLocalizedChatOverHead(MSG_NO_ENERGY, UserList(UserIndex).Char.charindex, vbWhite))

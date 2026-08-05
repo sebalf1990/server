@@ -3234,6 +3234,7 @@ Private Sub HandleModifySkills(ByVal UserIndex As Integer)
             Exit Sub
         End If
         '<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+        Dim huboRechazo As Boolean
         With .Stats
             For i = 1 To NUMSKILLS
                 If points(i) > 0 And IsFeatureEnabled("professions_learnable") Then
@@ -3241,6 +3242,7 @@ Private Sub HandleModifySkills(ByVal UserIndex As Integer)
                         If Not TieneProfesionAprendida(UserIndex, CInt(i)) Then
                             Call WriteLocaleMsg(UserIndex, MSG_PROF_SKILL_BLOQUEADA, e_FontTypeNames.FONTTYPE_INFO)
                             points(i) = 0
+                            huboRechazo = True
                         End If
                     End If
                 End If
@@ -3258,6 +3260,9 @@ Private Sub HandleModifySkills(ByVal UserIndex As Integer)
                 End If
             Next i
         End With
+        ' Plan 04.001: si se rechazaron puntos, resincronizar SkillPts del cliente
+        ' (los descuenta de forma optimista y quedaban como gastados hasta relogear).
+        If huboRechazo Then Call WriteLevelUp(UserIndex, .Stats.SkillPts)
     End With
     Exit Sub
 HandleModifySkills_Err:
@@ -7889,6 +7894,8 @@ Private Sub HandleResetChar(ByVal UserIndex As Integer)
                 Call WriteUpdateUserStats(User.ArrayIndex)
                 Call WriteLevelUp(User.ArrayIndex, .Stats.SkillPts)
             End With
+            ' Plan 04.001: /RESET tambien limpia profesiones y contador de olvidos.
+            Call ResetUserProfessions(User.ArrayIndex)
             'Msg1280= Personaje reseteado a nivel 1.
             Call WriteLocaleMsg(UserIndex, MSG_PERSONAJE_RESETEADO_NIVEL, e_FontTypeNames.FONTTYPE_INFO)
         End If

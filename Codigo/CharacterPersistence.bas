@@ -249,7 +249,7 @@ Public Function LoadCharacterFromDB(ByVal UserIndex As Integer) As Boolean
         Call SetupUserPets(UserList(UserIndex))
         Call SetupUserBankInventory(UserList(UserIndex))
         Call SetupUserSkills(UserList(UserIndex))
-        Call SetupUserProfessions(UserList(UserIndex))
+        If Not SetupUserProfessions(UserList(UserIndex)) Then Exit Function
         Call SetupUserQuests(UserList(UserIndex))
         Call SetupUserQuestsDone(UserList(UserIndex))
         ' Load additional inventories.
@@ -1701,16 +1701,19 @@ SaveInventorySkins_Error:
     Call Logging.TraceError(Err.Number, Err.Description, "CharacterPersistence.SaveInventorySkins Nick: " & UserList(UserIndex).name, Erl())
 
 End Function
-Private Sub SetupUserProfessions(ByRef User As t_User)
+Private Function SetupUserProfessions(ByRef User As t_User) As Boolean
+    ' Plan 04.001: si la carga falla, el login se aborta. Antes seguia con 0 profesiones
+    ' en memoria y el save del logout las borraba de la DB (DELETE de reconciliacion).
     On Error GoTo SetupUserProfessions_Err
     Dim RS    As ADODB.Recordset
     Dim slot  As Byte
+    SetupUserProfessions = False
     For slot = 1 To PROF_MAX_SLOTS
         User.Professions(slot) = 0
     Next slot
     slot = 1
     Set RS = Query("SELECT profession_id FROM user_professions WHERE user_id = ? ORDER BY learned_at ASC;", User.Id)
-    If RS Is Nothing Then Exit Sub
+    If RS Is Nothing Then Exit Function
     Do While Not RS.EOF
         If slot > PROF_MAX_SLOTS Then Exit Do
         User.Professions(slot) = CInt(RS!profession_id)
@@ -1718,10 +1721,11 @@ Private Sub SetupUserProfessions(ByRef User As t_User)
         RS.MoveNext
     Loop
     Call RS.Close
-    Exit Sub
+    SetupUserProfessions = True
+    Exit Function
 SetupUserProfessions_Err:
     Call LogDatabaseError("Error en SetupUserProfessions: " & User.name & ". " & Err.Number & " - " & Err.Description)
-End Sub
+End Function
 
 Private Sub SaveCharacterProfessionsDB(ByRef U As t_User, ByRef QueryBreakdown As String)
     On Error GoTo SaveCharacterProfessionsDB_Err
