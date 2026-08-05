@@ -4028,7 +4028,7 @@ Public Sub HandleCancelarEvento(ByVal UserIndex As Integer)
         Call WriteLocaleMsg(UserIndex, MSG_SERVIDOR_COMANDO_DESHABILITADO_CARGO, e_FontTypeNames.FONTTYPE_INFO)
         Exit Sub
     End If
-    If CurrentActiveEventType = CaptureTheFlag Then
+    If ModLobby.ActiveEventType() = e_EventType.CaptureTheFlag Then
         If InstanciaCaptura Is Nothing Then
             'Msg1003= Eventos » No hay ninguna instancia en curso para ese evento.
             Call WriteLocaleMsg(UserIndex, MSG_NO_EVENTOS_HAY_NINGUNA_INSTANCIA_CURSO_ESE_EVENTO, e_FontTypeNames.FONTTYPE_INFO)

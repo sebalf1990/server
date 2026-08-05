@@ -95,6 +95,7 @@ Type t_Lobby
     IsGlobal As Boolean
     MapOpenTime As Long
     BroadOpenEvent As t_Timer
+    ScenearioType As Byte
 End Type
 
 Public Type t_response
@@ -133,7 +134,12 @@ Public Enum e_LobbyCommandId
 End Enum
 
 Public GlobalLobbyIndex         As Integer
-Public CurrentActiveEventType   As e_EventType
+' Plan 05.002 ola 3 (clase C). ANTES esto era un escalar publico con 3 escritores y 3
+' lectores, escrito ANTES de validar y nunca reseteado al terminar: de ahi salian el stomp
+' del CTF, el lobby fantasma y los misrouteos de /PARTICIPAR y de la cancelacion.
+' AHORA el tipo de evento activo se DERIVA de las estructuras vivas (ver ActiveEventType).
+' El escalar ya no existe: no hay nada que pueda quedar desincronizado.
+Public Const NO_ACTIVE_EVENT As Integer = -1
 Public LastAutoEventAttempt     As Long
 Public AlreadyDidAutoEventToday As Boolean
 Const LobbyCount = 200
@@ -235,6 +241,9 @@ Public Sub SetupLobby(ByRef instance As t_Lobby, ByRef LobbySettings As t_NewSce
     instance.Description = LobbySettings.Description
     instance.Password = LobbySettings.Password
     instance.InscriptionPrice = LobbySettings.InscriptionFee
+    ' Plan 05.002 ola 3: el lobby recuerda de que tipo es, para que ActiveEventType pueda
+    ' derivarlo en vez de depender de un escalar global que se desincronizaba.
+    instance.ScenearioType = LobbySettings.ScenearioType
 End Sub
 
 Public Sub SetSummonCoordinates(ByRef instance As t_Lobby, ByVal Map As Integer, ByVal PosX As Integer, ByVal PosY As Integer)
@@ -611,8 +620,11 @@ Public Function OpenLobby(ByRef instance As t_Lobby, ByVal IsPublic As Boolean) 
     If Not instance.Scenario Is Nothing Then
         RequiresSpawn = instance.Scenario.RequiresSpawn
     End If
-    RequiresSpawn = RequiresSpawn Or instance.SummonCoordinates.Map > 0
-    If RequiresSpawn Then
+    ' Plan 05.002 ola 3: la guarda estaba INVERTIDA por partida doble. Decia
+    ' "RequiresSpawn Or hay coordenada -> rechazar", asi que rechazaba justamente cuando el
+    ' GM SI habia fijado el punto de spawn (/lobby setspawnpos dejaba el lobby imposible de
+    ' abrir). Lo correcto: rechazar solo si el escenario EXIGE spawn y NO hay ninguno.
+    If RequiresSpawn And instance.SummonCoordinates.Map <= 0 Then
         Ret.Success = False
         Ret.Message = 400
         OpenLobby = Ret
@@ -856,8 +868,16 @@ SetTeamSize_Err:
 End Function
 
 Public Sub StartLobby(ByRef instance As t_Lobby, ByVal UserIndex As Integer)
-    If instance.State = Initialized And UserIndex >= 0 Then
-        Call WriteLocaleMsg(UserIndex, MSG_EVENT_ALREADY_STARTED, e_FontTypeNames.FONTTYPE_INFO) 'Msg1605= El evento ya fue iniciado.
+    ' Plan 05.002 ola 3: el guard miraba el estado equivocado. "Ya fue iniciado" se
+    ' rechazaba con State = Initialized, que es ANTES de aceptar jugadores, y en cambio un
+    ' evento realmente en curso (InProgress) se podia re-iniciar: SortTeams volvia a correr
+    ' y reasignaba los equipos en el medio de la partida.
+    If instance.State >= e_LobbyState.InProgress Then
+        If UserIndex >= 0 Then Call WriteLocaleMsg(UserIndex, MSG_EVENT_ALREADY_STARTED, e_FontTypeNames.FONTTYPE_INFO) 'Msg1605= El evento ya fue iniciado.
+        Exit Sub
+    End If
+    If instance.State < e_LobbyState.AcceptingPlayers Then
+        If UserIndex >= 0 Then Call WriteConsoleMsg(UserIndex, "El evento todavia no esta abierto a inscripciones.", e_FontTypeNames.FONTTYPE_INFO)
         Exit Sub
     End If
     If (instance.TeamSize > 1 Or instance.TeamType = eFixedTeamCount) And instance.TeamType = eRandom Then
@@ -1083,9 +1103,39 @@ Public Function ValidateLobbySettings(ByRef LobbySettings As t_NewScenearioSetti
     ValidateLobbySettings = True
 End Function
 
+Public Function ActiveEventType() As Integer
+    ' Plan 05.002 ola 3: fuente UNICA de verdad del tipo de evento publico en curso,
+    ' derivada de lo que esta vivo. Devuelve NO_ACTIVE_EVENT si no hay ninguno.
+    ' El CTF todavia vive en su propio singleton; cuando la ola 4 lo migre a
+    ' IBaseScenario, esta primera rama se cae sola y queda solo la del lobby.
+    On Error GoTo ActiveEventType_Err
+    ActiveEventType = NO_ACTIVE_EVENT
+    If Not InstanciaCaptura Is Nothing Then
+        ActiveEventType = e_EventType.CaptureTheFlag
+        Exit Function
+    End If
+    If GlobalLobbyIndex >= 0 And GlobalLobbyIndex <= UBound(LobbyList) Then
+        If LobbyList(GlobalLobbyIndex).State > e_LobbyState.UnInitilized And LobbyList(GlobalLobbyIndex).State <= e_LobbyState.InProgress Then
+            ActiveEventType = LobbyList(GlobalLobbyIndex).ScenearioType
+        End If
+    End If
+    Exit Function
+ActiveEventType_Err:
+    Call TraceError(Err.Number, Err.Description, "ModLobby.ActiveEventType", Erl)
+    ActiveEventType = NO_ACTIVE_EVENT
+End Function
+
 Public Sub CreatePublicEvent(ByRef LobbySettings As t_NewScenearioSettings)
     ' R3: validar ANTES de reservar el lobby (GetAvailableLobby lo consume); si no, fuga de lobby
     If Not ValidateLobbySettings(LobbySettings) Then
+        Exit Sub
+    End If
+    ' Plan 05.002 ola 3 (decision 2 del dueno: UN evento publico a la vez, formalizado).
+    ' Antes se pisaba GlobalLobbyIndex sin mirar si ya habia uno: el lobby anterior quedaba
+    ' huerfano, ocupando un slot del pool que nadie iba a liberar nunca.
+    If ActiveEventType() <> NO_ACTIVE_EVENT Then
+        Call LogError("CreatePublicEvent: ya hay un evento publico activo (tipo " & ActiveEventType() & "), no se crea otro.")
+        Call SendData(SendTarget.ToAdmins, 0, PrepareMessageConsoleMsg("[Eventos] Ya hay un evento publico en curso: cancelalo antes de abrir otro.", e_FontTypeNames.FONTTYPE_INFO))
         Exit Sub
     End If
     GlobalLobbyIndex = GetAvailableLobby()
@@ -1112,7 +1162,7 @@ Public Sub initEventLobby(ByVal UserIndex As Integer, ByVal eventType As Integer
     ' Las dos ramas se unifican en el mismo ruteo por tipo de escenario. Efecto lateral
     ' deseado: el formulario mandaba TODO a CreatePublicEvent, incluido CaptureTheFlag, y
     ' abria un lobby sin logica de CTF; ahora rutea igual que el comando de chat.
-    CurrentActiveEventType = LobbySettings.ScenearioType
+    ' El tipo de evento ya no se guarda en ningun escalar: se deriva (ActiveEventType).
     Select Case LobbySettings.ScenearioType
         Case e_EventType.CaptureTheFlag
             Call HandleIniciarCaptura(LobbySettings)

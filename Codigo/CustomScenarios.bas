@@ -338,15 +338,8 @@ ClearMap_Err:
 End Sub
 
 Public Function IsEventActive() As Boolean
-    If CurrentActiveEventType = CaptureTheFlag Then
-        IsEventActive = Not InstanciaCaptura Is Nothing
-    Else
-        If GlobalLobbyIndex >= 0 Then
-            IsEventActive = LobbyList(GlobalLobbyIndex).State > e_LobbyState.UnInitilized And LobbyList(GlobalLobbyIndex).State <= e_LobbyState.InProgress
-        Else
-            IsEventActive = False
-        End If
-    End If
+    ' Plan 05.002 ola 3: una sola fuente de verdad, derivada de lo que esta vivo.
+    IsEventActive = (ModLobby.ActiveEventType() <> ModLobby.NO_ACTIVE_EVENT)
 End Function
 
 Public Sub UserDisconnected(ByVal UserIndex As Integer)
