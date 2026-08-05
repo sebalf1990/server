@@ -208,6 +208,7 @@ Public Function AprenderProfesion(ByVal UserIndex As Integer, ByVal ProfesionId 
     End If
     Call Execute("INSERT OR REPLACE INTO user_professions (user_id, profession_id, learned_at) VALUES (?, ?, ?);", UserList(UserIndex).Id, CInt(ProfesionId), CLng(GetTickCountRaw() \ 1000))
     Call RefrescarHerramientasInventario(UserIndex, ProfesionId)
+    Call WriteProfessionsUpdate(UserIndex)
     Call WriteLocaleMsg(UserIndex, MSG_PROF_APRENDIDA_OK, e_FontTypeNames.FONTTYPE_INFO, NombreProfesion(ProfesionId))
     AprenderProfesion = True
     Exit Function
@@ -238,6 +239,7 @@ Public Function OlvidarProfesion(ByVal UserIndex As Integer, ByVal ProfesionId A
     End If
     Call Execute("DELETE FROM user_professions WHERE user_id = ? AND profession_id = ?;", UserList(UserIndex).Id, CInt(ProfesionId))
     Call RefrescarHerramientasInventario(UserIndex, ProfesionId)
+    Call WriteProfessionsUpdate(UserIndex)
     Call WriteLocaleMsg(UserIndex, MSG_PROF_OLVIDADA_OK, e_FontTypeNames.FONTTYPE_INFO, NombreProfesion(ProfesionId))
     OlvidarProfesion = True
     Exit Function
@@ -424,6 +426,7 @@ Public Sub ResetUserProfessions(ByVal UserIndex As Integer)
             End If
         End If
     Next i
+    Call WriteProfessionsUpdate(UserIndex)
     Exit Sub
 ResetUserProfessions_Err:
     Call TraceError(Err.Number, Err.Description, "modProfesiones.ResetUserProfessions", Erl)

@@ -240,6 +240,7 @@ Public Enum ServerPacketID
     eNpcRadarPartyMember
     eNpcRadarClanMember
     eUpdatePoisonStacks ' Sistema venenos TOGGLE26: contador stacks de Hemo (solo al dueno)
+    eProfessionsUpdate  ' Plan 04.001: vista resuelta de profesiones (7 bytes, skills 17..23)
     eMaxPacket
     [PacketCount]
 End Enum

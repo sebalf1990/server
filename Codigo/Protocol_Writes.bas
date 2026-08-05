@@ -2879,6 +2879,8 @@ Public Sub WriteQuestDetails(ByVal UserIndex As Integer, ByVal QuestIndex As Int
     For i = 1 To QuestList(QuestIndex).RewardSpellCount
         Writer.WriteInt16 (QuestList(QuestIndex).RewardSpellList(i))
     Next i
+    ' Plan 04.001: requisito de profesion (0 = sin requisito) al final del paquete.
+    Call Writer.WriteInt8(QuestList(QuestIndex).RequiredProfession)
     Call modSendData.SendData(ToIndex, UserIndex)
     Exit Sub
 WriteQuestDetails_Err:
@@ -4441,6 +4443,30 @@ Public Sub WriteUpdatePoisonStacks(ByVal UserIndex As Integer, ByVal UniqueId As
 WriteUpdatePoisonStacks_Err:
     Call Writer.Clear
     Call TraceError(Err.Number, Err.Description, "Argentum20Server.Protocol_Writes.WriteUpdatePoisonStacks", Erl)
+End Sub
+
+Public Sub WriteProfessionsUpdate(ByVal UserIndex As Integer)
+    ' Plan 04.001: 7 bytes (skills 17..23), 1 = puede ejercer la profesion.
+    ' Vista RESUELTA por el server: aplica toggle y bypass de GM; con el toggle
+    ' apagado manda ceros y el cliente cae al comportamiento legacy por clase.
+    On Error GoTo WriteProfessionsUpdate_Err
+    If UserIndex <= 0 Then Exit Sub
+    Dim i        As Integer
+    Dim toggleOn As Boolean
+    toggleOn = IsFeatureEnabled("professions_learnable")
+    Call Writer.WriteInt16(ServerPacketID.eProfessionsUpdate)
+    For i = PROF_MIN_ID To PROF_MAX_ID
+        If toggleOn And TieneProfesionAprendida(UserIndex, i) Then
+            Call Writer.WriteInt8(1)
+        Else
+            Call Writer.WriteInt8(0)
+        End If
+    Next i
+    Call modSendData.SendData(ToIndex, UserIndex)
+    Exit Sub
+WriteProfessionsUpdate_Err:
+    Call Writer.Clear
+    Call TraceError(Err.Number, Err.Description, "Argentum20Server.Protocol_Writes.WriteProfessionsUpdate", Erl)
 End Sub
 
 Public Sub WriteObjQuestSend(ByVal UserIndex As Integer, ByVal QuestIndex As Integer, ByVal Slot As Byte)
