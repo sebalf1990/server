@@ -1991,7 +1991,11 @@ Public Function UserCanAttackNpc(ByVal UserIndex As Integer, ByVal NpcIndex As I
         End If
     End If
     If IsPet Then
-        If UserList(NpcList(NpcIndex).MaestroUser.ArrayIndex).Grupo.Id = UserList(UserIndex).Grupo.Id And UserList(UserIndex).Grupo.Id > 0 Then
+        ' Plan 05.002 ola 7: tercera copia del mismo agujero. Corria ANTES del chequeo de
+        ' equipo del NPC (2011-2016), asi que adentro de un evento la mascota del rival
+        ' agrupado quedaba intocable ademas del rival. Se compara contra el AMO, que es quien
+        ' tiene bando; el IsPet de arriba ya garantizo que MaestroUser es una referencia viva.
+        If UserMod.GrupoProtege(NpcList(NpcIndex).MaestroUser.ArrayIndex, UserIndex) Then
             UserCanAttackNpc.Result = eSameGroup
             Exit Function
         End If

@@ -96,6 +96,7 @@ Type t_Lobby
     MapOpenTime As Long
     BroadOpenEvent As t_Timer
     ScenearioType As Byte
+    RoundNumber As Byte
 End Type
 
 Public Type t_response
@@ -141,7 +142,13 @@ Public GlobalLobbyIndex         As Integer
 ' El escalar ya no existe: no hay nada que pueda quedar desincronizado.
 Public Const NO_ACTIVE_EVENT As Integer = -1
 Public LastAutoEventAttempt     As Long
-Public AlreadyDidAutoEventToday As Boolean
+' Plan 05.002 ola 8: antes esto era 'AlreadyDidAutoEventToday As Boolean', reseteado con un
+' cronometro de 1 hora sobre LastAutoEventAttempt. No comparaba dias en ningun lado: el nombre
+' decia "Today" pero funcionaba de casualidad, porque la ventana horaria del calendario mide
+' exactamente 1 hora, igual que el umbral del reset. Ahora guarda la FECHA del ultimo
+' auto-evento que ABRIO de verdad, que es lo que el nombre siempre prometio.
+' LastAutoEventAttempt sigue, pero con otro rol: freno de reintento dentro de la ventana.
+Public LastAutoEventDate        As Date
 Const LobbyCount = 200
 Public LobbyList(0 To LobbyCount) As t_Lobby
 Private AvailableLobby            As t_IndexHeap
@@ -220,6 +227,9 @@ Public Sub InitializeLobby(ByRef instance As t_Lobby)
     instance.SummonCoordinates.Map = -1
     instance.TeamSize = -1
     instance.TeamType = eRandom
+    ' Plan 05.002 ola 5: sin esto, SortType se heredaba del ocupante anterior del slot. Un
+    ' lobby comun podia arrancar con el eFixedTeamCount que le dejo un Abordaje.
+    instance.SortType = eFixedTeamSize
     instance.TeamSortDone = False
     instance.NextTeamId = 1
     instance.AvailableInscriptionMoney = 0
@@ -244,6 +254,7 @@ Public Sub SetupLobby(ByRef instance As t_Lobby, ByRef LobbySettings As t_NewSce
     ' Plan 05.002 ola 3: el lobby recuerda de que tipo es, para que ActiveEventType pueda
     ' derivarlo en vez de depender de un escalar global que se desincronizaba.
     instance.ScenearioType = LobbySettings.ScenearioType
+    instance.RoundNumber = LobbySettings.RoundNumber
 End Sub
 
 Public Sub SetSummonCoordinates(ByRef instance As t_Lobby, ByVal Map As Integer, ByVal PosX As Integer, ByVal PosY As Integer)
@@ -289,6 +300,12 @@ Private Sub ClearUserSocket(ByRef instance As t_Lobby, ByVal Index As Integer)
     instance.Players(i).IsSummoned = False
     instance.Players(i).ReturnOnReconnect = False
     instance.Players(i).team = -1
+    ' Plan 05.002 ola 5: el slot se REUSA. Sin limpiar el origen, la guarda de SummonPlayer
+    ' (`.SummonedFrom.Map = 0`) queda en falso para el proximo ocupante y ReturnPlayer lo
+    ' devuelve al punto del jugador anterior.
+    instance.Players(i).SummonedFrom.Map = 0
+    instance.Players(i).SummonedFrom.x = 0
+    instance.Players(i).SummonedFrom.y = 0
     Call ClearUserRef(instance.Players(i).User)
     instance.Players(i).UserId = 0
     instance.RegisteredPlayers = instance.RegisteredPlayers - 1
@@ -474,6 +491,19 @@ Public Sub SummonPlayer(ByRef instance As t_Lobby, ByVal User As Integer)
         If Not .IsSummoned And .SummonedFrom.Map = 0 Then
             .SummonedFrom = UserList(.User.ArrayIndex).pos
         End If
+        ' Plan 05.002 ola 7: ReturnPlayer BORRA CurrentTeam pero SummonPlayer no lo restauraba.
+        ' El par /lobby returnplayer + /lobby summonsingleplayer devolvia al jugador al evento
+        ' con equipo 0: en el CTF eso lo dejaba fuera de la cola de muertes (nunca le corria el
+        ' respawn), la bandera no se le caia nunca al morir porque TirarBanderaDe resuelve el
+        ' objeto por CurrentTeam, y el fuego amigo pasaba a alcanzarlo. Que era un olvido y no
+        ' un diseno lo prueba RegisterReconnectedUserOnLobby, que ya hacia esto mismo a mano.
+        ' Se compara explicito en vez de asignar .team crudo: .team es Integer y ClearUserSocket
+        ' lo deja en -1, mientras que flags.CurrentTeam es Byte (asignar -1 seria overflow).
+        If .team > 0 And .team < 256 Then
+            UserList(.User.ArrayIndex).flags.CurrentTeam = CByte(.team)
+        Else
+            UserList(.User.ArrayIndex).flags.CurrentTeam = 0
+        End If
         If Not instance.Scenario Is Nothing Then
             Call instance.Scenario.WillSummonPlayer(.User.ArrayIndex)
         End If
@@ -503,10 +533,17 @@ Public Sub ReturnPlayer(ByRef instance As t_Lobby, ByVal User As Integer)
             Call LogUserRefError(.User, "ReturnPlayer")
             Exit Sub
         End If
+        ' Plan 05.002 ola 7: el Exit Sub tapaba la limpieza del equipo, que estaba debajo.
+        ' Si SummonPlayer fallaba a mitad (SummonCoordinates.Map arranca en -1 y un lobby
+        ' Generic al que nunca le corrieron setspawnpos lo conserva), el jugador quedaba con
+        ' IsSummoned = False y con el CurrentTeam que ya le habia escrito AddPlayer, y ningun
+        ' cierre del lobby se lo sacaba: con un equipo colgado CanHelpUser deja de dejarlo
+        ' curar o ayudar a nadie del servidor hasta que desloguea. El equipo es estado del
+        ' jugador, no del warp.
+        UserList(.User.ArrayIndex).flags.CurrentTeam = 0
         If Not .IsSummoned Then
             Exit Sub
         End If
-        UserList(.User.ArrayIndex).flags.CurrentTeam = 0
         Call WarpToLegalPos(.User.ArrayIndex, .SummonedFrom.Map, .SummonedFrom.x, .SummonedFrom.y, True, True)
         .IsSummoned = False
     End With
@@ -703,6 +740,68 @@ Public Sub UpdateWaitingForPlayers(ByVal frametime As Long, ByRef instance As t_
     End If
 End Sub
 
+Public Sub UpdateLobbiesWithoutScenario(ByVal frametime As Long)
+    ' Plan 05.002 ola 5. El tick de los lobbies vivia DENTRO de los escenarios: los unicos 4
+    ' llamadores de UpdateWaitingForPlayers son los IBaseScenario_Update. Un lobby de tipo
+    ' Generic no tiene escenario (CustomScenarios.PrepareNewEvent no le asigna ninguno), asi
+    ' que no lo hacia avanzar NADIE: no se cancelaba a los 5 minutos ni devolvia el slot, y
+    ' como quedaba en AcceptingPlayers, ActiveEventType() lo contaba como evento activo y
+    ' bloqueaba todo evento publico posterior hasta que un GM hiciera /cancelarevento.
+    ' El auto-arranque por cupo NO se habilita: un Generic es un evento MANUAL y lo inicia el
+    ' GM con /lobby startevent. Si se dejara arrancar solo, el lobby pasaria a InProgress, que
+    ' aca no se tickea, y el zombi se mudaria de estado en vez de morir.
+    On Error GoTo UpdateLobbiesWithoutScenario_Err
+    Dim i   As Integer
+    Dim idx As Integer
+    ' HACIA ATRAS: ReleaseLobby compacta ActiveLobby moviendo el ultimo elemento al hueco.
+    For i = ActiveLobby.currentIndex To 0 Step -1
+        idx = ActiveLobby.IndexInfo(i)
+        If idx >= 0 And idx <= UBound(LobbyList) Then
+            If LobbyList(idx).Scenario Is Nothing Then
+                If LobbyList(idx).State = e_LobbyState.AcceptingPlayers Then
+                    ' NO se reusa UpdateWaitingForPlayers: tiene DOS arranques automaticos y el
+                    ' de vencimiento (RegisteredPlayers >= MinPlayers) llevaria el lobby manual
+                    ' a InProgress, donde este barrido no lo mira. El zombi se mudaria de
+                    ' estado en vez de morir. Aca se hace solo lo que corresponde al evento
+                    ' manual: anunciar mientras espera, y cancelar si vencio sin gente.
+                    If LobbyList(idx).IsPublic Then
+                        If UpdateTime(LobbyList(idx).BroadOpenEvent, frametime) Then
+                            Call BroadcastOpenLobby(LobbyList(idx))
+                        End If
+                    End If
+                    If WaitForPlayersTimeUp(LobbyList(idx)) Then
+                        ' Plan 05.002 ola 9: el camino CON escenario avisa antes de cancelar
+                        ' (UpdateWaitingForPlayers, Msg1729, lineas 729-733). Esta rama, que
+                        ' nacio en la ola 5, no avisaba NADA: al inscripto lo teletransportaban
+                        ' de vuelta y le devolvian el oro sin una sola linea de texto.
+                        Dim j As Integer
+                        For j = 0 To LobbyList(idx).RegisteredPlayers - 1
+                            If IsValidUserRef(LobbyList(idx).Players(j).User) Then
+                                'Msg1729=Evento cancelado por falta de jugadores
+                                Call SendData(SendTarget.ToIndex, LobbyList(idx).Players(j).User.ArrayIndex, PrepareMessageLocaleMsg(MSG_EVENTO_CANCELADO_FALTA_JUGADORES, "", e_FontTypeNames.FONTTYPE_GUILD))
+                            End If
+                        Next j
+                        Call CancelLobby(LobbyList(idx))
+                    End If
+                ElseIf LobbyList(idx).State = e_LobbyState.InProgress Then
+                    ' Watchdog: el GM lo arranco con /lobby startevent y no hay escenario que
+                    ' lo termine. Si se fue el ultimo inscripto, no queda nadie que pueda
+                    ' cerrarlo y el slot quedaria tomado bloqueando todo evento publico.
+                    If LobbyList(idx).RegisteredPlayers <= 0 Then
+                        Call LogError("[Eventos] Lobby manual " & idx & " cerrado por watchdog: quedo en curso sin inscriptos.")
+                        Call CancelLobby(LobbyList(idx))
+                    End If
+                ElseIf LobbyList(idx).State >= e_LobbyState.Closed Then
+                    Call ReleaseLobby(idx)
+                End If
+            End If
+        End If
+    Next i
+    Exit Sub
+UpdateLobbiesWithoutScenario_Err:
+    Call TraceError(Err.Number, Err.Description, "ModLobby.UpdateLobbiesWithoutScenario", Erl)
+End Sub
+
 Public Sub BroadcastOpenLobby(ByRef instance As t_Lobby)
     If Not instance.IsGlobal Then Exit Sub
     Dim EventName As String: EventName = "Evento"
@@ -715,7 +814,7 @@ Public Sub BroadcastOpenLobby(ByRef instance As t_Lobby)
     End If
 End Sub
 
-Public Sub ForceReset(ByRef instance As t_Lobby)
+Public Sub ForceReset(ByRef instance As t_Lobby, ByVal LobbyIndex As Integer)
     On Error GoTo ForceReset_Err
     ' Plan 05.002 ola 2: antes tiraba el array de jugadores sin devolverlos ni refundar:
     ' quedaban atrapados en el mapa instancia y el oro se perdia. Se recorre HACIA ATRAS
@@ -724,8 +823,6 @@ Public Sub ForceReset(ByRef instance As t_Lobby)
     For p = instance.RegisteredPlayers - 1 To 0 Step -1
         Call RemovePlayerFromEvent(instance, p, True)
     Next p
-    ' NOTA: la liberacion del slot del pool (ReleaseLobby) y el contrato Reset completo de
-    ' los escenarios van en la ola 5, con el resto del residuo del R4.
     instance.MinLevel = 1
     instance.MaxLevel = 47
     instance.MaxPlayers = 0
@@ -737,13 +834,33 @@ Public Sub ForceReset(ByRef instance As t_Lobby)
     instance.ClassFilter = -1
     If Not instance.Scenario Is Nothing Then
         Call instance.Scenario.Reset
+        ' Reset es una Sub sin retorno y las 4 implementaciones se tragan sus propios errores,
+        ' asi que "la llame" no prueba que haya desregistrado. Se verifica la postcondicion:
+        ' si el escenario sigue en el tick, el slot NO vuelve al pool. Fugar 1 de 201 lobbies
+        ' es infinitamente mas barato que entregarle el mismo slot a dos eventos.
+        If CustomScenarios.IsScenarioInUpdateList(instance.Scenario) Then
+            Call LogError("ModLobby.ForceReset: el escenario del lobby " & LobbyIndex & " NO se desregistro del tick. El slot no se devuelve al pool.")
+            Set instance.Scenario = Nothing
+            Erase instance.Players
+            Exit Sub
+        End If
     End If
     Set instance.Scenario = Nothing
     Erase instance.Players
+    ' Plan 05.002 ola 5: el slot vuelve al pool. Antes no se devolvia -no habia forma, esta
+    ' Sub ni sabia que indice estaba reseteando- asi que cada /lobby forcereset quemaba uno
+    ' de los 201 slots para siempre.
+    ' ORDEN OBLIGATORIO: va DESPUES de Scenario.Reset, que es lo unico que saca al escenario
+    ' de CustomScenarioList y de la lista de update. Si el slot volviera antes, el escenario
+    ' viejo seguiria tickeando sobre un LobbyIndex que el pool ya pudo reasignar a OTRO
+    ' evento. Por eso los Reset vacios de DeathMatch y Abordaje se arreglan en el mismo commit.
+    Call ReleaseLobby(LobbyIndex)
     Exit Sub
 ForceReset_Err:
+    ' Sin Resume Next: con ReleaseLobby adentro dejo de ser inofensivo. Si Scenario.Reset
+    ' fallara, Resume Next seguiria hasta devolver al pool un slot cuyo escenario nunca se
+    ' desregistro, que es exactamente la catastrofe que el orden de arriba evita.
     Call TraceError(Err.Number, Err.Description, "ModLobby.ForceReset", Erl)
-    Resume Next
 End Sub
 
 Public Sub RegisterDisconnectedUser(ByVal DisconnectedUserIndex As Integer)
@@ -784,7 +901,11 @@ End Sub
 Public Sub RegisterReconnectedUser(ByVal DisconnectedUserIndex As Integer)
     Dim i As Integer
     For i = 0 To ActiveLobby.currentIndex
-        Call RegisterReconnectedUserOnLobby(LobbyList(i), DisconnectedUserIndex)
+        ' Plan 05.002 ola 4: iteraba LobbyList(i) en vez de LobbyList(ActiveLobby.IndexInfo(i)),
+    ' o sea recorria los primeros N slots del pool y no los N lobbies activos. Es el mismo
+    ' bug que la ola 2 arreglo en la desconexion. Con el CTF migrado, este es el unico
+    ' camino que reintegra a un jugador que se cayo en medio del evento.
+    Call RegisterReconnectedUserOnLobby(LobbyList(ActiveLobby.IndexInfo(i)), DisconnectedUserIndex)
     Next i
 End Sub
 
@@ -825,7 +946,7 @@ Public Function SetTeamSize(ByRef instance As t_Lobby, ByVal TeamSize As Integer
         Exit Function
     End If
     If instance.State <> Initialized Then
-        reponse.Success = False
+        response.Success = False
         response.Message = MsgCantChangeGroupSizeNow
         SetTeamSize = response
         Exit Function
@@ -851,7 +972,7 @@ Public Function SetTeamCount(ByRef instance As t_Lobby, ByVal TeamCount As Integ
         Exit Function
     End If
     If instance.State <> Initialized Then
-        reponse.Success = False
+        response.Success = False
         response.Message = MsgCantChangeGroupSizeNow
         SetTeamCount = response
         Exit Function
@@ -880,6 +1001,20 @@ Public Sub StartLobby(ByRef instance As t_Lobby, ByVal UserIndex As Integer)
         If UserIndex >= 0 Then Call WriteConsoleMsg(UserIndex, "El evento todavia no esta abierto a inscripciones.", e_FontTypeNames.FONTTYPE_INFO)
         Exit Sub
     End If
+    ' Plan 05.002 ola 5: minimo de jugadores. El camino automatico ya lo chequeaba
+    ' (UpdateWaitingForPlayers), pero /lobby startevent entraba derecho a InProgress con 0 o 1
+    ' inscriptos. En DeathMatch/Caceria/Abordaje eso "solo" quema el MaxTime del modo; el CTF
+    ' no tiene reloj -la ronda termina unicamente si alguien aguanta la bandera- asi que con 0
+    ' jugadores el lobby se queda en InProgress para siempre: no libera el slot y
+    ' ActiveEventType() sigue diciendo que hay un evento publico, o sea que no se puede abrir
+    ' ningun otro. El piso de 2 es el mismo que ya exige ValidateLobbySettings al crear.
+    Dim MinimoRequerido As Integer
+    MinimoRequerido = instance.MinPlayers
+    If MinimoRequerido < 2 Then MinimoRequerido = 2
+    If instance.RegisteredPlayers < MinimoRequerido Then
+        If UserIndex >= 0 Then Call WriteConsoleMsg(UserIndex, "No se puede iniciar: hay " & instance.RegisteredPlayers & " inscriptos y se necesitan " & MinimoRequerido & ".", e_FontTypeNames.FONTTYPE_INFO)
+        Exit Sub
+    End If
     If (instance.TeamSize > 1 Or instance.TeamType = eFixedTeamCount) And instance.TeamType = eRandom Then
         Call SortTeams(instance)
     End If
@@ -893,6 +1028,15 @@ Public Function HandleRemoteLobbyCommand(ByVal Command, ByVal Params As String, 
     Dim RetValue    As t_response
     Dim tUser       As t_UserReference
     Arguments = Split(Params, " ")
+    ' Plan 05.002 ola 5: HandleLobbyCommand rutea siempre a GlobalLobbyIndex, que vale -1
+    ' cuando no hay evento publico. Con -1 todos los Case de abajo hacen LobbyList(-1) y tiran
+    ' error 9; el handler se lo traga y la funcion devuelve el True que ya estaba asignado, asi
+    ' que el GM lee "comando procesado" y no pasa absolutamente nada.
+    If LobbyIndex < 0 Or LobbyIndex > UBound(LobbyList) Then
+        Call WriteConsoleMsg(UserIndex, "No hay ningun evento activo sobre el que operar.", e_FontTypeNames.FONTTYPE_INFO)
+        HandleRemoteLobbyCommand = True
+        Exit Function
+    End If
     HandleRemoteLobbyCommand = True
     With UserList(UserIndex)
         Select Case Command
@@ -900,6 +1044,14 @@ Public Function HandleRemoteLobbyCommand(ByVal Command, ByVal Params As String, 
                 Call SetSummonCoordinates(LobbyList(LobbyIndex), .pos.Map, .pos.x, .pos.y)
             Case e_LobbyCommandId.eEndEvent
                 Call CancelLobby(LobbyList(LobbyIndex))
+                ' Plan 05.002 ola 5: CancelLobby deja el lobby en Closed pero NO devuelve el
+                ' slot. Con escenario lo devuelve CloseScenario en el tick siguiente (rama
+                ' Closed de su Update), asi que aca hay que liberar SOLO si no hay escenario.
+                ' Liberar en los dos casos seria peor que la fuga: el pool puede reasignar ese
+                ' indice antes del tick, y ahi el ReleaseLobby del escenario sacaria de
+                ' ActiveLobby un slot que ya es de OTRO evento. Misma condicion que usa
+                ' HandleCancelarEvento.
+                If LobbyList(LobbyIndex).Scenario Is Nothing Then Call ReleaseLobby(LobbyIndex)
             Case e_LobbyCommandId.eReturnAllSummoned
                 Call ModLobby.ReturnAllPlayers(LobbyList(LobbyIndex))
             Case e_LobbyCommandId.eReturnSinglePlayer
@@ -921,7 +1073,9 @@ Public Function HandleRemoteLobbyCommand(ByVal Command, ByVal Params As String, 
             Case e_LobbyCommandId.eListPlayers
                 Call ModLobby.ListPlayers(LobbyList(LobbyIndex), UserIndex)
             Case e_LobbyCommandId.eForceReset
-                Call ModLobby.ForceReset(LobbyList(LobbyIndex))
+                ' Ola 5: ForceReset ahora tambien devuelve el slot al pool, y para eso necesita
+                ' el INDICE ademas de la estructura.
+                Call ModLobby.ForceReset(LobbyList(LobbyIndex), LobbyIndex)
                 Call WriteConsoleMsg(UserIndex, "Reset done.", e_FontTypeNames.FONTTYPE_INFO)
             Case e_LobbyCommandId.eSetTeamSize
                 Call ModLobby.SetTeamSize(LobbyList(LobbyIndex), Arguments(0), Arguments(1))
@@ -986,16 +1140,25 @@ End Function
 
 Public Sub SortTeams(ByRef instance As t_Lobby)
     On Error GoTo SortTeams_Err
-    If instance.TeamSize < 1 Or (instance.MaxPlayers / instance.TeamSize) < 1 Then Exit Sub
+    ' Plan 05.002 ola 8: VB6 NO cortocircuita el Or, asi que la division se evaluaba
+    ' TAMBIEN con TeamSize = 0 y tiraba error 11. El On Error de arriba se lo comia, o sea
+    ' que SortTeams no hacia nada y dejaba un error espurio en el log cada vez. Se parte en
+    ' dos para que la division nunca vea un divisor 0.
+    If instance.TeamSize < 1 Then Exit Sub
+    If (instance.MaxPlayers \ instance.TeamSize) < 1 Then Exit Sub
     Dim currentIndex       As Integer
     Dim TeamCount          As Integer
     Dim MaxPossiblePlayers As Integer
-    TeamCount = instance.MaxPlayers / instance.TeamSize
+    ' Plan 05.002 ola 5: estas cuentas quieren truncar al multiplo de abajo, pero `/` es
+    ' division flotante y VB6 redondea al PAR al meterla en un Integer: 7/2 = 3.5 -> 4, y
+    ' MaxPossiblePlayers terminaba siendo MAYOR que los inscriptos, asi que el loop de
+    ' expulsion no echaba a nadie y los equipos quedaban desparejos. `\` es division entera.
+    TeamCount = instance.MaxPlayers \ instance.TeamSize
     If instance.SortType = eFixedTeamSize Then
-        MaxPossiblePlayers = (instance.RegisteredPlayers / instance.TeamSize)
+        MaxPossiblePlayers = (instance.RegisteredPlayers \ instance.TeamSize)
         MaxPossiblePlayers = MaxPossiblePlayers * instance.TeamSize
     Else
-        MaxPossiblePlayers = instance.RegisteredPlayers / TeamCount
+        MaxPossiblePlayers = instance.RegisteredPlayers \ TeamCount
         MaxPossiblePlayers = MaxPossiblePlayers * TeamCount
     End If
     Dim i As Integer
@@ -1005,7 +1168,13 @@ Public Sub SortTeams(ByRef instance As t_Lobby)
         End If
         Call KickPlayer(instance, i)
     Next i
-    TeamCount = instance.RegisteredPlayers / instance.TeamSize
+    ' Plan 05.002 ola 5: esta formula solo vale en eFixedTeamSize, donde TeamSize ES el
+    ' tamano del equipo. En eFixedTeamCount -lo que usa el Abordaje- TeamSize vale
+    ' MaxPlayers/N, asi que recalcular aca colapsaba todo a UN solo equipo salvo lobby lleno.
+    If instance.SortType = e_SortType.eFixedTeamSize Then
+        TeamCount = instance.RegisteredPlayers \ instance.TeamSize
+    End If
+    If TeamCount < 1 Then TeamCount = 1
     currentIndex = GetHigherLvlWithoutTeam(instance)
     Dim CurrentAssignTeam As Integer
     Dim Direction         As Integer
@@ -1106,14 +1275,10 @@ End Function
 Public Function ActiveEventType() As Integer
     ' Plan 05.002 ola 3: fuente UNICA de verdad del tipo de evento publico en curso,
     ' derivada de lo que esta vivo. Devuelve NO_ACTIVE_EVENT si no hay ninguno.
-    ' El CTF todavia vive en su propio singleton; cuando la ola 4 lo migre a
-    ' IBaseScenario, esta primera rama se cae sola y queda solo la del lobby.
+    ' Ola 4: el CTF dejo de ser una excepcion. Ahora vive dentro de su lobby como
+    ' cualquier escenario, asi que alcanza con mirar el lobby.
     On Error GoTo ActiveEventType_Err
     ActiveEventType = NO_ACTIVE_EVENT
-    If Not InstanciaCaptura Is Nothing Then
-        ActiveEventType = e_EventType.CaptureTheFlag
-        Exit Function
-    End If
     If GlobalLobbyIndex >= 0 And GlobalLobbyIndex <= UBound(LobbyList) Then
         If LobbyList(GlobalLobbyIndex).State > e_LobbyState.UnInitilized And LobbyList(GlobalLobbyIndex).State <= e_LobbyState.InProgress Then
             ActiveEventType = LobbyList(GlobalLobbyIndex).ScenearioType
@@ -1125,26 +1290,60 @@ ActiveEventType_Err:
     ActiveEventType = NO_ACTIVE_EVENT
 End Function
 
-Public Sub CreatePublicEvent(ByRef LobbySettings As t_NewScenearioSettings)
+Public Function CreatePublicEvent(ByRef LobbySettings As t_NewScenearioSettings, Optional ByRef FailReason As String) As Boolean
+    ' Plan 05.002 ola 8: era una Sub que no devolvia NADA, con cinco salidas tempranas. El
+    ' scheduler de auto-eventos marcaba el dia como hecho en la linea siguiente pasara lo que
+    ' pasara, asi que una creacion caida costaba el auto-evento del dia entero, en silencio.
+    ' Ahora devuelve exito y, por FailReason, el motivo CONCRETO con los valores que lo
+    ' causaron (un "no se pudo crear" generico no sirve para diagnosticar nada).
+    ' El otro call site (initEventLobby -> camino GM /CREAREVENTO) NO se toca: sigue con
+    ' 'Call CreatePublicEvent(LobbySettings)'. VB6 descarta el valor de retorno de una Function
+    ' llamada con Call, y el segundo parametro es Optional. Compila igual y se comporta igual.
     ' R3: validar ANTES de reservar el lobby (GetAvailableLobby lo consume); si no, fuga de lobby
     If Not ValidateLobbySettings(LobbySettings) Then
-        Exit Sub
+        FailReason = "settings invalidos para el tipo " & LobbySettings.ScenearioType & " (niveles " & LobbySettings.MinLevel & "-" & LobbySettings.MaxLevel & ", jugadores " & LobbySettings.MinPlayers & "-" & LobbySettings.MaxPlayers & ")."
+        Exit Function
     End If
     ' Plan 05.002 ola 3 (decision 2 del dueno: UN evento publico a la vez, formalizado).
     ' Antes se pisaba GlobalLobbyIndex sin mirar si ya habia uno: el lobby anterior quedaba
     ' huerfano, ocupando un slot del pool que nadie iba a liberar nunca.
+    ' Plan 05.002 ola 4: el CTF trae validaciones de settings propias (fee no negativo,
+    ' cupo <= 48, rango de niveles). Corren ANTES de reservar el lobby, igual que
+    ' ValidateLobbySettings, para no fugar un slot del pool si los settings son invalidos.
+    If LobbySettings.ScenearioType = e_EventType.CaptureTheFlag Then
+        If Not HandleIniciarCaptura(LobbySettings) Then
+            FailReason = "settings de Captura la Bandera rechazados (fee " & LobbySettings.InscriptionFee & ", cupo " & LobbySettings.MaxPlayers & ", niveles " & LobbySettings.MinLevel & "-" & LobbySettings.MaxLevel & ")."
+            Exit Function
+        End If
+    End If
     If ActiveEventType() <> NO_ACTIVE_EVENT Then
         Call LogError("CreatePublicEvent: ya hay un evento publico activo (tipo " & ActiveEventType() & "), no se crea otro.")
         Call SendData(SendTarget.ToAdmins, 0, PrepareMessageConsoleMsg("[Eventos] Ya hay un evento publico en curso: cancelalo antes de abrir otro.", e_FontTypeNames.FONTTYPE_INFO))
-        Exit Sub
+        FailReason = "ya hay un evento publico activo (tipo " & ActiveEventType() & ")."
+        Exit Function
     End If
     GlobalLobbyIndex = GetAvailableLobby()
-    If GlobalLobbyIndex < 0 Then Exit Sub ' pool de lobbies agotado
+    ' Plan 05.002 ola 8: esta salida era MUDA en los dos caminos (scheduler y GM). El pool se
+    ' agotaba y no lo sabia nadie. La instrumentacion de la ola 1 ya expone el conteo.
+    If GlobalLobbyIndex < 0 Then
+        Call LogError("CreatePublicEvent: pool de lobbies agotado (" & LobbiesEnUso() & " en uso), no se crea el evento.")
+        FailReason = "no hay lobbies libres en el pool (" & LobbiesEnUso() & " en uso)."
+        Exit Function
+    End If
     Call InitializeLobby(LobbyList(GlobalLobbyIndex))
     Call ModLobby.SetupLobby(LobbyList(GlobalLobbyIndex), LobbySettings)
-    Call CustomScenarios.PrepareNewEvent(LobbySettings.ScenearioType, GlobalLobbyIndex)
+    ' Plan 05.002 ola 5: PrepareNewEvent ahora devuelve si el lobby quedo con un escenario
+    ' VIVO (construido y enganchado al tick). Si no, hay que devolver el slot: un lobby sin
+    ' escenario no lo hace avanzar nadie, se queda en AcceptingPlayers cobrando inscripciones
+    ' y ActiveEventType() lo cuenta como evento activo, bloqueando todo evento posterior.
+    If Not CustomScenarios.PrepareNewEvent(LobbySettings.ScenearioType, GlobalLobbyIndex) Then
+        Call ReleaseLobby(GlobalLobbyIndex)
+        FailReason = "el escenario tipo " & LobbySettings.ScenearioType & " no quedo registrado en el tick (detalle en el log de PrepareNewEvent)."
+        Exit Function
+    End If
     Call OpenLobby(LobbyList(GlobalLobbyIndex), True)
-End Sub
+    CreatePublicEvent = True
+End Function
 
 Public Sub initEventLobby(ByVal UserIndex As Integer, ByVal eventType As Integer, LobbySettings As t_NewScenearioSettings)
     ' Plan 05.002 ola 1. El comentario viejo decia "a esto solo se accede si el lobby fue
@@ -1163,10 +1362,8 @@ Public Sub initEventLobby(ByVal UserIndex As Integer, ByVal eventType As Integer
     ' deseado: el formulario mandaba TODO a CreatePublicEvent, incluido CaptureTheFlag, y
     ' abria un lobby sin logica de CTF; ahora rutea igual que el comando de chat.
     ' El tipo de evento ya no se guarda en ningun escalar: se deriva (ActiveEventType).
-    Select Case LobbySettings.ScenearioType
-        Case e_EventType.CaptureTheFlag
-            Call HandleIniciarCaptura(LobbySettings)
-        Case Else
-            Call CreatePublicEvent(LobbySettings)
-    End Select
+    ' Plan 05.002 ola 4: el CTF dejo de tener su propia rama. Ahora es un escenario
+    ' del motor como los demas, asi que entra por CreatePublicEvent y hereda el lobby
+    ' (participantes, cobro, refund, estado, desconexiones).
+    Call CreatePublicEvent(LobbySettings)
 End Sub

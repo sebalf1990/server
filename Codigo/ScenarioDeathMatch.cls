@@ -176,6 +176,41 @@ Private Sub AddItemToUser(ByVal UserIndex As Integer, ByVal ItemId As Integer, B
     End With
 End Sub
 
+Private Function TieneItemsRetenidos(ByVal UserId As Long) As Boolean
+    On Error GoTo TieneItemsRetenidos_Err
+    Dim i As Integer
+    For i = 0 To SpawnedUserList.RegisteredUserCount - 1
+        If SpawnedUserList.UserList(i).UserId = UserId Then
+            TieneItemsRetenidos = True
+            Exit Function
+        End If
+    Next i
+    Exit Function
+TieneItemsRetenidos_Err:
+    Call TraceError(Err.Number, Err.Description, "DeathMatch.TieneItemsRetenidos", Erl)
+End Function
+
+Private Sub DevolverItemsRetenidos()
+    ' OJO: RemoveForbiddenItems ademas SACA del inventario los items prohibidos que el
+    ' jugador tenga encima, asi que NO se puede barrer a todo el mundo: de ahi el filtro por
+    ' SpawnedUserList antes de tocar a nadie. Solo alcanza a los que estan online; el que
+    ' estaba offline al momento del forcereset pierde los items igual (SpawnedUserList vive
+    ' en memoria). Cerrar eso requiere persistir la retencion y queda fuera de esta ola.
+    On Error GoTo DevolverItemsRetenidos_Err
+    Dim ui As Integer
+    For ui = 1 To LastUser
+        If SpawnedUserList.RegisteredUserCount = 0 Then Exit Sub
+        If UserList(ui).flags.UserLogged Then
+            If TieneItemsRetenidos(UserList(ui).Id) Then
+                Call RemoveForbiddenItems(ui)
+            End If
+        End If
+    Next ui
+    Exit Sub
+DevolverItemsRetenidos_Err:
+    Call TraceError(Err.Number, Err.Description, "DeathMatch.DevolverItemsRetenidos", Erl)
+End Sub
+
 Private Sub RemoveForbiddenItems(ByVal UserIndex As Integer)
     Dim i As Integer
     Dim j As Integer
@@ -330,6 +365,34 @@ Public Function IBaseScenario_GetExtraInterfaces() As Long
 End Function
 
 Public Sub IBaseScenario_Reset()
+    ' Plan 05.002 ola 5 (contrato Reset, residuo del R4 de junio). Estaba VACIO: /lobby
+    ' forcereset dejaba el escenario registrado en CustomScenarioList y en la lista de
+    ' update, con LobbyIndex apuntando a un slot que ahora vuelve al pool. Ese objeto sigue
+    ' tickeando y, cuando el pool reasigna el slot, escribe sobre el evento de otro.
+    ' El desregistro del tick va SIEMPRE y aparte del mapa: con el heap de instancias
+    ' agotado MapNumber vale -1 (InstanceManager.GetNextAvailableInstance), y ademas ClearMap
+    ' no tiene Resume Next, asi que si RemoveCustomScenario tira, su RemoveUpdateScenario no
+    ' corre. Quedar en el tick es la unica falla inaceptable aca.
+    ' Idempotente: RemoveUpdateScenario no hace nada si el indice ya no esta activo, y los
+    ' slots arrancan en 1, asi que 0 es "ya lo solte".
+    On Error GoTo Reset_Err
+    ' Igual que el Abordaje: WillSummonPlayer le VACIA al jugador los slots de items
+    ' prohibidos y los guarda SOLO en memoria, en SpawnedUserList. RemoveForbiddenItems es lo
+    ' unico que los devuelve, y con forcereset no corria: al hacer Scenario = Nothing muere el
+    ' objeto y con el los items. Perdida definitiva.
+    Call DevolverItemsRetenidos
+    If MapNumber > 0 Then
+        Call ClearMap
+        Call ReleaseInstance(MapNumber)
+    End If
+    If UpdateIndex > 0 Then
+        Call CustomScenarios.RemoveUpdateScenario(UpdateIndex)
+        UpdateIndex = 0
+    End If
+    MapNumber = 0
+    Exit Sub
+Reset_Err:
+    Call TraceError(Err.Number, Err.Description, "DeathMatch.Reset", Erl)
 End Sub
 
 Public Function IBaseScenario_RequiresSpawn() As Boolean
@@ -342,8 +405,11 @@ End Function
 Public Sub IBaseScenario_WillSummonPlayer(ByVal UserIndex As Integer)
     Dim SpawnPos As t_WorldPos
     SpawnPos.Map = MapNumber
-    SpawnPos.x = RandomNumber(50 - MinArenaSize, 50 - MinArenaSize)
-    SpawnPos.y = RandomNumber(50 - MinArenaSize, 50 - MinArenaSize)
+    ' Ola 5: el rango estaba degenerado (min = max en los dos ejes), asi que RandomNumber
+    ' devolvia siempre 50 - MinArenaSize y TODOS los invocados caian en la misma baldosa.
+    ' Aca no se puede usar FightArea: se calcula recien en StartGame (LimitFightArea).
+    SpawnPos.x = RandomNumber(50 - MinArenaSize, 50 + MinArenaSize)
+    SpawnPos.y = RandomNumber(50 - MinArenaSize, 50 + MinArenaSize)
     LobbyList(LobbyIndex).SummonCoordinates = SpawnPos
     Call Board.AddPlayer(UserIndex)
     Dim UserItemInfo As t_UserItemInfo
@@ -399,6 +465,10 @@ Public Sub IBaseScenario_PlayerKillPlayer(ByVal killerIndex As Integer, ByVal de
         If Board.UpdatePlayerScore(killerIndex, 3) >= TargetScore Then
             Call SendData(SendTarget.toMap, MapNumber, PrepareMessageLocaleMsg(MSG_TENEMOS_GANADOR_1889, vbNullString, e_FontTypeNames.FONTTYPE_GUILD)) 'Msg1889=¡Tenemos un ganador!
             Call MatchCompleted
+            ' Plan 05.002 ola 5: sin este corte, si el asistente tambien cruzaba TargetScore
+            ' con la misma muerte se ejecutaba MatchCompleted (y GiveRewards) por segunda vez.
+            ' Es el mismo corte que ya tenia ScenarioHuntNpc.IBaseScenario_PlayerKillNpc.
+            Exit Sub
         End If
         If GlobalFrameTime - UserList(deadIndex).flags.LastAttackedByUserTime < AssistDamageValidTime Then
             If IsValidUserRef(UserList(deadIndex).flags.LastAttacker) And UserList(deadIndex).flags.LastAttacker.ArrayIndex <> killerIndex Then
@@ -492,7 +562,10 @@ Private Sub StartGame()
     Dim InitialStacks As Integer
     For i = 0 To UBound(ItemsToSpawn) - 1
         InitialStacks = ItemsToSpawn(i).InitialStacks * LobbyList(LobbyIndex).RegisteredPlayers
-        For j = 0 To InitialStacks
+        ' Ola 5: iteraba 0 To InitialStacks, o sea un stack de mas por item. El ini declara
+        ' la semantica ("if Initial stack is 15 and there are 10 players it will create 15
+        ' stacks") y RespawnItems si la respeta restando 1.
+        For j = 1 To InitialStacks
             Call SpawnItem(ItemsToSpawn(i).ItemId, ItemsToSpawn(i).ItemCount)
         Next j
     Next i
@@ -513,6 +586,15 @@ Private Sub Respawn(ByVal player As Integer)
 End Sub
 
 Private Sub MatchCompleted()
+    ' Ola 5: idempotente. Tres caminos llaman aca (el puntaje en PlayerKillPlayer, el timeout
+    ' en Update y UpdateLobbyState(Closed) desde CancelLobby) y ninguno sabe de los otros.
+    ' Correrla dos veces repartia de nuevo sobre el pozo remanente, repetia el broadcast
+    ' global y reiniciaba el contador de cierre (SetTimer pone Occurrences = 0).
+    ' La marca es el propio estado del lobby: el 'State = Completed' de mas abajo corre ANTES
+    ' de repartir, asi que tambien corta una reentrada en medio de GiveRewards.
+    If LobbyList(LobbyIndex).State >= e_LobbyState.Completed Then
+        Exit Sub
+    End If
     MapInfo(MapNumber).Seguro = 1
     Call SetTimer(CountdownTimer, 1000)
     Dim i As Integer
@@ -582,12 +664,15 @@ Private Sub RespawnPlayers()
 End Sub
 
 Private Sub RespawnItems(ByVal frametime As Long)
-    Dim i, j As Integer
+    Dim i             As Integer
+    Dim j             As Integer
     Dim SpawnCount    As Integer
     Dim StackToCreate As Integer
-    StackToCreate = (ItemsToSpawn(i).StackCount * LobbyList(LobbyIndex).RegisteredPlayers) - 1
     For i = 0 To UBound(ItemsToSpawn) - 1
         If UpdateTime(ItemsToSpawn(i).timer, frametime) Then
+            ' Plan 05.002 ola 5: esto estaba ARRIBA del For y con i sin inicializar, o sea
+            ' que TODOS los items respawneaban con el StackCount del item 0.
+            StackToCreate = (ItemsToSpawn(i).StackCount * LobbyList(LobbyIndex).RegisteredPlayers) - 1
             For j = 0 To StackToCreate
                 SpawnCount = ItemsToSpawn(i).ItemCount
                 Call SpawnItem(ItemsToSpawn(i).ItemId, SpawnCount)
@@ -686,6 +771,12 @@ Sub GiveRewards()
             End If
         Next i
         For i = 1 To 3
+            ' Ola 5: GetTeamRanking devuelve rank(0 To CantidadDeEquipos) -- el 0 es un equipo
+            ' fantasma y SortRank ordena de 1 en adelante. Con 2 equipos (el caso normal)
+            ' UBound vale 2, y Ranking(3) daba subscript out of range: el handler abortaba
+            ' GiveRewards en silencio DESPUES de haber pagado parte. El tope de 3 se mantiene
+            ' porque Rewards() solo llega hasta 3.
+            If i > UBound(Ranking) Then Exit For
             If LobbyList(LobbyIndex).AvailableInscriptionMoney > 0 Then
                 Reward = Rewards(i) / LobbyList(LobbyIndex).TeamSize
                 For j = 0 To LobbyList(LobbyIndex).RegisteredPlayers - 1

@@ -1115,28 +1115,31 @@ End Sub
 
 Private Sub Automatic_Event_Timer()
     On Error GoTo Evento_Timer_Err
-    'validacion para captura la bandera que es unico
-    'EventoActivo es el flag de eventos-multiplicador; IsEventActive() es el de
-    'lobby/escenario (DeathMatch/Captura/etc). Sin el segundo, se podia lanzar un
-    'auto-evento encima de uno de escenario ya en curso.
-    If EventoActivo Or IsEventActive() Then Exit Sub
     Dim CurrentDay    As Byte
     Dim CurrentHour   As Byte
     Dim EventOfTheDay As Integer
     Dim nowRaw        As Long
+    Dim MotivoFallo   As String
+    ' Plan 05.002 ola 8: freno de reintento, 10 minutos. Ver el bloque de abajo.
+    Const AUTOEVENT_RETRY_MS As Long = 600000
     CurrentDay = Weekday(Date) 'domingo=1 , lunes=2, martes=3, miercoles=4, jueves=5, viernes=6, sabado=7
     CurrentHour = Hour(Time) 'number between 0 and 23
     'si no es la hora de activar el evento salimos
     If SvrConfig.GetValue("AUTOEVENTHOURCALENDAR_Horarios") <> CurrentHour Then
         Exit Sub
     End If
-    If AlreadyDidAutoEventToday Then
-        '3600000 = 1 hora en milisegundos
-        nowRaw = GetTickCountRaw()
-        If TicksElapsed(LastAutoEventAttempt, nowRaw) > 3600000 Then
-            AlreadyDidAutoEventToday = False
-        End If
-        Exit Sub
+    ' Plan 05.002 ola 8: el gate del dia compara FECHAS. El bloque viejo reseteaba un Boolean
+    ' cuando pasaba 1 hora desde el ultimo intento: nunca comparo dias, funcionaba porque la
+    ' ventana del calendario mide exactamente 1 hora, y gastaba el primer tick del dia solo en
+    ' resetear (el evento salia a las HH:01, no a las HH:00).
+    If LastAutoEventDate = Date Then Exit Sub
+    ' Freno de reintento. Como ahora la fecha se marca SOLO si el evento abrio de verdad, un
+    ' intento fallido deja la puerta abierta para reintentar dentro de la misma ventana horaria
+    ' (hasta 6 intentos). Sin freno reintentaria cada minuto y repetiria el mismo log y el
+    ' mismo aviso a los admins 60 veces por dia.
+    nowRaw = GetTickCountRaw()
+    If LastAutoEventAttempt <> 0 Then
+        If TicksElapsed(LastAutoEventAttempt, nowRaw) < AUTOEVENT_RETRY_MS Then Exit Sub
     End If
     Select Case CurrentDay
         Case 1 'domingo
@@ -1194,6 +1197,14 @@ Private Sub Automatic_Event_Timer()
             LobbySettings.InscriptionFee = SvrConfig.GetValue("AUTODEATHMATCH_InscriptionFee")
             LobbySettings.Description = SvrConfig.GetValue("AUTODEATHMATCH_Description")
         Case e_EventType.NavalBattle
+            ' Plan 05.002 ola 8: el Abordaje salio del calendario (Configuracion.ini pasa a
+            ' 3 = DeathMatch los siete dias) porque NUNCA se probo con jugadores. El Case se
+            ' deja entero a proposito: volver a programarlo tiene que ser cambiar un numero
+            ' del .ini, no reescribir estas diez lineas de memoria. Pero si alguien lo
+            ' reprograma, que quede rastro de que esta lanzando el modo menos rodado, en vez
+            ' de enterarse por un reporte de jugador.
+            Call LogError("[AutoEvento] El calendario programo la Batalla Naval, que nunca se probo con jugadores. Ver plan 05.002 ola 8.")
+            Call SendData(SendTarget.ToAdmins, 0, PrepareMessageConsoleMsg("[Eventos] Atencion: el auto-evento de hoy es la Batalla Naval, un modo sin pruebas.", e_FontTypeNames.FONTTYPE_INFO))
             LobbySettings.ScenearioType = e_EventType.NavalBattle
             LobbySettings.MinLevel = SvrConfig.GetValue("AUTONAVALBATTLE_MinLevel")
             LobbySettings.MaxLevel = SvrConfig.GetValue("AUTONAVALBATTLE_MaxLevel")
@@ -1206,17 +1217,58 @@ Private Sub Automatic_Event_Timer()
             LobbySettings.Description = SvrConfig.GetValue("AUTONAVALBATTLE_Description")
     End Select
     LobbySettings.Password = ""
-    ' Plan 05.002 ola 3: el tipo de evento ya no se guarda en un escalar, se deriva.
-    If LobbySettings.ScenearioType = e_EventType.CaptureTheFlag Then
-        Call HandleIniciarCaptura(LobbySettings)
-    Else
-        Call CreatePublicEvent(LobbySettings)
+    ' Plan 05.002 ola 8: este chequeo estaba ARRIBA DE TODO y era mudo. Alla arriba corre una
+    ' vez por minuto, asi que loguearlo habria inundado el log; aca adentro solo corre en la
+    ' ventana horaria del calendario, y es el modo de falla MAS probable en produccion: el
+    ' auto-evento del dia no sale porque quedo abierto un evento anterior.
+    ' EventoActivo es el flag de eventos-multiplicador; IsEventActive() es el de
+    ' lobby/escenario (DeathMatch/Captura/etc). Sin el segundo, se podia lanzar un
+    ' auto-evento encima de uno de escenario ya en curso.
+    If EventoActivo Or IsEventActive() Then
+        Call RegistrarAutoEventoFallido("ya hay un evento en curso (multiplicador=" & EventoActivo & ", escenario=" & IsEventActive() & "). Se reintenta dentro de la ventana horaria.")
+        Exit Sub
     End If
-    AlreadyDidAutoEventToday = True
+    ' Plan 05.002 ola 3: el tipo de evento ya no se guarda en un escalar, se deriva.
+    ' Plan 05.002 ola 4: el CTF ya no tiene ruta de creacion propia; entra por el
+    ' mismo camino que los demas modos (CreatePublicEvent valida y reserva el lobby).
+    ' Plan 05.002 ola 8: CreatePublicEvent paso de Sub a Function y devuelve el motivo
+    ' concreto. Antes se marcaba el dia como hecho PASARA LO QUE PASARA: si la creacion se
+    ' caia por cualquiera de sus cinco salidas tempranas, ese dia ya no habia auto-evento y
+    ' no quedaba rastro de por que.
+    If Not CreatePublicEvent(LobbySettings, MotivoFallo) Then
+        Call RegistrarAutoEventoFallido(MotivoFallo)
+        Exit Sub
+    End If
+    LastAutoEventDate = Date
     LastAutoEventAttempt = GetTickCountRaw()
+    Call LogInfoServidor("[AutoEvento] Abierto OK: tipo " & EventOfTheDay & ", dia " & CurrentDay & ", hora " & CurrentHour & ".")
     Exit Sub
 Evento_Timer_Err:
     Call TraceError(Err.Number, Err.Description, "frmMain.Evento_Timer", Erl)
+End Sub
+
+' Plan 05.002 ola 8 (observabilidad). Un auto-evento que no arranca tenia que dejar rastro:
+' hasta ahora fallaba mudo y encima el dia se marcaba como hecho igual.
+' Por que LogError y no LogInfoServidor, si esto no es un error de codigo sino un evento
+' operativo: LogThis (Logging.bas:98) NO escribe archivos, escribe al Event Log de Windows, y
+' SOLO mete en el buffer circular los mensajes de nivel Warning/Error (Logging.bas:101). Ese
+' buffer es lo unico que se puede leer desde el juego (WriteDebugLogResponse -> "remote
+' errors", Protocol_Writes.bas:4563). Un LogInfoServidor aca seria invisible justo para el que
+' esta parado en el mundo preguntandose por que no salio el evento. Ademas es lo que ya usan
+' ValidateLobbySettings, CreatePublicEvent y PrepareNewEvent para rechazos operativos.
+' El motivo llega CONCRETO desde el llamador (con los valores que lo causaron), no generico:
+' un "el auto-evento fallo" a secas no sirve para diagnosticar nada.
+' Marcar LastAutoEventAttempt es parte del contrato: es el freno que evita repetir este mismo
+' log y este mismo aviso cada minuto de la ventana horaria. Va PRIMERO, antes de cualquier
+' llamada que pueda tirar error, para que el freno quede puesto si.
+Private Sub RegistrarAutoEventoFallido(ByVal Motivo As String)
+    On Error GoTo RegistrarAutoEventoFallido_Err
+    LastAutoEventAttempt = GetTickCountRaw()
+    Call LogError("[AutoEvento] No pudo abrirse: " & Motivo)
+    Call SendData(SendTarget.ToAdmins, 0, PrepareMessageConsoleMsg("[Eventos] El auto-evento del dia no pudo abrirse: " & Motivo, e_FontTypeNames.FONTTYPE_INFO))
+    Exit Sub
+RegistrarAutoEventoFallido_Err:
+    Call TraceError(Err.Number, Err.Description, "frmMain.RegistrarAutoEventoFallido", Erl)
 End Sub
 
 Private Sub Form_MouseMove(Button As Integer, Shift As Integer, x As Single, y As Single)

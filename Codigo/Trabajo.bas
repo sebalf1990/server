@@ -811,6 +811,15 @@ Public Sub HerreroConstruirItem(ByVal UserIndex As Integer, ByVal ItemIndex As I
     On Error GoTo HerreroConstruirItem_Err
     If Not IntervaloPermiteTrabajarConstruir(UserIndex) Then Exit Sub
     ' Plan 04.001: gate de ejecucion — eCraftBlacksmith llegaba directo sin validar profesion.
+    ' Plan 05.002 ola 7: los 4 crafteos no tenian NINGUN gate de posicion, mapa ni evento, y
+    ' HandleCraftBlacksmith tampoco revalida el yunque: alcanzaba con mandar el paquete crudo
+    ' desde adentro del ring. El gate va aca y no en el handler para cubrir de paso el camino
+    ' del timer del servidor.
+    If CustomScenarios.IsUserInMatch(UserIndex) And Not EsGM(UserIndex) Then
+        ' Msg702=Accion no permitida.
+        Call WriteLocaleMsg(UserIndex, MSG_NO_ACCION_PERMITIDA, e_FontTypeNames.FONTTYPE_INFO)
+        Exit Sub
+    End If
     If Not TieneProfesionAprendida(UserIndex, e_Skill.Herreria) Then
         Call WriteLocaleMsg(UserIndex, MSG_PROF_NO_APRENDIDA, e_FontTypeNames.FONTTYPE_INFO)
         Exit Sub
@@ -913,6 +922,19 @@ Public Sub CarpinteroConstruirItem(ByVal UserIndex As Integer, ByVal ItemIndex A
     On Error GoTo CarpinteroConstruirItem_Err
     If Not IntervaloPermiteTrabajarConstruir(UserIndex) Then Exit Sub
     ' Plan 04.001: gate de ejecucion, no solo al equipar la herramienta.
+    ' Plan 05.002 ola 7: la carpinteria NO craftea en el handler del paquete, craftea en el
+    ' timer del servidor (frmMain.t_Extraer_Timer -> Trabajar -> aca). Una orden de 100 sillas
+    ' empezada en la ciudad seguia produciendo tick a tick despues de que al jugador lo
+    ' invocaban al evento, asi que un gate puesto solo en HandleCraftCarpenter dejaba la orden
+    ' en vuelo. Ademas se corta el macro: si no, el jugador queda tildado "trabajando" en falso
+    ' y el timer lo sigue visitando cada tick sin producir nada.
+    If CustomScenarios.IsUserInMatch(UserIndex) And Not EsGM(UserIndex) Then
+        ' Msg702=Accion no permitida.
+        Call WriteLocaleMsg(UserIndex, MSG_NO_ACCION_PERMITIDA, e_FontTypeNames.FONTTYPE_INFO)
+        Call WriteMacroTrabajoToggle(UserIndex, False)
+        UserList(UserIndex).Counters.Trabajando = 0
+        Exit Sub
+    End If
     If Not TieneProfesionAprendida(UserIndex, e_Skill.Carpinteria) Then
         Call WriteLocaleMsg(UserIndex, MSG_PROF_NO_APRENDIDA, e_FontTypeNames.FONTTYPE_INFO)
         Exit Sub
@@ -977,6 +999,15 @@ End Sub
 Public Sub AlquimistaConstruirItem(ByVal UserIndex As Integer, ByVal ItemIndex As Integer)
     On Error GoTo AlquimistaConstruirItem_Err
     ' Plan 04.001: gate de ejecucion, no solo al equipar la herramienta.
+    ' Plan 05.002 ola 7: no se trabaja adentro de un reto ni de un evento. Va ARRIBA, pegado al
+    ' gate de profesion, y no mas abajo entre los chequeos de bounds: el handler de error de
+    ' esta Sub termina en Resume Next, asi que un Exit Sub puesto en la zona de abajo puede
+    ' quedar salteado.
+    If CustomScenarios.IsUserInMatch(UserIndex) And Not EsGM(UserIndex) Then
+        ' Msg702=Accion no permitida.
+        Call WriteLocaleMsg(UserIndex, MSG_NO_ACCION_PERMITIDA, e_FontTypeNames.FONTTYPE_INFO)
+        Exit Sub
+    End If
     If Not TieneProfesionAprendida(UserIndex, e_Skill.Alquimia) Then
         Call WriteLocaleMsg(UserIndex, MSG_PROF_NO_APRENDIDA, e_FontTypeNames.FONTTYPE_INFO)
         Exit Sub
@@ -1041,6 +1072,14 @@ Public Sub SastreConstruirItem(ByVal UserIndex As Integer, ByVal ItemIndex As In
     On Error GoTo SastreConstruirItem_Err
     If Not IntervaloPermiteTrabajarConstruir(UserIndex) Then Exit Sub
     ' Plan 04.001: gate de ejecucion, no solo al equipar la herramienta.
+    ' Plan 05.002 ola 7: no se trabaja adentro de un reto ni de un evento. Cuarta y ultima
+    ' copia del gate: dejar una sola sin cubrir es el patron de "fix a medias en funciones
+    ' gemelas" que ya nos costo una ola.
+    If CustomScenarios.IsUserInMatch(UserIndex) And Not EsGM(UserIndex) Then
+        ' Msg702=Accion no permitida.
+        Call WriteLocaleMsg(UserIndex, MSG_NO_ACCION_PERMITIDA, e_FontTypeNames.FONTTYPE_INFO)
+        Exit Sub
+    End If
     If Not TieneProfesionAprendida(UserIndex, e_Skill.Sastreria) Then
         Call WriteLocaleMsg(UserIndex, MSG_PROF_NO_APRENDIDA, e_FontTypeNames.FONTTYPE_INFO)
         Exit Sub

@@ -1828,7 +1828,16 @@ Sub UserDie(ByVal UserIndex As Integer)
         Call ClearAttackerNpc(UserIndex)
         '<< Guardar o matar mascotas >>
         Call HandleUserPetsOnDeath(UserIndex)
-        If MapData(.pos.Map, .pos.x, .pos.y).trigger <> e_Trigger.ZONAPELEA And MapInfo(.pos.Map).DropItems Then
+        ' Plan 05.002 ola 9 (decision 7 del dueno): en un mapa de evento NO se dropea el
+        ' inventario. Se CONSULTA al escenario vivo (mismo helper que ya usa la ola 7) en
+        ' vez de escribir MapInfo().DropItems: la sala de espera del CTF es el mapa FIJO 278
+        ' (ModCaptura.MAP_SALA_ESPERA) y una mutacion ahi queda pegada hasta el reinicio,
+        ' porque CustomScenarios.PrepareNewEvent puede tirar el escenario sin pasar por
+        ' Reset ni CloseScenario. Consultando, si el escenario muere GetMap devuelve Nothing
+        ' y el mapa vuelve solo: el estado que no se escribe no hay que restaurarlo.
+        ' Las 3 asignaciones MapInfo().DropItems = False de DeathMatch/Caceria/Abordaje
+        ' quedan REDUNDANTES pero NO se tocan: son el unico freno si esta consulta falla.
+        If MapData(.pos.Map, .pos.x, .pos.y).trigger <> e_Trigger.ZONAPELEA And MapInfo(.pos.Map).DropItems And Not CustomScenarios.IsUserInScenarioMap(UserIndex) Then
             If (.flags.Privilegios And e_PlayerType.User) <> 0 Then
                 If .flags.PendienteDelSacrificio = 0 Then
                     Call TirarTodosLosItems(UserIndex)
@@ -1893,11 +1902,9 @@ Sub UserDie(ByVal UserIndex As Integer)
         If .flags.EnReto Then
             Call MuereEnReto(UserIndex)
         End If
-        If .flags.jugando_captura = 1 Then
-            If Not InstanciaCaptura Is Nothing Then
-                Call InstanciaCaptura.muereUsuario(UserIndex)
-            End If
-        End If
+        ' Plan 05.002 ola 4: la muerte en el CTF ya no se maneja aca. Entra por
+        ' CustomScenarios.UserDie, que rutea al escenario del mapa igual que en los
+        ' demas modos (ese llamado ya existe en el flujo de muerte).
         'Borramos todos los personajes del area
         'HarThaoS: Mando un 5 en head para que cuente como muerto el area y no recalcule las posiciones.
         Call CheckUpdateNeededUser(UserIndex, 5, 0, .flags.Muerto)
@@ -2322,12 +2329,8 @@ Sub Cerrar_Usuario(ByVal UserIndex As Integer, Optional ByVal forceClose As Bool
                 ' Msg577=Has vuelto a ser visible
                 Call WriteLocaleMsg(UserIndex, MSG_VUELTO_VISIBLE_577, e_FontTypeNames.FONTTYPE_INFO)
             End If
-            'HarThaoS: Captura de bandera
-            If .flags.jugando_captura = 1 Then
-                If Not InstanciaCaptura Is Nothing Then
-                    Call InstanciaCaptura.eliminarParticipante(InstanciaCaptura.GetPlayer(UserIndex))
-                End If
-            End If
+            ' Plan 05.002 ola 4: sacar a un jugador del CTF al salir lo hace el lobby
+            ' por su hook de desconexion (RegisterDisconnectedUser), como en los demas modos.
             Call WriteLocaleMsg(UserIndex, MSG_GAME_CLOSING_IN_SECONDS, e_FontTypeNames.FONTTYPE_INFO, .Counters.Salir)
             If EsGM(UserIndex) Or MapInfo(.pos.Map).Seguro = 1 Or forceClose Then
                 Call WriteDisconnect(UserIndex)
@@ -2765,6 +2768,26 @@ End Function
 
 Public Function CanHelpUser(ByVal UserIndex As Integer, ByVal targetUserIndex As Integer) As e_InteractionResult
     CanHelpUser = eInteractionOk
+    ' Plan 05.002 ola 7: el unico gate de bando era el de CurrentTeam de abajo, y los retos NO
+    ' usan CurrentTeam (usan SalaReto + EquipoReto), asi que adentro de un reto se podia curar,
+    ' buffear o revivir al rival. Con el grupo formado era ademas el camino natural, porque
+    ' ApplyEffectOnParty reparte a todos los miembros filtrando solo por CanHelpUser: el rival
+    ' ERA miembro del grupo, asi que el efecto lo buscaba activamente. Combinado con la
+    ' invulnerabilidad mutua, el empate forzado quedaba blindado.
+    If UserList(UserIndex).flags.EnReto Or UserList(targetUserIndex).flags.EnReto Then
+        If UserList(UserIndex).flags.EnReto <> UserList(targetUserIndex).flags.EnReto Then
+            CanHelpUser = eDifferentTeam
+            Exit Function
+        End If
+        If UserList(UserIndex).flags.SalaReto <> UserList(targetUserIndex).flags.SalaReto Then
+            CanHelpUser = eDifferentTeam
+            Exit Function
+        End If
+        If UserList(UserIndex).flags.EquipoReto <> UserList(targetUserIndex).flags.EquipoReto Then
+            CanHelpUser = eDifferentTeam
+            Exit Function
+        End If
+    End If
     If UserList(UserIndex).flags.CurrentTeam > 0 And UserList(UserIndex).flags.CurrentTeam <> UserList(targetUserIndex).flags.CurrentTeam Then
         CanHelpUser = eDifferentTeam
         Exit Function
@@ -2811,6 +2834,74 @@ Public Function CanHelpUser(ByVal UserIndex As Integer, ByVal targetUserIndex As
     End Select
 End Function
 
+' Plan 05.002 ola 7. Predicado UNICO de "el grupo protege a estos dos". Antes cada gate de
+' dano tenia su propia copia de la condicion de grupo y las dos eximian del dano ANTES de
+' mirar reto, evento o arena: dos rivales que se agrupaban adentro quedaban mutuamente
+' invulnerables (en un reto 1v1 eso forzaba el empate por reloj, y el empate liquida ELO).
+' Son TRES reglas distintas A PROPOSITO; escribir una sola rompe alguna de las tres:
+'  - RETO: el grupo protege SOLO al companero real (misma SalaReto Y mismo EquipoReto). Si
+'    aca se ignorara el grupo entero se habilitaria fuego amigo entre companeros de un 2v2,
+'    que hoy NO existe: los retos no usan CurrentTeam, asi que el grupo es su unica proteccion.
+'  - EVENTO: manda el equipo del escenario. Tampoco alcanza con "ignorar el grupo": en el
+'    DeathMatch FFA CurrentTeam vale 0 para TODOS (SortTeams no corre con TeamSize = -1) y en
+'    el CTF los mapas 275/277 tienen FriendlyFire = True, asi que el chequeo de equipo de mas
+'    abajo es inerte y los companeros agrupados perderian la proteccion que hoy tienen.
+'  - FUERA de reto y evento: comportamiento historico, sin ningun cambio.
+Public Function GrupoProtege(ByVal UserA As Integer, ByVal UserB As Integer) As Boolean
+    On Error GoTo GrupoProtege_Err
+    Dim mismoGrupo As Boolean
+    GrupoProtege = False
+    mismoGrupo = False
+    If UserA <= 0 Or UserB <= 0 Then Exit Function
+    mismoGrupo = (UserList(UserA).Grupo.Id > 0 And UserList(UserA).Grupo.Id = UserList(UserB).Grupo.Id)
+    If Not mismoGrupo Then Exit Function
+    If UserList(UserA).flags.EnReto Or UserList(UserB).flags.EnReto Then
+        If Not (UserList(UserA).flags.EnReto And UserList(UserB).flags.EnReto) Then Exit Function
+        If UserList(UserA).flags.SalaReto <> UserList(UserB).flags.SalaReto Then Exit Function
+        If UserList(UserA).flags.EquipoReto <> UserList(UserB).flags.EquipoReto Then Exit Function
+        GrupoProtege = True
+        Exit Function
+    End If
+    If CustomScenarios.IsUserInScenarioMap(UserA) Or CustomScenarios.IsUserInScenarioMap(UserB) Then
+        GrupoProtege = (UserList(UserA).flags.CurrentTeam > 0 And UserList(UserA).flags.CurrentTeam = UserList(UserB).flags.CurrentTeam)
+        Exit Function
+    End If
+    GrupoProtege = True
+    Exit Function
+GrupoProtege_Err:
+    Call TraceError(Err.Number, Err.Description, "UserMod.GrupoProtege", Erl)
+    ' Ante el error se conserva el comportamiento historico (el grupo protege) para no
+    ' habilitar fuego amigo por sorpresa. mismoGrupo ya vale False si el error ocurrio antes
+    ' de resolver la pertenencia al grupo, asi que no puede proteger a dos desconocidos.
+    GrupoProtege = mismoGrupo
+End Function
+
+' "Estos dos comparten grupo pero estan en bandos opuestos del mismo combate pactado". Es el
+' filtro de las fugas de informacion del grupo (radar, ubicacion en cada paso, chat). Fuera de
+' eventos y retos devuelve SIEMPRE False, asi que el grupo del mundo no cambia en nada.
+Public Function GrupoCruzaBandos(ByVal UserA As Integer, ByVal UserB As Integer) As Boolean
+    On Error GoTo GrupoCruzaBandos_Err
+    GrupoCruzaBandos = False
+    If UserA <= 0 Or UserB <= 0 Then Exit Function
+    If UserList(UserA).Grupo.Id <= 0 Then Exit Function
+    If UserList(UserA).Grupo.Id <> UserList(UserB).Grupo.Id Then Exit Function
+    If Not CustomScenarios.IsUserInMatch(UserA) Then Exit Function
+    If Not CustomScenarios.IsUserInMatch(UserB) Then Exit Function
+    If Not (UserList(UserA).flags.EnReto Or UserList(UserB).flags.EnReto) Then
+        ' Sin equipos repartidos (caceria cooperativa, DeathMatch FFA, sala de espera del
+        ' CTF antes del sorteo) CurrentTeam vale 0 para TODOS: no hay bandos que cruzar y
+        ' el grupo es la unica estructura que tienen. Cortarles radar, ubicacion y chat ahi
+        ' rompe el unico modo cooperativo del juego. Ojo que esta guarda va SOLO aca: la
+        ' informacion se corta por bando ASIGNADO, el dano se resuelve por bando.
+        If UserList(UserA).flags.CurrentTeam = 0 And UserList(UserB).flags.CurrentTeam = 0 Then Exit Function
+    End If
+    GrupoCruzaBandos = Not GrupoProtege(UserA, UserB)
+    Exit Function
+GrupoCruzaBandos_Err:
+    Call TraceError(Err.Number, Err.Description, "UserMod.GrupoCruzaBandos", Erl)
+    GrupoCruzaBandos = False
+End Function
+
 Public Function CanAttackUser(ByVal attackerIndex As Integer, _
                               ByVal AttackerVersionID As Integer, _
                               ByVal TargetIndex As Integer, _
@@ -2829,7 +2920,11 @@ Public Function CanAttackUser(ByVal attackerIndex As Integer, _
             Exit Function
         End If
     End If
-    If UserList(attackerIndex).Grupo.Id > 0 And UserList(TargetIndex).Grupo.Id > 0 And UserList(attackerIndex).Grupo.Id = UserList(TargetIndex).Grupo.Id Then
+    ' Plan 05.002 ola 7: copia exacta del agujero de SistemaCombate.PuedeAtacar, por el gate
+    ' gemelo. Este cubre el AoE por posicion, los DoT (DelayedBlast), el provoke y el
+    ' UserCanAttack generico de ReferenceUtils que usan las clases de escenario, asi que
+    ' arreglar solo el otro dejaba la clase entera abierta (fix a medias en funciones gemelas).
+    If GrupoProtege(attackerIndex, TargetIndex) Then
         CanAttackUser = eSameGroup
         Exit Function
     End If

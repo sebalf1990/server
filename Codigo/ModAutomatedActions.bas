@@ -42,7 +42,17 @@ Public Sub RunAutomatedActions()
                     ' Plan 04.001: revalidar la profesion en cada tick. Olvidarla en pleno
                     ' loop cortaba el permiso pero la accion seguia corriendo y subiendo skill.
                     ' Smelting revalida adentro (modSmelting exige Mineria por su cuenta).
-                    If (.AutomatedAction.skill = e_Skill.Talar Or .AutomatedAction.skill = e_Skill.Mineria Or .AutomatedAction.skill = e_Skill.Pescar) And Not TieneProfesionAprendida(UserIndex, CInt(.AutomatedAction.skill)) Then
+                    ' Plan 05.002 ola 7: un gate solo en el paquete no alcanza. La accion
+                    ' empezada en la ciudad seguia corriendo tick a tick despues de que al
+                    ' jugador lo invocaban al evento o lo metian al ring, exactamente el mismo
+                    ' problema que el plan 04.001 ya tuvo con la profesion y resolvio
+                    ' revalidando por tick. Va en su propia rama para no mezclar el mensaje de
+                    ' profesion con el de evento.
+                    If CustomScenarios.IsUserInMatch(UserIndex) And Not EsGM(UserIndex) Then
+                        ' Msg702=Accion no permitida.
+                        Call WriteLocaleMsg(UserIndex, MSG_NO_ACCION_PERMITIDA, e_FontTypeNames.FONTTYPE_INFO)
+                        Call ResetUserAutomatedActions(UserIndex)
+                    ElseIf (.AutomatedAction.skill = e_Skill.Talar Or .AutomatedAction.skill = e_Skill.Mineria Or .AutomatedAction.skill = e_Skill.Pescar) And Not TieneProfesionAprendida(UserIndex, CInt(.AutomatedAction.skill)) Then
                         Call WriteLocaleMsg(UserIndex, MSG_PROF_NO_APRENDIDA, e_FontTypeNames.FONTTYPE_INFO)
                         Call ResetUserAutomatedActions(UserIndex)
                     Else

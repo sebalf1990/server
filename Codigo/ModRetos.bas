@@ -27,8 +27,21 @@ Attribute VB_Name = "ModRetos"
 '
 Option Explicit
 Private Const APUESTA_MAXIMA = 100000000
+' Plan 05.002 ola 6: tabla del enfriamiento anti win-trading. La clave es el CONJUNTO
+' exacto de participantes: si cambia uno solo es otro enfrentamiento y arranca de cero.
+' Es tabla fija a proposito: 256 entradas sobran para una ventana de 45 minutos y no hay
+' que pedir memoria en caliente ni preocuparse por un ReDim a medio hacer.
+Private Const MAX_HISTORIAL_RETOS As Integer = 256
+
+Private Type t_HistorialReto
+    Clave        As String
+    Repeticiones As Integer
+    UltimoTick   As Long
+End Type
+
 Public Retos          As t_Retos
 Private ListaDeEspera As New Dictionary
+Private HistorialRetos(0 To MAX_HISTORIAL_RETOS - 1) As t_HistorialReto
 
 Public Sub CargarInfoRetos()
     Dim File As clsIniManager
@@ -39,6 +52,19 @@ Public Sub CargarInfoRetos()
         .ApuestaMinima = val(File.GetValue("Retos", "ApuestaMinima"))
         .ImpuestoApuesta = val(File.GetValue("Retos", "ImpuestoApuesta"))
         .DuracionMaxima = val(File.GetValue("Retos", "DuracionMaxima"))
+        .TiempoGuardarItems = val(File.GetValue("Retos", "TiempoGuardarItems"))
+        .FactorK = val(File.GetValue("Retos", "FactorK"))
+        .NivelMinimoELO = val(File.GetValue("Retos", "NivelMinimoELO"))
+        .MaximoRetosSeguidos = val(File.GetValue("Retos", "MaximoRetosSeguidos"))
+        .MinutosEnfriamiento = val(File.GetValue("Retos", "MinutosEnfriamiento"))
+        ' Defaults obligatorios: el binario y el .dat se despliegan por separado. Con un
+        ' .dat viejo FactorK quedaria en 0 y el ELO de todo el servidor se congelaria sin
+        ' que nadie se entere.
+        If .TiempoGuardarItems <= 0 Then .TiempoGuardarItems = 60
+        If .FactorK <= 0 Then .FactorK = 24
+        If .NivelMinimoELO <= 0 Then .NivelMinimoELO = 35
+        If .MaximoRetosSeguidos <= 0 Then .MaximoRetosSeguidos = 3
+        If .MinutosEnfriamiento <= 0 Then .MinutosEnfriamiento = 45
         #If DEBUGGING Then
             .TiempoConteo = 3
         #Else
@@ -132,6 +158,18 @@ Public Sub CrearReto(ByVal UserIndex As Integer, JugadoresStr As String, ByVal A
                     End If
                 End With
             Next
+            ' Plan 05.002 ola 6: freno anti win-trading EN LA PUERTA. Se corta aca, con los
+            ' nombres ya resueltos pero antes de mandar una sola invitacion, y solo cuando
+            ' el reto moveria ELO: a los que estan por debajo del nivel minimo no hay nada
+            ' que farmearles y no tiene sentido limitarlos.
+            If RetoOtorgaElo(UserIndex) Then
+                Dim MinutosFaltan As Long
+                MinutosFaltan = MinutosParaRepetir(ClaveEnfrentamiento(UserIndex))
+                If MinutosFaltan > 0 Then
+                    Call WriteConsoleMsg(UserIndex, "Ya jugaste " & Retos.MaximoRetosSeguidos & " retos seguidos contra ese mismo equipo. Faltan " & MinutosFaltan & " minutos para poder repetirlo.", e_FontTypeNames.FONTTYPE_INFO)
+                    Exit Sub
+                End If
+            End If
             Dim Texto1 As String, Texto2 As String, Texto3 As String
             Texto1 = UserList(UserIndex).name & "(" & UserList(UserIndex).Stats.ELV & ") te invita a jugar el siguiente reto:"
             Texto2 = Equipo1 & " vs " & Equipo2 & ". Apuesta: " & PonerPuntos(Apuesta) & " monedas de oro" & IIf(CaenItems, " y los items.", ".")
@@ -319,6 +357,34 @@ Private Sub IniciarReto(ByVal Oferente As Integer, ByVal Sala As Integer)
         .Apuesta = Apuesta
         .TiempoRestante = Retos.DuracionMaxima
         .CaenItems = UserList(Oferente).flags.SolicitudReto.CaenItems
+        ' Foto del ELO y del plantel. Todo lo que el rating necesita se congela aca: si se
+        ' leyera al final, el que abandona le cambiaria el rating al rival y el gate de
+        ' nivel se evaluaria sobre los sobrevivientes (un nivel 10 podia entrar, cortarse
+        ' la luz, y el resto cobrar ELO igual).
+        ReDim .EloSaldado(0 To UBound(.Jugadores))
+        .TamañoInicialIzq = .TamañoEquipoIzq
+        .TamañoInicialDer = .TamañoEquipoDer
+        .EloHabilitado = True
+        Dim EloSumaIzq As Long, EloSumaDer As Long
+        For i = 0 To UBound(.Jugadores)
+            .EloSaldado(i) = False
+            If IsValidUserRef(.Jugadores(i)) Then
+                If UserList(.Jugadores(i).ArrayIndex).Stats.ELV < Retos.NivelMinimoELO Then .EloHabilitado = False
+                If i Mod 2 = 0 Then
+                    EloSumaIzq = EloSumaIzq + UserList(.Jugadores(i).ArrayIndex).Stats.ELO
+                Else
+                    EloSumaDer = EloSumaDer + UserList(.Jugadores(i).ArrayIndex).Stats.ELO
+                End If
+            Else
+                ' Falta alguien antes de empezar: mejor no mover rating que inventarlo.
+                .EloHabilitado = False
+            End If
+        Next i
+        If .TamañoInicialIzq > 0 Then .EloPromedioIzq = EloSumaIzq \ CLng(.TamañoInicialIzq)
+        If .TamañoInicialDer > 0 Then .EloPromedioDer = EloSumaDer \ CLng(.TamañoInicialDer)
+        ' Recien aca se registra el enfrentamiento para el enfriamiento: una solicitud que
+        ' se cancela o que nunca arranca no tiene que gastar uno de los retos permitidos.
+        If .EloHabilitado Then Call RegistrarEnfrentamiento(ClaveEnfrentamiento(Oferente))
         Dim tUser As t_UserReference
         For i = 0 To UBound(.Jugadores)
             tUser = .Jugadores(i)
@@ -409,33 +475,33 @@ ErrorHandler:
 End Sub
 
 Private Sub ProcesarRondaGanada(ByVal Sala As Integer, ByVal Equipo As e_EquipoReto)
+    ' El label ErrorHandler estaba escrito pero no habia On Error que lo activara: cualquier
+    ' error de este Sub subia al handler de MuereEnReto y se registraba con el origen mal.
+    On Error GoTo ErrorHandler
     With Retos.Salas(Sala)
-        ' Sumamos puntaje o restamos según el equipo
+        ' Sumamos puntaje o restamos segun el equipo
         If Equipo = e_EquipoReto.Derecha Then
             .Puntaje = .Puntaje + 1
         Else
             .Puntaje = .Puntaje - 1
         End If
-        ' Si terminó la tercer ronda o bien algún equipo obtuvo 2 victorias seguidas
+        ' Si termino la tercer ronda o bien algun equipo obtuvo 2 victorias seguidas
         If .Ronda >= 3 Or Abs(.Puntaje) >= 2 Then
             Call FinalizarReto(Sala)
             Exit Sub
         End If
-        ' Aumentamos el número de ronda
+        ' Aumentamos el numero de ronda
         .Ronda = .Ronda + 1
-        ' Obtenemos el tamaño actual del equipo (por si alguno abandonó)
-        Dim TamañoEquipo As Integer, TamañoEquipo2 As Integer
-        TamañoEquipo = ObtenerTamañoEquipo(Sala, Equipo)
-        ' Menos cálculos en el bucle
-        TamañoEquipo2 = TamañoEquipo * 2
-        ' Obtenemos los nombres del equipo ganador
+        ' Nombres del equipo ganador. El bucle viejo iba hasta 2 * TamañoEquipo - 1 con el
+        ' tamaño YA descontado por los abandonos, pero los slots del array no se compactan:
+        ' se salteaba a los sobrevivientes que quedaban en indices altos y podia leer el
+        ' slot vaciado del que se fue. Ahora se recorre el array entero filtrando por
+        ' paridad (pares = izquierda) y por referencia viva.
         Dim i As Integer, nombres As String
-        For i = IIf(Equipo = e_EquipoReto.Izquierda, 0, 1) To TamañoEquipo2 - 1 Step 2
-            If .Jugadores(i).ArrayIndex <> 0 Then
+        For i = IIf(Equipo = e_EquipoReto.Izquierda, 0, 1) To UBound(.Jugadores) Step 2
+            If IsValidUserRef(.Jugadores(i)) Then
+                If LenB(nombres) > 0 Then nombres = nombres & ", "
                 nombres = nombres & UserList(.Jugadores(i).ArrayIndex).name
-                If i < TamañoEquipo2 - 2 Then
-                    nombres = nombres & IIf(i > TamañoEquipo2 - 5, " y ", ", ")
-                End If
             End If
         Next
         ' Informamos el ganador de esta ronda
@@ -467,30 +533,33 @@ Public Sub FinalizarReto(ByVal Sala As Integer, Optional ByVal TiempoAgotado As 
         OroTotal = .Apuesta * (UBound(.Jugadores) + 1)
         ' Descontamos el impuesto
         OroTotal = OroTotal * (1 - Retos.ImpuestoApuesta)
-        ' Decidimos el resultado del reto según el puntaje:
-        Dim i                 As Integer, tUser As t_UserReference, Equipo1 As String, Equipo2 As String
-        Dim eloTotalIzquierda As Long, eloTotalDerecha As Long, winsIzquierda As Long, winsDerecha As Long
-        Dim todosMayorA35     As Boolean
-        todosMayorA35 = True
-        For i = 0 To UBound(.Jugadores)
-            tUser = .Jugadores(i)
-            If tUser.ArrayIndex <> 0 Then
-                todosMayorA35 = todosMayorA35 And (UserList(tUser.ArrayIndex).Stats.ELV >= 35)
-                If i Mod 2 = 0 Then
-                    eloTotalIzquierda = eloTotalIzquierda + UserList(tUser.ArrayIndex).Stats.ELO
-                Else
-                    eloTotalDerecha = eloTotalDerecha + UserList(tUser.ArrayIndex).Stats.ELO
-                End If
-            End If
-        Next i
+        Dim i As Integer, tUser As t_UserReference, Equipo1 As String, Equipo2 As String
+        Dim Presentes As Integer
+        ' Sa es el puntaje del equipo IZQUIERDO: 1 gano, 0.5 empate, 0 perdio.
+        Dim Sa As Double
+        If .Puntaje = 0 Then
+            Sa = 0.5
+        ElseIf .Puntaje < 0 Then
+            Sa = 1
+        Else
+            Sa = 0
+        End If
+        ' El ELO se liquida ACA, antes de pagar el pozo y antes de tocar la sala. Antes se
+        ' hacia al final del Sub, DESPUES de SalaLiberada/IniciarDepositoItems, y
+        ' SalaLiberada arranca el reto que estaba esperando en la cola: el ReDim de
+        ' IniciarReto pisaba .Jugadores y el rating terminaba cayendole a los jugadores del
+        ' reto SIGUIENTE.
+        Call AplicarEloReto(Sala, Sa)
         ' Empate
         If .Puntaje = 0 Then
-            ' Pagamos a todos los que no abandonaron
-            Oro = OroTotal \ (UBound(.Jugadores) + 1)
+            ' Pagamos a todos los que no abandonaron. Antes se dividia por la cantidad
+            ' ORIGINAL de jugadores pero solo cobraban los presentes: la parte del que
+            ' abandonaba no la cobraba nadie y desaparecia del pozo.
+            For i = 0 To UBound(.Jugadores)
+                If IsValidUserRef(.Jugadores(i)) Then Presentes = Presentes + 1
+            Next i
+            If Presentes > 0 Then Oro = OroTotal \ Presentes
             OroStr = PonerPuntos(Oro)
-            ' No hubo ganadores, entonces el ELO no les da el bonus.
-            winsIzquierda = 0
-            winsDerecha = 0
             For i = 0 To UBound(.Jugadores)
                 tUser = .Jugadores(i)
                 If IsValidUserRef(tUser) Then
@@ -526,15 +595,12 @@ Public Sub FinalizarReto(ByVal Sala As Integer, Optional ByVal TiempoAgotado As 
             Dim Ganador As e_EquipoReto
             If .Puntaje < 0 Then
                 Ganador = e_EquipoReto.Izquierda
-                winsIzquierda = .TamañoEquipoDer
-                winsDerecha = -.TamañoEquipoIzq
             Else
                 Ganador = e_EquipoReto.Derecha
-                winsIzquierda = -.TamañoEquipoDer
-                winsDerecha = .TamañoEquipoIzq
             End If
             ' Pagamos a los ganadores que no abandonaron
-            Oro = OroTotal \ ObtenerTamañoEquipo(Sala, Ganador)
+            Presentes = ObtenerTamañoEquipo(Sala, Ganador)
+            If Presentes > 0 Then Oro = OroTotal \ Presentes
             OroStr = PonerPuntos(Oro)
             For i = 0 To UBound(.Jugadores)
                 tUser = .Jugadores(i)
@@ -583,12 +649,14 @@ Public Sub FinalizarReto(ByVal Sala As Integer, Optional ByVal TiempoAgotado As 
             equipoGanador = IIf(Ganador = e_EquipoReto.Izquierda, Equipo1, Equipo2)
             equipoPerdedor = IIf(Ganador = e_EquipoReto.Izquierda, Equipo2, Equipo1)
             ' Anuncio global
+            ' El anuncio mostraba .Apuesta, que es lo que puso UN jugador. El botin real es
+            ' el pozo completo menos el impuesto, que ya esta calculado en OroTotal.
             If UBound(.Jugadores) > 1 Then
-                Call SendData(SendTarget.ToAll, 0, PrepareMessageLocaleMsg(MSG_RETOS_EQUIPO_VENCIO_EQUIPO_QUEDO_BOTIN_MONEDAS, equipoGanador & "¬" & equipoPerdedor & "¬" & PonerPuntos(.Apuesta), _
-                        e_FontTypeNames.FONTTYPE_INFO)) 'Msg1671=Retos » El equipo ¬1 venció al equipo ¬2 y se quedó con el botín de: ¬3 monedas de oro.
+                Call SendData(SendTarget.ToAll, 0, PrepareMessageLocaleMsg(MSG_RETOS_EQUIPO_VENCIO_EQUIPO_QUEDO_BOTIN_MONEDAS, equipoGanador & "¬" & equipoPerdedor & "¬" & PonerPuntos(OroTotal), _
+                        e_FontTypeNames.FONTTYPE_INFO)) 'Msg1671 = el equipo X vencio al equipo Y y se quedo con el botin
             Else ' 1 vs 1
-                Call SendData(SendTarget.ToAll, 0, PrepareMessageLocaleMsg(MSG_RETOS_VENCIO_QUEDO_BOTIN_MONEDAS_ORO, equipoGanador & "¬" & equipoPerdedor & "¬" & PonerPuntos(.Apuesta), _
-                        e_FontTypeNames.FONTTYPE_INFO)) 'Msg1672=Retos » ¬1 venció a ¬2 y se quedó con el botín de: ¬3 monedas de oro.
+                Call SendData(SendTarget.ToAll, 0, PrepareMessageLocaleMsg(MSG_RETOS_VENCIO_QUEDO_BOTIN_MONEDAS_ORO, equipoGanador & "¬" & equipoPerdedor & "¬" & PonerPuntos(OroTotal), _
+                        e_FontTypeNames.FONTTYPE_INFO)) 'Msg1672 = X vencio a Y y se quedo con el botin
             End If
             If .CaenItems Then
                 Call IniciarDepositoItems(Sala)
@@ -596,32 +664,9 @@ Public Sub FinalizarReto(ByVal Sala As Integer, Optional ByVal TiempoAgotado As 
                 Call SalaLiberada(Sala)
             End If
         End If
-        ' Actualizamos el ELO de cada jugador, inspirados en `Algoritmo de 400`
-        ' https://en.wikipedia.org/wiki/Elo_rating_system
-        Dim eloDiff As Long
-        For i = 0 To UBound(.Jugadores)
-            tUser = .Jugadores(i)
-            If IsValidUserRef(tUser) Then
-                If todosMayorA35 Then
-                    If i Mod 2 = 0 Then ' Jugadores en el equipo Izquierdo
-                        eloDiff = winsIzquierda * (eloTotalDerecha * 0.1)
-                    Else
-                        eloDiff = winsDerecha * (eloTotalIzquierda * 0.1)
-                    End If
-                    If eloDiff > 0 Then
-                        Call SendData(SendTarget.ToIndex, tUser.ArrayIndex, PrepareMessageLocaleMsg(MSG_HAS_GANADO_PUNTOS_ELO, Abs(eloDiff), e_FontTypeNames.FONTTYPE_ROSA)) 'Msg1695=Has ganado ¬1 puntos de ELO!
-                    Else
-                        If UserList(tUser.ArrayIndex).Stats.ELO < Abs(eloDiff) Then
-                            eloDiff = -UserList(tUser.ArrayIndex).Stats.ELO
-                        End If
-                        Call SendData(SendTarget.ToIndex, tUser.ArrayIndex, PrepareMessageLocaleMsg(MSG_HAS_PERDIDO_PUNTOS_ELO, Abs(eloDiff), e_FontTypeNames.FONTTYPE_ROSA)) 'Msg1696=Has perdido ¬1 puntos de ELO!
-                    End If
-                    UserList(tUser.ArrayIndex).Stats.ELO = UserList(tUser.ArrayIndex).Stats.ELO + eloDiff
-                Else ' Alguno es menor a level 35
-                    Call SendData(SendTarget.ToIndex, tUser.ArrayIndex, PrepareMessageLocaleMsg(MSG_PARTICIPANTE_RETO_TIENE_NIVEL_MENOR_ELO_PERMANECE, vbNullString, e_FontTypeNames.FONTTYPE_INFOIAO)) 'Msg1697=Al menos un participante del reto tiene nivel menor a 35, tu ELO permanece igual.
-                End If
-            End If
-        Next i
+        ' El calculo del ELO que estaba aca se movio ARRIBA, a AplicarEloReto: corria
+        ' despues de SalaLiberada / IniciarDepositoItems, o sea despues de que la sala
+        ' pudiera haber sido reasignada al reto que esperaba en la cola.
     End With
     Exit Sub
 ErrorHandler:
@@ -666,6 +711,12 @@ TirarItemsEnPos_Err:
 End Sub
 
 Public Sub IniciarDepositoItems(ByVal Sala As Integer)
+    ' Este Sub no tenia On Error propio y el For de abajo indexaba UserList(0), que no
+    ' existe (el array arranca en 1) cuando alguien habia abandonado y su slot quedaba en
+    ' cero. El error subia a FinalizarReto, que abortaba SIN spawnear el banquero y SIN
+    ' setear TiempoItems: la sala quedaba EnUso para siempre porque el reingreso posterior
+    ' lo bloquea la marca .Finalizado.
+    On Error GoTo ErrHandler
     Dim i       As Byte
     Dim Ganador As e_EquipoReto
     With Retos.Salas(Sala)
@@ -675,8 +726,10 @@ Public Sub IniciarDepositoItems(ByVal Sala As Integer)
             Ganador = e_EquipoReto.Derecha
         End If
         For i = 0 To UBound(.Jugadores)
-            If UserList(.Jugadores(i).ArrayIndex).flags.EquipoReto = Ganador Then
-                Call WriteConsoleMsg(.Jugadores(i).ArrayIndex, PrepareMessageLocaleMsg(MSG_TIENES_MINUTO_LEVANTAR_ITEMS_PISO, vbNullString, e_FontTypeNames.FONTTYPE_INFO)) ' Msg1972=Tienes 1 minuto para levantar los items del piso.
+            If IsValidUserRef(.Jugadores(i)) Then
+                If UserList(.Jugadores(i).ArrayIndex).flags.EquipoReto = Ganador Then
+                    Call WriteConsoleMsg(.Jugadores(i).ArrayIndex, PrepareMessageLocaleMsg(MSG_TIENES_MINUTO_LEVANTAR_ITEMS_PISO, vbNullString, e_FontTypeNames.FONTTYPE_INFO)) ' Msg1972=Tienes 1 minuto para levantar los items del piso.
+                End If
             End If
         Next i
         Dim pos As t_WorldPos
@@ -685,12 +738,18 @@ Public Sub IniciarDepositoItems(ByVal Sala As Integer)
         pos.y = ((.PosDerecha.y - .PosIzquierda.y) \ 2) + .PosIzquierda.y
         'Spawneo un banquero.
         .IndexBanquero = SpawnNpc(3, pos, True, False)
-        #If DEBUGGING Then
-            .TiempoItems = 20
-        #Else
-            .TiempoItems = 60
-        #End If
+        ' Plan 05.002 ola 6: Retos.dat ya traia TiempoGuardarItems y el codigo lo ignoraba.
+        ' El #If DEBUGGING que estaba aca dejaba el fix INERTE: Server.VBP declara
+        ' DEBUGGING = 1 (y VB6 /make ignora el /d de la linea de comandos), asi que la rama
+        ' que se compilaba era la del 20 hardcodeado. Ahora el .dat es la unica verdad; el
+        ' que quiera 20 segundos en desarrollo pone 20 en TiempoGuardarItems.
+        .TiempoItems = Retos.TiempoGuardarItems
     End With
+    Exit Sub
+ErrHandler:
+    Call TraceError(Err.Number, Err.Description, "ModRetos.IniciarDepositoItems", Erl)
+    ' Pase lo que pase la sala tiene que quedar en un estado que el timer pueda cerrar.
+    If Retos.Salas(Sala).TiempoItems <= 0 Then Retos.Salas(Sala).TiempoItems = Retos.TiempoGuardarItems
 End Sub
 
 Public Sub TerminarTiempoAgarrarItems(ByVal Sala As Integer)
@@ -749,7 +808,11 @@ Public Sub AbandonarReto(ByVal UserIndex As Integer, Optional ByVal Desconexion 
         .flags.EnReto = False
     End With
     With Retos.Salas(Sala)
-        If .CaenItems And Abs(.Puntaje) >= 2 Then
+        ' El proxy viejo era Abs(.Puntaje) >= 2, que NO cubre el reto ganado por tiempo
+        ' agotado (termina 1-0): un ganador que se desconectaba durante el minuto de looteo
+        ' entraba por la rama de abajo, descontaba mal el equipo y dejaba el looteo abierto.
+        ' .Finalizado dice exactamente "este reto ya se cerro".
+        If .CaenItems And .Finalizado Then
             ' Fase de looteo: solo cuenta que se vayan los GANADORES (son los unicos que
             ' pueden levantar). Antes se descontaba al equipo ganador aunque el que se iba
             ' fuera del equipo perdedor, y el contador podia irse a negativo y re-disparar
@@ -767,6 +830,13 @@ Public Sub AbandonarReto(ByVal UserIndex As Integer, Optional ByVal Desconexion 
             End If
             Exit Sub
         End If
+        ' El que se va paga la derrota, y se le cobra ACA, antes de cualquier bifurcacion.
+        ' Tiene que ser en este punto porque en 1v1 la rama de abajo llama a FinalizarReto y
+        ' sale con Exit Sub, y en equipos la de mas abajo le borra la referencia del array:
+        ' en los dos casos despues ya no hay a quien cobrarle. Vale igual para abandono
+        ' voluntario y para desconexion, porque TCP.ClearAndSaveUser entra por aca antes de
+        ' llamar a SaveUser y el ELO nuevo se termina grabando.
+        Call SaldarEloAbandono(Sala, UserIndex, Equipo)
         If Not Desconexion Then
             Call WriteConsoleMsg(UserIndex, PrepareMessageLocaleMsg(MSG_HAS_ABANDONADO_RETO, vbNullString, e_FontTypeNames.FONTTYPE_INFO)) ' Msg1973=Has abandonado el reto.
         End If
@@ -971,3 +1041,248 @@ Private Sub RevivirYLimpiar(ByVal UserIndex As Integer)
     ' Si está muerto lo revivimos, sino lo curamos
     Call RevivirUsuario(UserIndex)
 End Sub
+
+' ---------------------------------------------------------------------------------------
+' ELO (plan 05.002 ola 6)
+' ---------------------------------------------------------------------------------------
+' La formula vieja no era Elo: eloDiff = wins * (eloTotalRival * 0.1), con wins igual al
+' tamaño del equipo rival con signo. En 1v1 de 2000 contra 200 el debil se fundia 200
+' puntos y el fuerte arriesgaba 20, y en equipos no sumaba cero. Ahora es Elo clasico con
+' K fijo: el delta se calcula UNA sola vez para el equipo izquierdo y se niega para el
+' derecho, asi ningun redondeo puede romper la simetria.
+
+' Delta ENTERO que le corresponde al equipo IZQUIERDO completo.
+' Sa: 1 gano la izquierda, 0.5 empate, 0 perdio la izquierda.
+Private Function DeltaEloEquipoIzq(ByVal Sala As Integer, ByVal Sa As Double) As Long
+    Dim Exponente As Double, Ea As Double
+    With Retos.Salas(Sala)
+        ' Promedio y no suma: con la suma un 5v5 con +100 de ventaja por cabeza daria una
+        ' expectativa de 0.95 en vez de 0.64, porque el 400 del Elo mide diferencia de
+        ' rating, no de plantel. La ventaja numerica ya se cobra al repartir el delta
+        ' entre mas jugadores.
+        Exponente = (CDbl(.EloPromedioDer) - CDbl(.EloPromedioIzq)) / 400#
+    End With
+    ' Con ratings absurdos (dato corrupto) 10 ^ Exponente desborda el Double y tira error
+    ' adentro de FinalizarReto, que se saltearia la liberacion de la sala. Saturamos.
+    If Exponente > 40# Then Exponente = 40#
+    If Exponente < -40# Then Exponente = -40#
+    Ea = 1# / (1# + 10# ^ Exponente)
+    DeltaEloEquipoIzq = CLng(CDbl(Retos.FactorK) * (Sa - Ea))
+End Function
+
+' Reparte Total entre Cantidad miembros sin perder ni inventar puntos: el resto se da de a
+' uno a los primeros miembros, asi la suma de las cuotas es EXACTAMENTE Total. Funciona
+' igual con Total negativo porque en VB6 "\" trunca hacia cero y Mod conserva el signo del
+' dividendo (-15 \ 2 = -7 y -15 Mod 2 = -1, o sea -8 y -7, que suman -15).
+Private Function CuotaElo(ByVal Total As Long, ByVal Cantidad As Integer, ByVal Orden As Integer) As Long
+    If Cantidad <= 0 Then Exit Function
+    Dim Base As Long, Resto As Long
+    Base = Total \ Cantidad
+    Resto = Total Mod Cantidad
+    CuotaElo = Base
+    If Orden < Abs(Resto) Then CuotaElo = Base + Sgn(Resto)
+End Function
+
+' Unico punto del modulo que escribe Stats.ELO.
+Private Sub AjustarElo(ByVal UserIndex As Integer, ByVal Delta As Long)
+    If Delta = 0 Then Exit Sub
+    With UserList(UserIndex).Stats
+        ' El rating no puede quedar negativo. Este es el UNICO lugar donde el sistema deja
+        ' de sumar cero: al recortar la perdida se INYECTAN hasta FactorK - 1 puntos, y
+        ' solo le puede pasar a alguien que ya tiene menos de FactorK. Un PJ nuevo arranca
+        ' en 1000 (DEFAULT de la columna elo, Fixtures/Database.db.sql).
+        If .ELO + Delta < 0 Then Delta = -.ELO
+        .ELO = .ELO + Delta
+    End With
+    If Delta > 0 Then
+        Call SendData(SendTarget.ToIndex, UserIndex, PrepareMessageLocaleMsg(MSG_HAS_GANADO_PUNTOS_ELO, CStr(Delta), e_FontTypeNames.FONTTYPE_ROSA))
+    ElseIf Delta < 0 Then
+        Call SendData(SendTarget.ToIndex, UserIndex, PrepareMessageLocaleMsg(MSG_HAS_PERDIDO_PUNTOS_ELO, CStr(-Delta), e_FontTypeNames.FONTTYPE_ROSA))
+    End If
+End Sub
+
+' Liquida el ELO de todos los que siguen en la sala y todavia no saldaron.
+Private Sub AplicarEloReto(ByVal Sala As Integer, ByVal Sa As Double)
+    On Error GoTo ErrHandler
+    Dim i As Integer, DeltaIzq As Long, DeltaDer As Long
+    With Retos.Salas(Sala)
+        If Not .EloHabilitado Then
+            For i = 0 To UBound(.Jugadores)
+                If IsValidUserRef(.Jugadores(i)) Then
+                    Call SendData(SendTarget.ToIndex, .Jugadores(i).ArrayIndex, PrepareMessageLocaleMsg(MSG_PARTICIPANTE_RETO_TIENE_NIVEL_MENOR_ELO_PERMANECE, CStr(Retos.NivelMinimoELO), e_FontTypeNames.FONTTYPE_INFOIAO))
+                End If
+            Next i
+            Exit Sub
+        End If
+        ' El divisor es el PLANTEL ORIGINAL, no los que quedan. Con los presentes, el que
+        ' se QUEDA pagaba la parte del que se fue: en un 5v5 donde 4 se desconectan, el
+        ' unico leal comia el delta completo (-24) en vez de su quinta parte, y encima los
+        ' 4 que se fueron ya habian pagado la suya. Se invertia el incentivo justo contra
+        ' el jugador que no hizo nada.
+        ' El ordinal tambien es estable (i \ 2, que da 0,1,2 tanto para pares como para
+        ' impares): asi el que se fue y el que se quedo usan ordinales DISJUNTOS y las
+        ' cuotas suman exactamente el delta del equipo, sin deflacion ni sobrecobro.
+        ' Un solo calculo y una sola conversion a entero para los dos equipos.
+        DeltaIzq = DeltaEloEquipoIzq(Sala, Sa)
+        DeltaDer = -DeltaIzq
+        For i = 0 To UBound(.Jugadores)
+            If IsValidUserRef(.Jugadores(i)) And Not .EloSaldado(i) Then
+                .EloSaldado(i) = True
+                If i Mod 2 = 0 Then
+                    Call AjustarElo(.Jugadores(i).ArrayIndex, CuotaElo(DeltaIzq, CInt(.TamañoInicialIzq), i \ 2))
+                Else
+                    Call AjustarElo(.Jugadores(i).ArrayIndex, CuotaElo(DeltaDer, CInt(.TamañoInicialDer), i \ 2))
+                End If
+            End If
+        Next i
+    End With
+    Exit Sub
+ErrHandler:
+    Call TraceError(Err.Number, Err.Description, "ModRetos.AplicarEloReto", Erl)
+End Sub
+
+' Le cobra la derrota al que abandona o se desconecta. Es exactamente el delta que le habria
+' tocado si su equipo perdia, dividido por el tamaño ORIGINAL de su equipo.
+' A proposito NO se le acredita a nadie: si al que se queda le pagaran los puntos del que se
+' fue, dos cuentas amigas farmearian rating entrando y saliendo. O sea que en equipos el
+' abandono DESTRUYE puntos (deflacion) y esta bien que asi sea.
+' En 1v1 no se pierde nada: el equipo perdedor tiene un solo miembro, la cuota es el delta
+' completo y el que se queda cobra esa misma cantidad en FinalizarReto. Suma cero exacta.
+' Piso del castigo por abandono. El Elo puro devuelve 0 cuando la derrota estaba
+' completamente descontada (a partir de unos 669 puntos de diferencia a favor del rival),
+' y ahi abandonar seria gratis: exactamente el agujero que esta ola vino a cerrar. Un punto
+' de deflacion por abandono es barato al lado de eso.
+Private Function PisoAbandono(ByVal Cuota As Long) As Long
+    PisoAbandono = Cuota
+    If Cuota = 0 Then PisoAbandono = -1
+End Function
+
+Private Sub SaldarEloAbandono(ByVal Sala As Integer, ByVal UserIndex As Integer, ByVal Equipo As e_EquipoReto)
+    On Error GoTo ErrHandler
+    Dim i As Integer, Total As Long
+    With Retos.Salas(Sala)
+        If Not .EloHabilitado Then Exit Sub
+        If .Finalizado Then Exit Sub
+        For i = 0 To UBound(.Jugadores)
+            If .Jugadores(i).ArrayIndex = UserIndex Then
+                If .EloSaldado(i) Then Exit Sub
+                .EloSaldado(i) = True
+                ' El ordinal es i \ 2, el mismo que va a usar AplicarEloReto para los que
+                ' se quedan: asi las cuotas del equipo son disjuntas y suman el delta exacto.
+                ' Con Orden = 0 fijo, cada abandonador se llevaba la cuota redondeada para
+                ' arriba y el equipo terminaba pagando de mas.
+                If Equipo = e_EquipoReto.Izquierda Then
+                    Total = DeltaEloEquipoIzq(Sala, 0)
+                    Call AjustarElo(UserIndex, PisoAbandono(CuotaElo(Total, CInt(.TamañoInicialIzq), i \ 2)))
+                Else
+                    Total = -DeltaEloEquipoIzq(Sala, 1)
+                    Call AjustarElo(UserIndex, PisoAbandono(CuotaElo(Total, CInt(.TamañoInicialDer), i \ 2)))
+                End If
+                Exit Sub
+            End If
+        Next i
+    End With
+    Exit Sub
+ErrHandler:
+    Call TraceError(Err.Number, Err.Description, "ModRetos.SaldarEloAbandono", Erl)
+End Sub
+
+' ---------------------------------------------------------------------------------------
+' Enfriamiento entre los mismos rivales (plan 05.002 ola 6)
+' ---------------------------------------------------------------------------------------
+
+' Clave canonica del enfrentamiento: nombres en mayusculas y ordenados, para que A vs B y
+' B vs A sean el MISMO enfrentamiento. Si cambia un solo participante la clave cambia y el
+' contador arranca de cero, que es exactamente lo pedido (el conjunto EXACTO).
+Private Function ClaveEnfrentamiento(ByVal Oferente As Integer) As String
+    Dim Nombres() As String
+    Dim i As Integer, j As Integer, Tmp As String
+    With UserList(Oferente).flags.SolicitudReto
+        ReDim Nombres(0 To UBound(.Jugadores) + 1)
+        Nombres(0) = UCase$(UserList(Oferente).name)
+        For i = 0 To UBound(.Jugadores)
+            Nombres(i + 1) = UCase$(.Jugadores(i).nombre)
+        Next i
+    End With
+    ' Insercion directa: son 10 nombres como maximo, no da para nada mas elaborado.
+    For i = 1 To UBound(Nombres)
+        Tmp = Nombres(i)
+        j = i - 1
+        Do While j >= 0
+            If StrComp(Nombres(j), Tmp, vbBinaryCompare) <= 0 Then Exit Do
+            Nombres(j + 1) = Nombres(j)
+            j = j - 1
+        Loop
+        Nombres(j + 1) = Tmp
+    Next i
+    ClaveEnfrentamiento = Join(Nombres, "|")
+End Function
+
+' Minutos que faltan para que este mismo grupo pueda volver a retarse. 0 = puede.
+Private Function MinutosParaRepetir(ByVal Clave As String) As Long
+    Dim i As Integer, Transcurrido As Double, Ventana As Double
+    If Retos.MaximoRetosSeguidos <= 0 Then Exit Function
+    Ventana = CDbl(Retos.MinutosEnfriamiento) * 60000#
+    If Ventana <= 0 Then Exit Function
+    For i = 0 To MAX_HISTORIAL_RETOS - 1
+        If HistorialRetos(i).Clave = Clave Then
+            ' TicksElapsed es a prueba del wrap de 32 bits de timeGetTime (49.7 dias).
+            Transcurrido = TicksElapsed(HistorialRetos(i).UltimoTick, GetTickCountRaw())
+            If Transcurrido >= Ventana Then
+                ' Paso el enfriamiento: el contador vuelve a cero.
+                HistorialRetos(i).Clave = vbNullString
+                HistorialRetos(i).Repeticiones = 0
+                Exit Function
+            End If
+            If HistorialRetos(i).Repeticiones < Retos.MaximoRetosSeguidos Then Exit Function
+            ' Redondeamos para arriba: decirle "faltan 0 minutos" y rebotarlo igual es peor.
+            MinutosParaRepetir = ((Ventana - Transcurrido) \ 60000) + 1
+            Exit Function
+        End If
+    Next i
+End Function
+
+Private Sub RegistrarEnfrentamiento(ByVal Clave As String)
+    Dim i As Integer, Libre As Integer, MasViejo As Integer
+    Dim Ahora As Long, Ventana As Double
+    If LenB(Clave) = 0 Then Exit Sub
+    Ahora = GetTickCountRaw()
+    Ventana = CDbl(Retos.MinutosEnfriamiento) * 60000#
+    Libre = -1
+    MasViejo = 0
+    For i = 0 To MAX_HISTORIAL_RETOS - 1
+        If HistorialRetos(i).Clave = Clave Then
+            HistorialRetos(i).Repeticiones = HistorialRetos(i).Repeticiones + 1
+            HistorialRetos(i).UltimoTick = Ahora
+            Exit Sub
+        End If
+        If Libre < 0 Then
+            If LenB(HistorialRetos(i).Clave) = 0 Then
+                Libre = i
+            ElseIf TicksElapsed(HistorialRetos(i).UltimoTick, Ahora) >= Ventana Then
+                Libre = i
+            End If
+        End If
+        If TicksElapsed(HistorialRetos(i).UltimoTick, Ahora) > TicksElapsed(HistorialRetos(MasViejo).UltimoTick, Ahora) Then MasViejo = i
+    Next i
+    ' Si la tabla se lleno con enfrentamientos vivos pisamos el mas viejo, que es el que
+    ' esta mas cerca de vencer igual. Hacen falta 256 grupos distintos en 45 minutos.
+    If Libre < 0 Then Libre = MasViejo
+    HistorialRetos(Libre).Clave = Clave
+    HistorialRetos(Libre).Repeticiones = 1
+    HistorialRetos(Libre).UltimoTick = Ahora
+End Sub
+
+' Solo tiene sentido frenar el win-trading donde hay rating en juego. Si alguno no llega al
+' nivel minimo el reto no mueve ELO y no hay ninguna razon para restringirlo.
+Private Function RetoOtorgaElo(ByVal Oferente As Integer) As Boolean
+    Dim i As Integer
+    If UserList(Oferente).Stats.ELV < Retos.NivelMinimoELO Then Exit Function
+    With UserList(Oferente).flags.SolicitudReto
+        For i = 0 To UBound(.Jugadores)
+            If Not IsValidUserRef(.Jugadores(i).CurIndex) Then Exit Function
+            If UserList(.Jugadores(i).CurIndex.ArrayIndex).Stats.ELV < Retos.NivelMinimoELO Then Exit Function
+        Next i
+    End With
+    RetoOtorgaElo = True
+End Function

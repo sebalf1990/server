@@ -350,7 +350,12 @@ Public Sub CompartirUbicacion(ByVal UserIndex As Integer)
         Next a
         For i = 1 To Lider.Grupo.CantidadMiembros
             If Lider.Grupo.Miembros(i).ArrayIndex <> UserIndex Then
-                If UserList(Lider.Grupo.Miembros(i).ArrayIndex).pos.Map = .pos.Map Then
+                ' Plan 05.002 ola 7: esto filtraba la posicion del companero en CADA movimiento
+                ' (Protocol.bas lo llama despues de cada MoveUserChar). Es la misma fuga que el
+                ' radar por otro canal, asi que arreglar solo Radar.bas la dejaba abierta.
+                ' Cuando cruzan bandos se cae al Else de abajo, que ya manda ubicacion 0, que es
+                ' exactamente "no se donde esta".
+                If UserList(Lider.Grupo.Miembros(i).ArrayIndex).pos.Map = .pos.Map And Not UserMod.GrupoCruzaBandos(UserIndex, Lider.Grupo.Miembros(i).ArrayIndex) Then
                     Call WriteUbicacion(Lider.Grupo.Miembros(i).ArrayIndex, indexpj, UserIndex)
                     'Si va al mapa del compañero
                     Call WriteUbicacion(UserIndex, i, Lider.Grupo.Miembros(i).ArrayIndex)

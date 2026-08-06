@@ -467,8 +467,10 @@ Sub DropObj(ByVal UserIndex As Integer, ByVal Slot As Byte, ByVal num As Integer
                         "Ya no tenes flechas envenenadas equipadas.")
                     Call UpdateUserInv(False, UserIndex, Slot)
                     If .flags.jugando_captura = 1 Then
-                        If Not InstanciaCaptura Is Nothing Then
-                            Call InstanciaCaptura.tiraBandera(UserIndex, obj.ObjIndex)
+                        Dim ctfTira As ScenarioCaptureTheFlag
+                        Set ctfTira = GetCapturaEscenario(UserIndex)
+                        If Not ctfTira Is Nothing Then
+                            Call ctfTira.TiraBandera(UserIndex, obj.ObjIndex)
                         End If
                     End If
                     If Not .flags.Privilegios And e_PlayerType.User Then
@@ -651,8 +653,10 @@ Sub PickObj(ByVal UserIndex As Integer)
             x = UserList(UserIndex).pos.x
             y = UserList(UserIndex).pos.y
             If UserList(UserIndex).flags.jugando_captura = 1 Then
-                If Not InstanciaCaptura Is Nothing Then
-                    If Not InstanciaCaptura.tomaBandera(UserIndex, MapData(UserList(UserIndex).pos.Map, x, y).ObjInfo.ObjIndex) Then
+                Dim ctfToma As ScenarioCaptureTheFlag
+                Set ctfToma = GetCapturaEscenario(UserIndex)
+                If Not ctfToma Is Nothing Then
+                    If Not ctfToma.TomaBandera(UserIndex, MapData(UserList(UserIndex).pos.Map, x, y).ObjInfo.ObjIndex) Then
                         Exit Sub
                     End If
                 End If
@@ -676,8 +680,10 @@ Sub PickObj(ByVal UserIndex As Integer)
                 End If
                 Call UserDidPickupItem(UserIndex, MiObj.ObjIndex)
                 If UserList(UserIndex).flags.jugando_captura = 1 Then
-                    If Not InstanciaCaptura Is Nothing Then
-                        Call InstanciaCaptura.quitarBandera(UserIndex, MiObj.ObjIndex)
+                    Dim ctfQuita As ScenarioCaptureTheFlag
+                    Set ctfQuita = GetCapturaEscenario(UserIndex)
+                    If Not ctfQuita Is Nothing Then
+                        Call ctfQuita.QuitarBandera(UserIndex, MiObj.ObjIndex)
                     End If
                 End If
                 If BusquedaTesoroActiva Then
@@ -3334,7 +3340,12 @@ Public Sub ResurrectWithItem(ByVal UserIndex As Integer)
             Exit Sub
         End If
         If CanHelpResult <> eInteractionOk Then
+            ' Plan 05.002 ola 7: faltaba el Exit Sub. Se mandaba el mensaje de rechazo y la
+            ' ejecucion seguia de largo hasta ResurrectUser: al jugador se le avisaba que no
+            ' podia revivir a ese objetivo y se lo revivia igual. Es el mismo patron que la
+            ' ola 4 encontro en el CTF: asumir que el llamador respeta el resultado.
             Call SendHelpInteractionMessage(UserIndex, CanHelpResult)
+            Exit Sub
         End If
         Dim costoVidaResu As Long
         costoVidaResu = UserList(TargetUser).Stats.ELV * 1.5 + .Stats.MinHp * 0.5

@@ -1,0 +1,11 @@
+# AO20 build stamp - lo genera build_tmp.bat, no editar a mano
+fecha          = jue. 06/08/2026  8:25:35,66
+flags          = UsarQueSocket=1:ConUpTime=1:AntiExternos=0:Lac=1:DEBUGGING=0:PYMMO=0:UNLOCK_CPU=0:DIRECT_PLAY=0
+proyecto       = C:\AO20\dev\server\Server.VBP
+vb6_exit_code  = 0
+build_ok       = 1
+hash_antes     = 3FC7BF1AE3CDA98C043A00DCA8A56A4D16FB411D9965B14076417D5EB1E7F158
+hash_despues   = 44C5DA57A87FAC6DADB977428FA73DF6945A41F2169029F75B0E895F92DE46F1
+# ---- vb6build.log ----
+
+Build of 'server.exe' succeeded.

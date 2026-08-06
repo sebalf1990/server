@@ -1432,7 +1432,12 @@ Public Function PuedeAtacar(ByVal attackerIndex As Integer, ByVal VictimIndex As
         PuedeAtacar = False
         Exit Function
     End If
-    If UserList(attackerIndex).Grupo.Id > 0 And UserList(VictimIndex).Grupo.Id > 0 And UserList(attackerIndex).Grupo.Id = UserList(VictimIndex).Grupo.Id Then
+    ' Plan 05.002 ola 7: esta condicion estaba en la posicion 4 del orden de IF, ANTES del
+    ' chequeo de equipo (1467) y ANTES de la arena, y no miraba ni reto ni evento. Dos rivales
+    ' que se agrupaban adentro no se podian pegar ni con arma, ni con flechas, ni con hechizos:
+    ' reto 1v1 = empate forzado por reloj (y el empate mueve ELO), evento = dos invulnerables
+    ' que sobreviven al resto. GrupoProtege decide por BANDO, no por grupo.
+    If UserMod.GrupoProtege(attackerIndex, VictimIndex) Then
         'Msg1046= No podés atacar a un miembro de tu grupo.
         Call WriteLocaleMsg(attackerIndex, "1046", e_FontTypeNames.FONTTYPE_INFO)
         PuedeAtacar = False

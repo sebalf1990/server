@@ -411,6 +411,86 @@ Public Function IBaseScenario_GetExtraInterfaces() As Long
 End Function
 
 Public Sub IBaseScenario_Reset()
+    ' Plan 05.002 ola 5. Contrato Reset: el UNICO que llama aca es ModLobby.ForceReset
+    ' (/lobby forcereset). Estaba VACIO, y eso costaba caro:
+    '  1) los items prohibidos que WillSummonPlayer le SACA del inventario a cada jugador
+    '     solo se devuelven en RemoveForbiddenItems, que corre en MatchCompleted (fin normal)
+    '     o al desconectar. Con forcereset no corria ninguno de los dos: el item quedaba solo
+    '     en SpawnedUserList (memoria) y el inventario ya guardado sin el = perdida definitiva.
+    '  2) ni ClearMap ni ReleaseInstance: los DOS mapas instancia quedaban tomados para
+    '     siempre, el escenario seguia registrado en CustomScenarios y seguia tickeando.
+    ' El barrido va por SpawnedUserList (identidad = UserId) y NO por la lista del lobby:
+    ' ForceReset deja RegisteredPlayers en 0 ANTES de llamar aca. Misma leccion que el CTF en
+    ' la ola 4. ReleaseLobby tampoco va aca: el slot lo devuelve ForceReset.
+    On Error GoTo Reset_Err
+    Call DevolverItemsRetenidos
+    Call PlayerRespawn.RemoveAll
+    Call UserLoot.RemoveAll
+    ' Drenar los NPCs ANTES de devolver la instancia, igual que hace MatchCompleted. Sin esto,
+    ' el mapa vuelve al pool con los capitanes y la tripulacion del evento anterior todavia
+    ' vivos: CloneMapWithTranslations reescribe MapInfo y MapData pero NO toca NpcList ni
+    ' ConnGroups, y el loop de IA es global por NpcList (no por mapa), asi que el proximo
+    ' evento que reciba ese numero arranca con hostiles heredados.
+    Dim NpcIndexReset As Integer
+    If MapNumbers(TopMapNumber) > 0 Then
+        Do While ModAreas.ConnGroups(MapNumbers(TopMapNumber)).RegisteredNpc > 0
+            NpcIndexReset = ModAreas.ConnGroups(MapNumbers(TopMapNumber)).NpcForAi(0)
+            ' Corte de seguridad que el original de MatchCompleted no tiene: un Do While que
+            ' no avanza cuelga el server sin tirar error, o sea sin pasar por el handler.
+            If NpcIndexReset <= 0 Then Exit Do
+            Call QuitarNPC(NpcIndexReset, eClearHunt)
+        Loop
+    End If
+    Call ClearMap
+    If MapNumbers(TopMapNumber) > 0 Then Call ReleaseInstance(MapNumbers(TopMapNumber))
+    MapNumbers(TopMapNumber) = 0
+    If MapNumbers(CargoMapNumber) > 0 Then Call ReleaseInstance(MapNumbers(CargoMapNumber))
+    MapNumbers(CargoMapNumber) = 0
+    If UpdateIndex > 0 Then
+        ' Igual que en DeathMatch: soltar el tick va SIEMPRE y aparte. ClearMap no tiene
+        ' Resume Next, asi que si RemoveCustomScenario tira, su RemoveUpdateScenario no corre.
+        Call CustomScenarios.RemoveUpdateScenario(UpdateIndex)
+        UpdateIndex = 0
+    End If
+    Exit Sub
+Reset_Err:
+    Call TraceError(Err.Number, Err.Description, "NavalBoarding.Reset", Erl)
+End Sub
+
+Private Function TieneItemsRetenidos(ByVal UserId As Long) As Boolean
+    On Error GoTo TieneItemsRetenidos_Err
+    Dim i As Integer
+    For i = 0 To SpawnedUserList.RegisteredUserCount - 1
+        If SpawnedUserList.UserList(i).UserId = UserId Then
+            TieneItemsRetenidos = True
+            Exit Function
+        End If
+    Next i
+    Exit Function
+TieneItemsRetenidos_Err:
+    Call TraceError(Err.Number, Err.Description, "NavalBoarding.TieneItemsRetenidos", Erl)
+End Function
+
+Private Sub DevolverItemsRetenidos()
+    ' OJO: RemoveForbiddenItems ademas SACA del inventario los items prohibidos que el
+    ' jugador tenga encima, asi que NO se puede barrer a todo el mundo. De ahi el filtro por
+    ' SpawnedUserList antes de tocar a nadie.
+    ' Limitacion conocida: solo alcanza a los que estan ONLINE. SpawnedUserList vive en
+    ' memoria, asi que el que estaba offline al momento del forcereset pierde los items
+    ' igual. Cerrar eso requiere persistir la retencion y queda fuera de esta ola.
+    On Error GoTo DevolverItemsRetenidos_Err
+    Dim ui As Integer
+    For ui = 1 To LastUser
+        If SpawnedUserList.RegisteredUserCount = 0 Then Exit Sub
+        If UserList(ui).flags.UserLogged Then
+            If TieneItemsRetenidos(UserList(ui).Id) Then
+                Call RemoveForbiddenItems(ui)
+            End If
+        End If
+    Next ui
+    Exit Sub
+DevolverItemsRetenidos_Err:
+    Call TraceError(Err.Number, Err.Description, "NavalBoarding.DevolverItemsRetenidos", Erl)
 End Sub
 
 Public Function IBaseScenario_RequiresSpawn() As Boolean
@@ -595,6 +675,16 @@ Private Sub Respawn(ByVal player As Integer)
 End Sub
 
 Private Sub MatchCompleted()
+    ' Plan 05.002 ola 5: se podia llamar mas de una vez y no habia guarda. Caminos: NpcDie
+    ' del capitan, ValidateCargoAreasForTeam (que dispara desde UserDropItem y NO mira el
+    ' estado del lobby, asi que sigue vivo durante los 10 s de cuenta regresiva), fin por
+    ' tiempo en Update, y UpdateLobbyState(Closed). Cada reentrada volvia a repartir el
+    ' remanente de AvailableInscriptionMoney y reseteaba el CountdownTimer, postergando el
+    ' cierre del mapa.
+    ' La guarda va por State y no por un flag nuevo: UpdateLobbyState corre el callback del
+    ' escenario ANTES de escribir instance.State, asi que al cancelar desde InProgress esta
+    ' Sub todavia ve InProgress y hace la limpieza; si ya estaba Completed, ya corrio.
+    If LobbyList(LobbyIndex).State >= e_LobbyState.Completed Then Exit Sub
     If Not LobbyList(LobbyIndex).Canceled Then
         Call GiveRewards
     End If
@@ -1066,6 +1156,10 @@ Private Function CaptainFire(ByVal CaptainIndex As Integer) As Boolean
             UserIndex = ModAreas.ConnGroups(NpcList(.NpcRef.ArrayIndex).pos.Map).UserEntrys(i)
             If UserList(UserIndex).flags.CurrentTeam = TargetTeam Then
                 If UserList(UserIndex).Stats.MinHp > 0 Then
+                    ' Plan 05.002 ola 5: PossibleTargets es fijo (0..10). Sin este corte, el
+                    ' objetivo 12 escribia fuera de rango y el error se comia el tick entero
+                    ' del escenario, incluido el chequeo de fin por tiempo.
+                    If PossibleTargetCount > UBound(PossibleTargets) Then Exit For
                     PossibleTargets(PossibleTargetCount) = UserIndex
                     PossibleTargetCount = PossibleTargetCount + 1
                 End If
@@ -1110,11 +1204,13 @@ Sub RefillPotions(ByVal UserIndex As Integer)
     With UserList(UserIndex)
         Dim Slot As Integer
         For Slot = 1 To UBound(.invent.Object)
-            If .invent.Object(Slot).ObjIndex = ManaPotId Then
+            ' Plan 05.002 ola 5: sin el chequeo de > 0, la SEGUNDA pila del mismo tipo se
+            ' pisaba con amount = 0 y quedaba un item fantasma (ObjIndex sin cantidad).
+            If .invent.Object(Slot).ObjIndex = ManaPotId And FillBluePots > 0 Then
                 .invent.Object(Slot).amount = FillBluePots
                 FillBluePots = 0
             End If
-            If .invent.Object(Slot).ObjIndex = HpPotId Then
+            If .invent.Object(Slot).ObjIndex = HpPotId And FillRedPots > 0 Then
                 .invent.Object(Slot).amount = FillRedPots
                 FillRedPots = 0
             End If
@@ -1166,8 +1262,12 @@ Sub GiveRewards()
             End If
         End If
     Next i
-    If LobbyList(LobbyIndex).AvailableInscriptionMoney > 0 Then
-        Reward = LobbyList(LobbyIndex).AvailableInscriptionMoney / TeamSize
+    ' Plan 05.002 ola 5: TeamSize puede ser 0 (empate -> Winner = -1, o equipo ganador sin
+    ' jugadores validos) y ni GiveRewards ni MatchCompleted ni Update tienen handler: el
+    ' error 11 dejaba el lobby clavado en InProgress. Ademas `/` redondea al par y hacia
+    ' arriba, y entonces al ultimo ganador no le alcanzaba el pozo.
+    If LobbyList(LobbyIndex).AvailableInscriptionMoney > 0 And TeamSize > 0 Then
+        Reward = LobbyList(LobbyIndex).AvailableInscriptionMoney \ TeamSize
     End If
     For i = 0 To LobbyList(LobbyIndex).RegisteredPlayers - 1
         If IsValidUserRef(LobbyList(LobbyIndex).Players(i).User) Then

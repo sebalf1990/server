@@ -4328,9 +4328,17 @@ Private Sub HandleGrupoMsg(ByVal UserIndex As Integer)
         If LenB(chat) <> 0 Then
             If .Grupo.EnGrupo = True Then
                 Dim i As Byte
+                Dim destinoIndex As Integer
                 For i = 1 To UserList(.Grupo.Lider.ArrayIndex).Grupo.CantidadMiembros
-                    Call WriteConsoleMsg(UserList(.Grupo.Lider.ArrayIndex).Grupo.Miembros(i).ArrayIndex, GetUserDisplayName(UserIndex) & "> " & chat, e_FontTypeNames.FONTTYPE_New_Amarillo_Verdoso)
-                    Call WriteChatOverHead(UserList(.Grupo.Lider.ArrayIndex).Grupo.Miembros(i).ArrayIndex, "NOCONSOLA*" & chat, UserList(UserIndex).Char.charindex, &HFF8000)
+                    destinoIndex = UserList(.Grupo.Lider.ArrayIndex).Grupo.Miembros(i).ArrayIndex
+                    ' Plan 05.002 ola 7: el chat de grupo era un canal privado que cruzaba
+                    ' equipos adentro del evento, imposible de interceptar por el resto de los
+                    ' participantes. Ahora el rival agrupado no lo escucha. El guard de > 0
+                    ' ademas evita escribirle al slot 0 si quedo un miembro colgado.
+                    If destinoIndex > 0 And Not UserMod.GrupoCruzaBandos(UserIndex, destinoIndex) Then
+                        Call WriteConsoleMsg(destinoIndex, GetUserDisplayName(UserIndex) & "> " & chat, e_FontTypeNames.FONTTYPE_New_Amarillo_Verdoso)
+                        Call WriteChatOverHead(destinoIndex, "NOCONSOLA*" & chat, UserList(UserIndex).Char.charindex, &HFF8000)
+                    End If
                 Next i
             Else
                 ' Msg758=Grupo> No estas en ningun grupo.
@@ -4632,6 +4640,21 @@ Private Sub HandleCommerceStart(ByVal UserIndex As Integer)
             If .pos.Map <> UserList(.flags.TargetUser.ArrayIndex).pos.Map Or Distancia(UserList(.flags.TargetUser.ArrayIndex).pos, .pos) > 3 Then
                 Call FinComerciarUsu(.flags.TargetUser.ArrayIndex, True)
                 Call WriteLocaleMsg(UserIndex, MSG_SACERDOTE_PUEDE_CURARTE_DEBIDO_DEMASIADO_LEJOS, e_FontTypeNames.FONTTYPE_INFO)
+                Exit Sub
+            End If
+            ' Plan 05.002 ola 7: el chequeo de abajo exige mapa SEGURO, o sea que estaba
+            ' INVERTIDO respecto de lo que hace falta aca. Las 4 salas de reto (mapas 324, 372,
+            ' 389 y 390) son Seguro = 1, y tambien lo son la caceria entera, la sala de espera
+            ' del DeathMatch, el salon 278 del CTF y los ~10 segundos de cierre del DeathMatch:
+            ' en todos esos el gate viejo daba PASO LIBRE. Dos retadores parados uno al lado del
+            ' otro se pasaban oro e items sin salir de la sala. El estado del jugador manda
+            ' sobre el del mapa; no se usa MapInfo(...).Seguro como criterio nuevo porque los
+            ' escenarios lo prenden y apagan por fase.
+            If CustomScenarios.IsUserInMatch(UserIndex) Or CustomScenarios.IsUserInMatch(.flags.TargetUser.ArrayIndex) Then
+                Call FinComerciarUsu(.flags.TargetUser.ArrayIndex, True)
+                Call FinComerciarUsu(UserIndex, True)
+                ' Msg1169=No podes comerciar con el usuario en este momento.
+                Call WriteLocaleMsg(UserIndex, MSG_NO_PODES_COMERCIAR_USUARIO_MOMENTO, e_FontTypeNames.FONTTYPE_INFO)
                 Exit Sub
             End If
             'Check if map is not safe
@@ -5909,14 +5932,9 @@ Public Sub HandleParticipar(ByVal UserIndex As Integer)
     Password = reader.ReadString8
     With UserList(UserIndex)
         If RoomId = -1 Then
-            If ModLobby.ActiveEventType() = e_EventType.CaptureTheFlag Then
-                If Not InstanciaCaptura Is Nothing Then
-                    Call InstanciaCaptura.inscribirse(UserIndex)
-                    Exit Sub
-                End If
-            Else
-                RoomId = GlobalLobbyIndex
-            End If
+            ' Plan 05.002 ola 4: el CTF pasa a inscribirse por el lobby como los demas
+            ' modos (antes tenia su propia rama con su propia coleccion de participantes).
+            RoomId = GlobalLobbyIndex
         End If
         If RoomId < 0 Or RoomId > UBound(LobbyList) Then
             ' R2: sin evento activo (GlobalLobbyIndex=-1) o RoomId invalido -> evita LobbyList fuera de rango
@@ -5930,6 +5948,20 @@ Public Sub HandleParticipar(ByVal UserIndex As Integer)
                 Call WriteLocaleMsg(UserIndex, addPlayerResult.Message, e_FontTypeNames.FONTTYPE_INFO)
             Else
                 Call WriteLocaleMsg(UserIndex, MsgCantJoinPrivateLobby, e_FontTypeNames.FONTTYPE_INFO)
+            End If
+            Exit Sub
+        Else
+            ' Plan 05.002 ola 9: sin este Else la Sub terminaba SIN escribir nada cuando el
+            ' lobby no estaba tomando inscriptos: el jugador escribia /PARTICIPAR y no
+            ' pasaba absolutamente nada en pantalla. Msg925 se quedo sin emisor cuando la
+            ' ola 4 saco clsCaptura.cls del proyecto (su unico call site vivo).
+            If LobbyList(RoomId).State > AcceptingPlayers Then
+                'Msg925=Ya se ha cerrado la inscripcion para el evento.
+                Call WriteLocaleMsg(UserIndex, MSG_HA_CERRADO_INSCRIPCION_EVENTO, e_FontTypeNames.FONTTYPE_INFO)
+            Else
+                ' UnInitilized/Initialized: el slot existe pero todavia no abrio. Se reusa el
+                ' mismo mensaje que la rama de "no hay evento" de mas arriba.
+                Call WriteLocaleMsg(UserIndex, MSG_NO_EVENTOS_ACTUALMENTE_HAY_NINGUN_EVENTO_CURSO, e_FontTypeNames.FONTTYPE_New_Eventos)
             End If
             Exit Sub
         End If
@@ -6108,9 +6140,11 @@ Public Sub HandleDuel(ByVal UserIndex As Integer)
         Bet = reader.ReadInt32
         PocionesMaximas = reader.ReadInt16
         CaenItems = reader.ReadBool
-        'Msg1233= No puedes realizar un reto en este momento.
-        Call WriteLocaleMsg(UserIndex, MSG_NO_PUEDES_REALIZAR_RETO_MOMENTO, e_FontTypeNames.FONTTYPE_INFO)
-        'Exit Sub
+        ' Habia colgado un WriteLocaleMsg "No puedes realizar un reto en este momento" que se
+        ' mandaba SIEMPRE y despues igual creaba el reto: era la mitad de un kill switch al
+        ' que le comentaron el Exit Sub. Todo jugador que armaba un reto veia el rechazo y
+        ' el reto arrancaba lo mismo. El Exit Sub comentado esta bien comentado (los retos
+        ' estan habilitados); lo que sobra es el mensaje.
         Call CrearReto(UserIndex, Players, Bet, PocionesMaximas, CaenItems)
     End With
     Exit Sub
@@ -8239,6 +8273,17 @@ Public Function HandleStartAutomatedAction(ByVal UserIndex As Integer)
     x = reader.ReadInt8()
     y = reader.ReadInt8()
     skill = reader.ReadInt8()
+    ' Plan 05.002 ola 7: no se trabaja adentro de un reto ni de un evento.
+    ' OJO, TRAMPA VERIFICADA: el gate NO va en HandleWorkLeftClick Case Talar / Case Mineria.
+    ' Ahi queda INERTE, porque Trabajar() (Trabajo.bas:51) es un Select Case con UN SOLO Case,
+    ' Carpinteria: con Talar o Mineria no hace absolutamente nada y sale. La tala y la mineria
+    ' de verdad corren por aca (StartAutomatedAction -> RunAutomatedActions -> ChopWood /
+    ' MineMinerals). Un gate puesto alla compila, se ve prolijo en el diff y no bloquea nada.
+    If CustomScenarios.IsUserInMatch(UserIndex) And Not EsGM(UserIndex) Then
+        ' Msg702=Accion no permitida.
+        Call WriteLocaleMsg(UserIndex, MSG_NO_ACCION_PERMITIDA, e_FontTypeNames.FONTTYPE_INFO)
+        Exit Function
+    End If
     'Gating profesiones aprendibles para acciones automatizadas (espejo de HandleWork)
     If IsFeatureEnabled("professions_learnable") Then
         If skill = e_Skill.Pescar Or skill = e_Skill.Talar Or skill = e_Skill.Mineria Then

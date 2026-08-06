@@ -29,7 +29,7 @@ Attribute VB_Exposed = False
 '    along with this program.  If not, see <https://www.gnu.org/licenses/>.
 '
 '    This program was based on Argentum Online 0.11.6
-'    Copyright (C) 2002 MÃ¡rquez Pablo Ignacio
+'    Copyright (C) 2002 Márquez Pablo Ignacio
 '
 '    Argentum Online is based on Baronsoft's VB6 Online RPG
 '    You can contact the original creator of ORE at aaron@baronsoft.com
@@ -162,7 +162,27 @@ Public Function IBaseScenario_GetExtraInterfaces() As Long
 End Function
 
 Public Sub IBaseScenario_Reset()
+    ' Plan 05.002 ola 5. Contrato Reset: el UNICO que llama aca es ModLobby.ForceReset
+    ' (/lobby forcereset), que YA devolvio y refundo a los jugadores y dejo RegisteredPlayers
+    ' en 0 ANTES de llamar. O sea que aca NO se puede iterar la lista del lobby: misma
+    ' leccion que el CTF en la ola 4. Lo que si es del escenario y no hacia nadie: matar las
+    ' criaturas spawneadas y devolver el mapa instancia al pool.
+    ' ReleaseLobby NO va aca: soltar el slot del pool es responsabilidad de ForceReset.
+    On Error GoTo Reset_Err
+    Dim key As Variant
+    For Each key In SpawnedCreaturesId.Keys
+        Call QuitarNPC(key, eClearHunt)
+    Next key
+    Call SpawnedCreaturesId.RemoveAll
+    Call PlayerRespawn.RemoveAll
     Call ClearMap
+    If MapNumber > 0 Then
+        Call ReleaseInstance(MapNumber)
+        MapNumber = 0
+    End If
+    Exit Sub
+Reset_Err:
+    Call TraceError(Err.Number, Err.Description, "ScenarioHunt.Reset", Erl)
 End Sub
 
 Private Function IBaseScenario_RequiresSpawn() As Boolean
@@ -228,7 +248,7 @@ Private Sub StartGame()
     Next key
     LastFrameTime = GetTickCountRaw()
     BroadCastInterval = 60000
-    Call SendData(SendTarget.toMap, MapNumber, PrepareMessageLocaleMsg(MSG_INICIE_CACERA, "", e_FontTypeNames.FONTTYPE_GUILD)) 'Msg1730=Â¡Que inicie la cacerÃ­a!
+    Call SendData(SendTarget.toMap, MapNumber, PrepareMessageLocaleMsg(MSG_INICIE_CACERA, "", e_FontTypeNames.FONTTYPE_GUILD)) 'Msg1730=¡Que inicie la cacería!
 End Sub
 
 Private Sub IBaseScenario_PlayerKillNpc(ByVal NpcIndex As Integer, ByVal UserIndex As Integer, ByVal SourceType As e_DamageSourceType, ByVal SourceIndex As Integer)
@@ -241,7 +261,7 @@ Private Sub IBaseScenario_PlayerKillNpc(ByVal NpcIndex As Integer, ByVal UserInd
         If MatchNpc.Exists(npcType) Then
             If Board.UpdatePlayerScore(UserIndex, MatchNpc.Item(npcType).Score) >= TargetScore Then
                 LobbyList(LobbyIndex).State = Completed
-                Call SendData(SendTarget.toMap, MapNumber, PrepareMessageLocaleMsg(MSG_TENEMOS_GANADOR, vbNullString, e_FontTypeNames.FONTTYPE_GUILD)) 'Msg1731=Â¡Tenemos un ganador!
+                Call SendData(SendTarget.toMap, MapNumber, PrepareMessageLocaleMsg(MSG_TENEMOS_GANADOR, vbNullString, e_FontTypeNames.FONTTYPE_GUILD)) 'Msg1731=¡Tenemos un ganador!
                 Call MatchComplete
                 Exit Sub
             End If
@@ -249,8 +269,17 @@ Private Sub IBaseScenario_PlayerKillNpc(ByVal NpcIndex As Integer, ByVal UserInd
     Else
         Call WriteLocaleMsg(UserIndex, MSG_MUST_HIT_WITH_WEAPON_TO_SCORE_POINTS, FONTTYPE_INFO, ObjData(RequiredWeaponId).name)
     End If
-    Call SpawnedCreaturesId.Remove(NpcIndex)
-    Call SpawnNpc(npcType)
+    ' Plan 05.002 ola 5: Scripting.Dictionary.Remove sobre una clave ausente tira 32811, y
+    ' este handler no tiene On Error propio: el error sube a CustomScenarios.PlayerKillNpc,
+    ' que se lo traga, y el SpawnNpc de abajo NUNCA corre (la criatura no se repone).
+    ' El hook entra para CUALQUIER npc muerto por un usuario en el mapa, no solo los de la
+    ' caceria: mascotas que WarpMascotas reinvoca en el mapa instancia, invocaciones, y NPCs
+    ' creados por un GM. El SpawnNpc va ADENTRO del If a proposito: reponer una criatura por
+    ' la muerte de una mascota ajena seria spawnear la mascota como presa.
+    If SpawnedCreaturesId.Exists(NpcIndex) Then
+        Call SpawnedCreaturesId.Remove(NpcIndex)
+        Call SpawnNpc(npcType)
+    End If
 End Sub
 
 Private Sub IBaseScenario_NPcKillPlayer(ByVal NpcIndex As Integer, ByVal UserIndex As Integer, ByVal SourceType As e_DamageSourceType, ByVal SourceIndex As Integer)
@@ -273,7 +302,7 @@ Private Sub IBaseScenario_Update()
                 If StartTimer.Occurrences >= 10 Then
                     Call StartGame
                 Else
-                    Call SendData(SendTarget.toMap, MapNumber, PrepareMessageLocaleMsg(MSG_CACERA_INICIARA, 10 - StartTimer.Occurrences, e_FontTypeNames.FONTTYPE_GUILD)) ' Msg1819=La cacerÃ­a iniciarÃ¡ en Â¬1
+                    Call SendData(SendTarget.toMap, MapNumber, PrepareMessageLocaleMsg(MSG_CACERA_INICIARA, 10 - StartTimer.Occurrences, e_FontTypeNames.FONTTYPE_GUILD)) ' Msg1819=La cacería iniciará en ¬1
                 End If
             End If
             Exit Sub
@@ -284,7 +313,7 @@ Private Sub IBaseScenario_Update()
             Call Board.PublishScoreboard(SendTarget.toMap, MapNumber, LobbyList(LobbyIndex), False)
         End If
         If ElapsedTime > MaxTime Then
-            Call SendData(SendTarget.toMap, MapNumber, PrepareMessageLocaleMsg(MSG_ACABA_TIEMPO, vbNullString, e_FontTypeNames.FONTTYPE_GUILD)) ' Msg1820=Â¡Se acabÃ³ el tiempo!
+            Call SendData(SendTarget.toMap, MapNumber, PrepareMessageLocaleMsg(MSG_ACABA_TIEMPO, vbNullString, e_FontTypeNames.FONTTYPE_GUILD)) ' Msg1820=¡Se acabó el tiempo!
             Call MatchComplete
         End If
         Call RespawnPlayers
@@ -324,6 +353,12 @@ Private Sub MatchComplete()
     For Each key In SpawnedCreaturesId.Keys
         Call QuitarNPC(key, eClearHunt)
     Next key
+    ' Plan 05.002 ola 5: vaciar el registro DESPUES de matarlas. MatchComplete corre mas de
+    ' una vez (fin por puntaje o tiempo, y despues CancelLobby -> UpdateLobbyState(Closed)) y
+    ' los indices de NpcList se reciclan (ReleaseNpc los devuelve al heap IdNpcLibres). Sin
+    ' esto, la segunda pasada le hace QuitarNPC a NPCs de OTROS mapas que heredaron esos
+    ' indices: ReleaseNpc solo frena el doble release del MISMO npc, via flags.NPCActive.
+    Call SpawnedCreaturesId.RemoveAll
     Exit Sub
 MatchComplete_Err:
     Call TraceError(Err.Number, Err.Description, "ScenarioHunt.MatchComplete ", Erl)
@@ -342,7 +377,7 @@ Private Sub SpawnNpc(ByVal npcType As Integer)
         NpcList(NpcId).Contadores.IntervaloRespawn = 0
         Call SpawnedCreaturesId.Add(NpcId, 0)
     Else
-        Call SendData(SendTarget.ToAdmins, 0, PrepareMessageLocaleMsg(MSG_NO_PUDO_SPAWNEAR_NPC_REVISAR, npcType, e_FontTypeNames.FONTTYPE_TALK)) ' Msg1792=No se pudo spawnear el npc Â¬1, revisar.
+        Call SendData(SendTarget.ToAdmins, 0, PrepareMessageLocaleMsg(MSG_NPC_SPAWN_FAILED, npcType, e_FontTypeNames.FONTTYPE_TALK)) ' Msg1786=No se pudo spawnear el npc ¬1, revisar.
         Call TraceError(Err.Number, "failed to spawn Npc " & npcType, "ScenarioHunt.SpawnNpc ", Erl)
     End If
 End Sub
@@ -354,7 +389,7 @@ Private Sub CloseCountDown()
         Call CloseScenario
         Exit Sub
     End If
-    Call SendData(SendTarget.toMap, MapNumber, PrepareMessageLocaleMsg(MSG_MAPA_CERRARA_SEGUNDOS, pendingTime, e_FontTypeNames.FONTTYPE_GUILD)) ' Msg1821=El mapa se cerrarÃ¡ en Â¬1 segundos.
+    Call SendData(SendTarget.toMap, MapNumber, PrepareMessageLocaleMsg(MSG_MAPA_CERRARA_SEGUNDOS, pendingTime, e_FontTypeNames.FONTTYPE_GUILD)) ' Msg1821=El mapa se cerrará en ¬1 segundos.
 End Sub
 
 Private Sub BroadCastTimeUpdate()
@@ -363,13 +398,16 @@ Private Sub BroadCastTimeUpdate()
     End If
     LastBroadCastTime = ElapsedTime
     Dim pendingTime As Long
-    'we add frame time here again so we round up
-    pendingTime = (MaxTime - ElapsedTime + frametime) / 1000
+    ' Plan 05.002 ola 5: aca se sumaba `frametime` "para redondear hacia arriba", pero ese
+    ' `frametime` era la variable de MODULO, que nadie escribe nunca: IBaseScenario_Update
+    ' declara su propio Dim frametime local y la tapa. Sumaba 0 siempre. Se saca el termino
+    ' fantasma para que el codigo diga lo que hace.
+    pendingTime = (MaxTime - ElapsedTime) / 1000
     If pendingTime > MaxTime / 2000 Then
         Exit Sub
     ElseIf pendingTime >= 60 Then
         pendingTime = pendingTime / 60
-        Call SendData(SendTarget.toMap, MapNumber, PrepareMessageLocaleMsg(MSG_QUEDAN_MINUTOS, pendingTime, e_FontTypeNames.FONTTYPE_GUILD)) ' Msg1822=Quedan Â¬1 minutos.
+        Call SendData(SendTarget.toMap, MapNumber, PrepareMessageLocaleMsg(MSG_QUEDAN_MINUTOS, pendingTime, e_FontTypeNames.FONTTYPE_GUILD)) ' Msg1822=Quedan ¬1 minutos.
         BroadCastInterval = 60000
     ElseIf pendingTime <= 10 Then
         Call SendData(SendTarget.toMap, MapNumber, PrepareMessageConsoleMsg(pendingTime, e_FontTypeNames.FONTTYPE_GUILD))
@@ -408,7 +446,14 @@ Public Sub IBaseScenario_UserDie(ByVal UserIndex)
     ' antes de revivir, el proximo que herede ese slot era teletransportado al arena,
     ' revivido y le sobreescribian Fuerza/Agilidad. El campo ya existia sin usarse.
     RespawnInfo.UserSlotIteration = UserList(UserIndex).VersionId
-    Call PlayerRespawn.Add(UserIndex, RespawnInfo)
+    ' Plan 05.002 ola 5: UserMod.DoDamageOrHeal no chequea flags.Muerto y ModifyHealth
+    ' devuelve True cada vez que MinHp <= 0, tambien sobre un cadaver: un segundo golpe (un
+    ' tick de veneno, un blast retrasado) vuelve a entrar a CustomScenarios.UserDie y el Add
+    ' con clave repetida tiraba 457. Se ignora la re-muerte: la entrada buena es la PRIMERA,
+    ' que capturo el equipo antes de que se desequipara.
+    If Not PlayerRespawn.Exists(UserIndex) Then
+        Call PlayerRespawn.Add(UserIndex, RespawnInfo)
+    End If
 End Sub
 
 Private Sub Respawn(ByVal player As Integer)
@@ -485,7 +530,10 @@ Sub GiveRewards()
                 Teams(LobbyList(LobbyIndex).Players(i).team) = Teams(LobbyList(LobbyIndex).Players(i).team) & UserList(LobbyList(LobbyIndex).Players(i).User.ArrayIndex).name & " "
             End If
         Next i
-        For i = 1 To 3
+        ' Plan 05.002 ola 5: GetTeamRanking devuelve rank(0 To CantidadDeEquipos), o sea que
+        ' el UBound es la cantidad de equipos, no 3. Con 2 equipos, Ranking(3) es error 9 y se
+        ' lo traga GiveRewards_Err. Rewards() esta declarado 1 To 3, asi que el tope sigue en 3.
+        For i = 1 To IIf(UBound(Ranking) < 3, UBound(Ranking), 3)
             If LobbyList(LobbyIndex).AvailableInscriptionMoney > 0 Then
                 Reward = Rewards(i) / LobbyList(LobbyIndex).TeamSize
                 For j = 0 To LobbyList(LobbyIndex).RegisteredPlayers - 1
@@ -497,12 +545,17 @@ Sub GiveRewards()
                 Next j
                 RewardStr = ", ganaron " & PonerPuntos(Reward) & " Modenas de oro cada uno."
             End If
-            Call SendData(SendTarget.ToAll, 0, PrepareMessageLocaleMsg(MSG_PUNTOSA, i & "Â¬" & Teams(Ranking(i).PlayerIndex) & "Â¬" & Ranking(i).Score & "Â¬" & RewardStr, _
-                    e_FontTypeNames.FONTTYPE_GUILD)) ' Msg1823=Â¬1) Â¬2: Â¬3 puntosÂ¬4
+            Call SendData(SendTarget.ToAll, 0, PrepareMessageLocaleMsg(MSG_PUNTOSA, i & "¬" & Teams(Ranking(i).PlayerIndex) & "¬" & Ranking(i).Score & "¬" & RewardStr, _
+                    e_FontTypeNames.FONTTYPE_GUILD)) ' Msg1823=¬1) ¬2: ¬3 puntos¬4
         Next i
     Else
         Ranking = Board.GetRanking(3)
         For i = 0 To UBound(Ranking) - 1
+            ' Plan 05.002 ola 5: GetRanking deja en 0 los puestos que no se llenaron y
+            ' UserList arranca en 1, asi que el broadcast leia UserList(0) y tiraba error 9,
+            ' abortando el resto de la premiacion. El ranking viene ordenado: el primer hueco
+            ' corta la lista.
+            If Ranking(i).PlayerIndex <= 0 Then Exit For
             If LobbyList(LobbyIndex).AvailableInscriptionMoney > 0 Then
                 For j = 0 To LobbyList(LobbyIndex).RegisteredPlayers - 1
                     If IsValidUserRef(LobbyList(LobbyIndex).Players(j).User) Then
@@ -514,8 +567,8 @@ Sub GiveRewards()
                 Next j
                 RewardStr = ", gano " & PonerPuntos(Rewards(i + 1)) & " Modenas de oro."
             End If
-            Call SendData(SendTarget.ToAll, 0, PrepareMessageLocaleMsg(MSG_PUNTOS_1824, (i + 1) & "Â¬" & UserList(Ranking(i).PlayerIndex).name & "Â¬" & Ranking(i).Score & "Â¬" & RewardStr, _
-                    e_FontTypeNames.FONTTYPE_GUILD)) ' Msg1824=Â¬1) Â¬2: Â¬3 puntosÂ¬4
+            Call SendData(SendTarget.ToAll, 0, PrepareMessageLocaleMsg(MSG_PUNTOS_1824, (i + 1) & "¬" & UserList(Ranking(i).PlayerIndex).name & "¬" & Ranking(i).Score & "¬" & RewardStr, _
+                    e_FontTypeNames.FONTTYPE_GUILD)) ' Msg1824=¬1) ¬2: ¬3 puntos¬4
         Next i
     End If
     Exit Sub

@@ -78,6 +78,11 @@ Public Sub MaybeRunGameEvents()
 
     Call PerformTimeLimitCheck(PerformanceTimer, "MaybeRunGameEvents User loop", USER_LOOP_TIME_LIMIT_MS)
     Call CustomScenarios.UpdateAll
+    ' Plan 05.002 ola 5: los lobbies SIN escenario (ScenearioType Generic) no los tickeaba
+    ' nadie, porque UpdateWaitingForPlayers solo se llamaba desde los IBaseScenario_Update.
+    ' Se pasa el intervalo nominal: el unico consumidor del frametime ahi es el timer de
+    ' anuncio cada 30 s (BroadOpenEvent); el vencimiento real usa GlobalFrameTime.
+    Call ModLobby.UpdateLobbiesWithoutScenario(GAME_EVENTS_INTERVAL_MS)
     Call PerformTimeLimitCheck(PerformanceTimer, "MaybeRunGameEvents customScenarios", CUSTOM_SCENARIOS_TIME_LIMIT_MS)
     Call MaybeRunShipTravel
 

@@ -33,6 +33,18 @@ Option Explicit
 'destino: receptor de la transaccion
 Public Function IniciarComercioConUsuario(ByVal Origen As Integer, ByVal Destino As Integer) As Boolean
     On Error GoTo ErrHandler
+    ' Plan 05.002 ola 7: el comercio seguro tiene DOS puertas. HandleCommerceStart valida al
+    ' pedirlo, pero el Case 4 de HandleResponderPregunta (la aceptacion) entra por aca sin
+    ' revalidar NADA: ni mapa, ni muerto, ni distancia. Se podia pedir comercio en la ciudad,
+    ' dejar la pregunta sin contestar, entrar al evento o al reto y recien ahi aceptar. Este es
+    ' el cuello por donde pasan los dos caminos, asi que el gate va aca a prueba de olvidos y
+    ' el de HandleCommerceStart queda solo para darle al jugador el mensaje amable.
+    If CustomScenarios.IsUserInMatch(Origen) Or CustomScenarios.IsUserInMatch(Destino) Then
+        Call FinComerciarUsu(Origen, True)
+        Call FinComerciarUsu(Destino, True)
+        IniciarComercioConUsuario = False
+        Exit Function
+    End If
     'Si ambos pusieron /comerciar entonces
     If UserList(Origen).ComUsu.DestUsu.ArrayIndex = Destino And UserList(Destino).ComUsu.DestUsu.ArrayIndex = Origen Then
         If UserList(Origen).pos.Map <> UserList(Destino).pos.Map Then

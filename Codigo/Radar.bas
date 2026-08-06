@@ -263,7 +263,16 @@ Private Function CollectRadarPartyMembers(ByVal ObserverIndex As Integer, ByRef 
     Dim px As Byte, py As Byte
     For i = 1 To cantidad
         memberIndex = UserList(leaderIndex).Grupo.Miembros(i).ArrayIndex
-        If memberIndex > 0 And memberIndex <> ObserverIndex Then
+        ' Plan 05.002 ola 7: el radar de party mostraba la posicion exacta (px, py) del rival
+        ' cuando dos de equipos opuestos compartian grupo adentro de un evento o de un reto:
+        ' wallhack legal en Captura la Bandera, y sobrevivia a cualquier fix que solo arreglara
+        ' el dano. GrupoCruzaBandos es False fuera de eventos, asi que el radar del mundo no
+        ' cambia en nada.
+        ' OJO: IsInObserverParty NO se toca A PROPOSITO. Sigue devolviendo True para el miembro
+        ' que aca se oculta, y eso es justamente lo que hace que CollectRadarClanMembers
+        ' tampoco lo muestre (excluye a los de party). Filtrarlo tambien alli reabriria la
+        ' misma fuga por el radar de clan.
+        If memberIndex > 0 And memberIndex <> ObserverIndex And Not UserMod.GrupoCruzaBandos(ObserverIndex, memberIndex) Then
             If UserList(memberIndex).flags.UserLogged Then
                 If UserList(memberIndex).pos.Map = userMap Then
                     Dim hidden As Boolean

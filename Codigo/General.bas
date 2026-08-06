@@ -1424,9 +1424,8 @@ Sub PasarSegundo()
         End If
         CuentaRegresivaTimer = CuentaRegresivaTimer - 1
     End If
-    If Not InstanciaCaptura Is Nothing Then
-        Call InstanciaCaptura.PasarSegundo
-    End If
+    ' Plan 05.002 ola 4: el CTF ya no se tickea desde aca. Es un escenario del motor
+    ' y corre por IBaseScenario_Update, que ademas respeta su propia cadencia de 1s.
     segundos = segundos + 1
     For i = 1 To LastUser
         With UserList(i)

@@ -608,7 +608,14 @@ Public Sub HandleWarpChar(ByVal UserIndex As Integer)
             ElseIf InMapBounds(Map, x, y) Then
                 'no permitimos que se use el telep para llevas User a casas privadas.
                 If UCase$(username) <> "YO" Then
-                    If .flags.Privilegios And e_PlayerType.Consejero Or e_PlayerType.SemiDios Then
+                    ' Plan 05.002 ola 7: en VB6 el And liga MAS FUERTE que el Or, asi que esto
+                    ' se evaluaba como (Privilegios And Consejero) Or SemiDios, y SemiDios (&H8)
+                    ' es una constante distinta de cero => el If daba SIEMPRE verdadero, tambien
+                    ' para Admin y Dios. Consecuencia medida: /telep sobre otro jugador solo
+                    ' aceptaba mapas de evento para TODOS los rangos, o sea que sacar a alguien
+                    ' de un evento con /telep estaba muerto y el mensaje de error le mentia al
+                    ' Admin. El paralelo correcto ya estaba bien parentizado en HandleSummonChar.
+                    If (.flags.Privilegios And (e_PlayerType.Consejero Or e_PlayerType.SemiDios)) <> 0 Then
                         If Not EsMapaEvento(Map) Then
                             'Msg948= Solamente puedes teletransportar gente a mapas de evento.
                             Call WriteLocaleMsg(UserIndex, MSG_SOLAMENTE_PUEDES_TELETRANSPORTAR_GENTE_MAPAS_EVENTO, e_FontTypeNames.FONTTYPE_INFO)
@@ -1841,7 +1848,12 @@ Public Sub HandleExecute(ByVal UserIndex As Integer)
         If (.flags.Privilegios And (e_PlayerType.Admin Or e_PlayerType.Dios Or e_PlayerType.SemiDios)) Then
             tUser = NameIndex(username)
             If IsValidUserRef(tUser) Then
-                Call CustomScenarios.UserDie(UserIndex)
+                ' Plan 05.002 ola 4: pasaba UserIndex, que es el GM que ejecuta, no el
+                ' ejecutado. Antes daba igual porque el CTF se enganchaba al final de
+                ' UserMod.UserDie; ahora CustomScenarios.UserDie es el UNICO ruteo al
+                ' escenario, asi que con el indice equivocado al muerto no se lo devuelve
+                ' a la sala ni se lo resucita: queda muerto y trabado adentro del evento.
+                Call CustomScenarios.UserDie(tUser.ArrayIndex)
                 Call UserMod.UserDie(tUser.ArrayIndex)
                 Call SendData(SendTarget.ToAdmins, 0, PrepareMessageLocaleMsg(MSG_EJECUTADO, .name & "¬" & UserList(tUser.ArrayIndex).name, e_FontTypeNames.FONTTYPE_EJECUCION)) ' Msg1832=¬1 ha ejecutado a ¬2.
                 Call LogGM(GetUserRealName(UserIndex), " ejecuto a " & username)
@@ -4028,21 +4040,15 @@ Public Sub HandleCancelarEvento(ByVal UserIndex As Integer)
         Call WriteLocaleMsg(UserIndex, MSG_SERVIDOR_COMANDO_DESHABILITADO_CARGO, e_FontTypeNames.FONTTYPE_INFO)
         Exit Sub
     End If
-    If ModLobby.ActiveEventType() = e_EventType.CaptureTheFlag Then
-        If InstanciaCaptura Is Nothing Then
-            'Msg1003= Eventos » No hay ninguna instancia en curso para ese evento.
-            Call WriteLocaleMsg(UserIndex, MSG_NO_EVENTOS_HAY_NINGUNA_INSTANCIA_CURSO_ESE_EVENTO, e_FontTypeNames.FONTTYPE_INFO)
-        Else
-            Call InstanciaCaptura.finalizarCaptura
-        End If
+    ' Plan 05.002 ola 4: el CTF ya no tiene rama propia de cancelacion. Vive dentro
+    ' de su lobby, asi que CancelLobby lo termina igual que a los demas escenarios
+    ' (Scenario.Cancel devuelve a los jugadores y refunda la inscripcion).
+    If GlobalLobbyIndex >= 0 Then
+        Call CancelLobby(LobbyList(GlobalLobbyIndex))
+        If LobbyList(GlobalLobbyIndex).Scenario Is Nothing Then Call ReleaseLobby(GlobalLobbyIndex)
+        Call SendData(SendTarget.ToAll, 0, PrepareMessageLocaleMsg(MSG_EVENTOS_EVENTO_SIDO_CANCELADO, vbNullString, e_FontTypeNames.FONTTYPE_GUILD)) 'Msg1738=Eventos» El evento ha sido cancelado.
     Else
-        If GlobalLobbyIndex >= 0 Then
-            Call CancelLobby(LobbyList(GlobalLobbyIndex))
-            If LobbyList(GlobalLobbyIndex).Scenario Is Nothing Then Call ReleaseLobby(GlobalLobbyIndex)
-            Call SendData(SendTarget.ToAll, 0, PrepareMessageLocaleMsg(MSG_EVENTOS_EVENTO_SIDO_CANCELADO, vbNullString, e_FontTypeNames.FONTTYPE_GUILD)) 'Msg1738=Eventos» El evento ha sido cancelado.
-        Else
-            Call SendData(SendTarget.ToAll, 0, PrepareMessageLocaleMsg(MSG_NO_ENCONTRO_NINGUN_EVENTO_ACTIVO, vbNullString, e_FontTypeNames.FONTTYPE_GUILD)) 'Msg1739=No se encontró ningún evento activo.
-        End If
+        Call SendData(SendTarget.ToAll, 0, PrepareMessageLocaleMsg(MSG_NO_ENCONTRO_NINGUN_EVENTO_ACTIVO, vbNullString, e_FontTypeNames.FONTTYPE_GUILD)) 'Msg1739=No se encontró ningún evento activo.
     End If
     Exit Sub
 ErrHandler:
@@ -4137,34 +4143,34 @@ HandleFeatureToggle_Err:
 End Sub
 
 'HarThaoS: Iniciar captura de bandera
-Public Sub HandleIniciarCaptura(EventSettings As t_NewScenearioSettings)
+' Plan 05.002 ola 4: ya NO crea la instancia. El CTF se crea como cualquier otro
+' escenario del motor (CreatePublicEvent -> lobby -> ScenarioCaptureTheFlag). Esto
+' quedo solo como el validador de settings propio del modo, que CreatePublicEvent
+' corre ANTES de reservar el lobby. Devuelve True si los settings sirven.
+Public Function HandleIniciarCaptura(EventSettings As t_NewScenearioSettings) As Boolean
     On Error GoTo ErrHandler
-    If Not InstanciaCaptura Is Nothing Then
-        Call SendData(SendTarget.ToAll, 0, PrepareMessageLocaleMsg(MSG_CAPTURE_EVENT_ALREADY_ACTIVE, "", e_FontTypeNames.FONTTYPE_GLOBAL))
-        Exit Sub
-    Else
-        'El precio no puede ser negativo
-        If EventSettings.InscriptionFee < 0 Then
-            Call SendData(SendTarget.ToAll, 0, PrepareMessageLocaleMsg(MSG_CAPTURE_INVALID_INSCRIPTION_FEE, "", e_FontTypeNames.FONTTYPE_GLOBAL))
-            Exit Sub
-        End If
-        'Permito un máximo de 48 participantes
-        If EventSettings.MaxPlayers > 48 Then 'Leer de una variable de configuración
-            Call SendData(SendTarget.ToAll, 0, PrepareMessageLocaleMsg(MSG_CAPTURE_MAX_PLAYERS_EXCEEDED, "", e_FontTypeNames.FONTTYPE_GLOBAL))
-            Exit Sub
-        End If
-        If EventSettings.MinLevel < 1 Or EventSettings.MinLevel > 47 Then
-            Call SendData(SendTarget.ToAll, 0, PrepareMessageLocaleMsg(MSG_CAPTURE_INVALID_MIN_LEVEL, "", e_FontTypeNames.FONTTYPE_GLOBAL))
-            Exit Sub
-        End If
-        If EventSettings.MinLevel > EventSettings.MaxLevel Then
-            Call SendData(SendTarget.ToAll, 0, PrepareMessageLocaleMsg(MSG_CAPTURE_MIN_LEVEL_GREATER_THAN_MAX, "", e_FontTypeNames.FONTTYPE_GLOBAL))
-            Exit Sub
-        End If
-        Set InstanciaCaptura = New clsCaptura
-        Call InstanciaCaptura.inicializar(EventSettings.MaxPlayers, EventSettings.RoundNumber, EventSettings.MinLevel, EventSettings.MaxLevel, EventSettings.InscriptionFee)
+    HandleIniciarCaptura = False
+    'El precio no puede ser negativo
+    If EventSettings.InscriptionFee < 0 Then
+        Call SendData(SendTarget.ToAll, 0, PrepareMessageLocaleMsg(MSG_CAPTURE_INVALID_INSCRIPTION_FEE, "", e_FontTypeNames.FONTTYPE_GLOBAL))
+        Exit Function
     End If
-    Exit Sub
+    'Permito un máximo de 48 participantes
+    If EventSettings.MaxPlayers > 48 Then 'Leer de una variable de configuración
+        Call SendData(SendTarget.ToAll, 0, PrepareMessageLocaleMsg(MSG_CAPTURE_MAX_PLAYERS_EXCEEDED, "", e_FontTypeNames.FONTTYPE_GLOBAL))
+        Exit Function
+    End If
+    If EventSettings.MinLevel < 1 Or EventSettings.MinLevel > 47 Then
+        Call SendData(SendTarget.ToAll, 0, PrepareMessageLocaleMsg(MSG_CAPTURE_INVALID_MIN_LEVEL, "", e_FontTypeNames.FONTTYPE_GLOBAL))
+        Exit Function
+    End If
+    If EventSettings.MinLevel > EventSettings.MaxLevel Then
+        Call SendData(SendTarget.ToAll, 0, PrepareMessageLocaleMsg(MSG_CAPTURE_MIN_LEVEL_GREATER_THAN_MAX, "", e_FontTypeNames.FONTTYPE_GLOBAL))
+        Exit Function
+    End If
+    HandleIniciarCaptura = True
+    Exit Function
 ErrHandler:
     Call TraceError(Err.Number, Err.Description, "Protocol.HandleIniciarCaptura", Erl)
-End Sub
+    HandleIniciarCaptura = False
+End Function
