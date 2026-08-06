@@ -919,6 +919,12 @@ End Function
 
 Private Sub RevivirYLimpiar(ByVal UserIndex As Integer)
     Call WriteStopped(UserIndex, False)
+    ' 06.002 Ola 1: los DoTs/slows del motor y los caches de veneno no pasan de una ronda a otra
+    ' (LimpiarEstadosAlterados solo cubre los estados legacy). Los encantamientos de arma/flechas
+    ' se conservan: son preparacion del jugador, igual que sus pociones.
+    Call ClearEffectList(UserList(UserIndex).EffectOverTime, e_EffectType.eAny, False)
+    Call ClearModifiers(UserList(UserIndex).Modifiers)
+    Call ClearPoisonEffectCaches(UserIndex)
     ' Si está vivo
     If UserList(UserIndex).flags.Muerto = 0 Then
         Call LimpiarEstadosAlterados(UserIndex)

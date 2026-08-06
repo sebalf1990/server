@@ -1186,6 +1186,35 @@ Sub ResetUserFlags(ByVal UserIndex As Integer)
         .LastPos.Map = 0
         .ReturnPos.Map = 0
         .Crafteando = 0
+        ' 06.002 Ola 1: el slot de UserList se recicla al desconectar; ningun cache de
+        ' veneno/encantamiento debe llegar vivo al proximo ocupante del indice.
+        .PoisonMinorActive = 0
+        .PoisonHemoStacks = 0
+        .PoisonNeuroActive = 0
+        .PoisonNeuroPenalidadPunteriaPct = 0
+        .PoisonNeuroPenalidadEvasionPct = 0
+        .PoisonNeuroPenalidadBloqueoEscudoPct = 0
+        .PoisonNeuroChancePifiaHechizoPct = 0
+        .PoisonNeuroRegenManaReduccionPct = 0
+        .PoisonNeuroRegenManaReduccionFija = 0
+        .PoisonNeuroBloqueaRegenManaTotal = 0
+        .PoisonedWeaponObjIndex = 0
+        .PoisonedWeaponFamilia = 0
+        .PoisonedWeaponCargas = 0
+        .PoisonedAmmoObjIndex = 0
+        .PoisonedAmmoFamilia = 0
+        .PoisonedAmmoCargas = 0
+        Dim emptyElemSrc As t_ElementalSource
+        .EnchantWeaponObjIndex = 0
+        .EnchantWeaponDeadline = 0
+        .EnchantWeaponPermanent = 0
+        .EnchantWeaponCargas = 0
+        .EnchantWeaponSource = emptyElemSrc
+        .EnchantedAmmoObjIndex = 0
+        .EnchantedAmmoDeadline = 0
+        .EnchantedAmmoPermanent = 0
+        .EnchantedAmmoCargas = 0
+        .EnchantedAmmoSource = emptyElemSrc
         'HarThaoS: Captura de bandera
         .jugando_captura = 0
         .CurrentTeam = 0
@@ -1327,11 +1356,14 @@ Sub ResetUserSlot(ByVal UserIndex As Integer)
         Call SetUserRef(.Grupo.Miembros(4), 0)
         Call SetUserRef(.Grupo.Miembros(5), 0)
         Call ClearEffectList(.EffectOverTime)
-        ' Sistema venenos (TOGGLE26): limpiar untados temporales al desconectar (no persisten)
-        If IsFeatureEnabled("new_poison_system") Then
-            Call ClearPoisonedWeapon(UserIndex)
-            Call ClearPoisonedAmmo(UserIndex, "", "desconexion")
-        End If
+        ' 06.002 Ola 1: untados y encantamientos se limpian SIEMPRE, sin gate de toggle (si un
+        ' Admin apaga el toggle en runtime el cache quedaria vivo y lo hereda el proximo ocupante
+        ' del slot reciclado). Limpiar es seguro con el sistema apagado.
+        Call ClearPoisonedWeapon(UserIndex)
+        Call ClearPoisonedAmmo(UserIndex, "", "desconexion")
+        Call ClearEnchantedWeapon(UserIndex)
+        Call ClearEnchantedAmmo(UserIndex)
+        Call ClearPoisonEffectCaches(UserIndex)
         Call ClearModifiers(.Modifiers)
     End With
     Call ResetQuestStats(UserIndex)
@@ -1401,11 +1433,11 @@ Sub ClearAndSaveUser(ByVal UserIndex As Integer)
             .flags.Mimetizado = e_EstadoMimetismo.Desactivado
         End If
         Call ClearEffectList(.EffectOverTime, e_EffectType.eAny, False)
-        ' Sistema venenos (TOGGLE26): limpiar untados temporales al desconectar (no persisten)
-        If IsFeatureEnabled("new_poison_system") Then
-            Call ClearPoisonedWeapon(UserIndex)
-            Call ClearPoisonedAmmo(UserIndex, "", "desconexion")
-        End If
+        ' 06.002 Ola 1: untados y encantamientos (no persisten) se limpian SIEMPRE, sin gate de toggle.
+        Call ClearPoisonedWeapon(UserIndex)
+        Call ClearPoisonedAmmo(UserIndex, "", "desconexion")
+        Call ClearEnchantedWeapon(UserIndex)
+        Call ClearEnchantedAmmo(UserIndex)
         errordesc = "ERROR AL LIMPIAR INVENTARIO DE CRAFTEO"
         If .flags.Crafteando <> 0 Then
             Call ReturnCraftingItems(UserIndex)

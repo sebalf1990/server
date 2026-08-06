@@ -1808,7 +1808,13 @@ Sub UserDie(ByVal UserIndex As Integer)
         .flags.Estupidiza = 0
         .flags.DivineBlood = 0
         Call ClearEffectList(.EffectOverTime, e_EffectType.eAny, True)
-        If IsFeatureEnabled("new_poison_system") Then Call ClearPoisonedAmmo(UserIndex, "", "muerte")
+        ' 06.002 Ola 1: untados, encantamientos y caches de veneno mueren con el portador,
+        ' sin gate de toggle (el arma dropeada no lleva el encanto: vive en UserList().flags).
+        Call ClearPoisonedWeapon(UserIndex)
+        Call ClearPoisonedAmmo(UserIndex, "", "muerte")
+        Call ClearEnchantedWeapon(UserIndex)
+        Call ClearEnchantedAmmo(UserIndex)
+        Call ClearPoisonEffectCaches(UserIndex)
         Call ClearModifiers(.Modifiers)
         .flags.Muerto = 1
         Call WriteUpdateHP(UserIndex)
@@ -3017,6 +3023,12 @@ Public Function DoDamageOrHeal(ByVal UserIndex As Integer, _
                                Optional GotDamageText As Integer = 34, _
                                Optional ByVal DamageColor As Long = vbRed) As e_DamageResult
     On Error GoTo DoDamageOrHeal_Err
+    ' 06.002 Ola 1: un DoT puede tickear en la misma pasada en que otro efecto mato al user;
+    ' sin esta guarda el cadaver vuelve a morir (UserDie/PlayerKillPlayer/ContarMuerte dobles).
+    If amount < 0 And UserList(UserIndex).flags.Muerto <> 0 Then
+        DoDamageOrHeal = eDead
+        Exit Function
+    End If
     Dim DamageStr As String
     Dim Color     As Long
     DamageStr = PonerPuntos(amount)

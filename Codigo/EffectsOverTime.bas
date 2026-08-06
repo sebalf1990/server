@@ -113,7 +113,9 @@ Private Function UpdateEffect(ByVal Index As Integer, ByVal ElapsedTime As Long)
     End If
     Dim CurrentEffect As IBaseEffectOverTime
     Set CurrentEffect = ActiveEffects.EffectList(Index)
-    CurrentEffect.Update (ElapsedTime)
+    ' 06.002 Ola 1: si ya esta marcado para remover (p.ej. ClearEffectList por una muerte en esta
+    ' misma pasada), no ejecutar su Update: el tick golpearia a un target ya muerto.
+    If Not CurrentEffect.RemoveMe Then CurrentEffect.Update (ElapsedTime)
     If CurrentEffect.RemoveMe Then
         If CurrentEffect.TargetIsValid Then
             If CurrentEffect.TargetRefType = eUser Then
@@ -647,6 +649,30 @@ Public Sub RemovePoisonNeuro(ByVal TargetIndex As Integer, ByVal TargetType As e
     Exit Sub
 RemovePoisonNeuro_Err:
     Call TraceError(Err.Number, Err.Description, "EffectsOverTime.RemovePoisonNeuro", Erl)
+End Sub
+
+' 06.002 Ola 1: resetea los caches de flags de los venenos por efecto (Minor/Hemo/Neuro).
+' OnRemove NO limpia estos caches (decision de los callers), asi que muerte/desconexion/reto
+' deben resetearlos aca o quedan como penalidad fantasma sin efecto ni icono.
+Public Sub ClearPoisonEffectCaches(ByVal UserIndex As Integer)
+    On Error GoTo ClearPoisonEffectCaches_Err
+    If UserIndex <= 0 Then Exit Sub
+    With UserList(UserIndex).flags
+        .PoisonMinorActive = 0
+        If .PoisonHemoStacks > 0 Then Call WriteUpdatePoisonStacks(UserIndex, 0, 0)
+        .PoisonHemoStacks = 0
+        .PoisonNeuroActive = 0
+        .PoisonNeuroPenalidadPunteriaPct = 0
+        .PoisonNeuroPenalidadEvasionPct = 0
+        .PoisonNeuroPenalidadBloqueoEscudoPct = 0
+        .PoisonNeuroChancePifiaHechizoPct = 0
+        .PoisonNeuroRegenManaReduccionPct = 0
+        .PoisonNeuroRegenManaReduccionFija = 0
+        .PoisonNeuroBloqueaRegenManaTotal = 0
+    End With
+    Exit Sub
+ClearPoisonEffectCaches_Err:
+    Call TraceError(Err.Number, Err.Description, "EffectsOverTime.ClearPoisonEffectCaches", Erl)
 End Sub
 
 ' Aplica veneno al NPC cuando un user le pega con arma envenenada.

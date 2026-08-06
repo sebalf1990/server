@@ -56,6 +56,7 @@ Public Sub Setup(ByVal SourceIndex As Integer, _
     Call SetRef(Source, SourceIndex, SourceType)
     Debug.Print "setting new id: " & Id & " to: " & DotInfo.UniqueId & " on target: " & TargetIndex
     TimeSinceLastTick = 0
+    Modifier = 0 ' 06.002 Ola 1: la instancia reciclada del pool arrastra el valor del uso anterior
     With EffectOverTime(EffectId)
         TickTime = .TickTime
         RequireTransform = .RequireTransform
