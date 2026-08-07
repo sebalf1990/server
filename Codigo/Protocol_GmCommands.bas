@@ -898,6 +898,7 @@ HandleHiding_Err:
 End Sub
 
 Public Sub HandleJail(ByVal UserIndex As Integer)
+    Const AUTO_MACRO_JAIL_REASON As String = "Uso de programas externos, Macros o Cheat"
     'Author: Juan Martín Sotuyo Dodero (Maraxus)
     On Error GoTo ErrHandler
     With UserList(UserIndex)
@@ -937,7 +938,11 @@ Public Sub HandleJail(ByVal UserIndex As Integer)
                             username = Replace(username, "/", "")
                         End If
                         If PersonajeExiste(username) Then
-                            Call SavePenaDatabase(username, .name & ": CARCEL " & jailTime & "m, MOTIVO: " & Reason & " " & Date & " " & Time)
+                            ' Upstream 748b0773: el anti-macro automatico manchaba el prontuario de
+                            ' gente que solo tuvo lag. Esa condena puntual no se registra.
+                            If StrComp(Trim$(Reason), AUTO_MACRO_JAIL_REASON, vbTextCompare) <> 0 Then
+                                Call SavePenaDatabase(username, .name & ": CARCEL " & jailTime & "m, MOTIVO: " & Reason & " " & Date & " " & Time)
+                            End If
                         End If
                         Call Encarcelar(tUser.ArrayIndex, jailTime, .name)
                         Call LogGM(GetUserRealName(UserIndex), " encarceló a " & username)

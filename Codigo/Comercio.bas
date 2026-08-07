@@ -105,6 +105,11 @@ Public Sub Comercio(ByVal Modo As eModoComercio, ByVal UserIndex As Integer, ByV
             'Msg1083= Lo siento, no comercio objetos para newbies.
             Call WriteLocaleMsg(UserIndex, MSG_NO_SIENTO_COMERCIO_OBJETOS_NEWBIES, e_FontTypeNames.FONTTYPE_TALK)
             Exit Sub
+        ' Upstream 46e5445a: las skins son items de pago; venderlas a un NPC las convertia en oro.
+        ElseIf EsSkinNoComprablePorComerciante(ObjData(Objeto.ObjIndex).OBJType) Then
+            'Msg1084= Lo siento, no puedo comprarte ese item.
+            Call WriteLocaleMsg(UserIndex, MSG_NO_SIENTO_PUEDO_COMPRARTE_ESE_ITEM, e_FontTypeNames.FONTTYPE_TALK)
+            Exit Sub
         ElseIf ObjData(Objeto.ObjIndex).Destruye = 1 Then
             'Msg1084= Lo siento, no puedo comprarte ese item.
             Call WriteLocaleMsg(UserIndex, MSG_NO_SIENTO_PUEDO_COMPRARTE_ESE_ITEM, e_FontTypeNames.FONTTYPE_TALK)
@@ -312,4 +317,15 @@ Public Function SalePrice(ByVal ObjIndex As Integer, Optional ByVal UserIndex As
     Exit Function
 SalePrice_Err:
     Call TraceError(Err.Number, Err.Description, "modSistemaComercio.SalePrice", Erl)
+End Function
+
+' Upstream 46e5445a: True si el tipo de objeto es una skin (item de pago) y por lo tanto
+' un NPC comerciante NO debe comprarla.
+Private Function EsSkinNoComprablePorComerciante(ByVal OBJType As e_OBJType) As Boolean
+    Select Case OBJType
+        Case e_OBJType.otSkinsWings, e_OBJType.otSkinsArmours, e_OBJType.otSkinsShields, _
+            e_OBJType.otSkinsHelmets, e_OBJType.otSkinsWeapons, e_OBJType.otSkinsBoats, _
+            e_OBJType.otSkinsSpells
+            EsSkinNoComprablePorComerciante = True
+    End Select
 End Function
