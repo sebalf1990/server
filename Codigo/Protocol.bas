@@ -4712,14 +4712,18 @@ Private Sub HandleInformation(ByVal UserIndex As Integer)
             Call WriteLocaleMsg(UserIndex, MSG_SACERDOTE_PUEDE_CURARTE_DEBIDO_DEMASIADO_LEJOS, e_FontTypeNames.FONTTYPE_INFO)
             Exit Sub
         End If
+        ' Iban con Or y eso hacia la guarda siempre verdadera: ningun valor puede ser
+        ' Armada y consejo a la vez, asi que todo el mundo comia el Msg1389 y salia. Los
+        ' Msg1390 y Msg1392 eran inalcanzables. HandleReward, aca abajo, siempre estuvo
+        ' bien escrito con And.
         If NpcList(.flags.TargetNPC.ArrayIndex).flags.Faccion = 0 Then
-            If .Faccion.Status <> e_Facciones.Armada Or .Faccion.Status <> e_Facciones.consejo Then
+            If .Faccion.Status <> e_Facciones.Armada And .Faccion.Status <> e_Facciones.consejo Then
                 Call WriteLocaleChatOverHead(UserIndex, 1389, vbNullString, NpcList(.flags.TargetNPC.ArrayIndex).Char.charindex, vbWhite)  ' Msg1389=No perteneces a las tropas reales!!!
                 Exit Sub
             End If
             Call WriteLocaleChatOverHead(UserIndex, 1390, vbNullString, NpcList(.flags.TargetNPC.ArrayIndex).Char.charindex, vbWhite)  ' Msg1390=Tu deber es combatir criminales, cada 100 criminales que derrotes te darí una recompensa.
         Else
-            If .Faccion.Status <> e_Facciones.Caos Or .Faccion.Status <> e_Facciones.concilio Then
+            If .Faccion.Status <> e_Facciones.Caos And .Faccion.Status <> e_Facciones.concilio Then
                 Call WriteLocaleChatOverHead(UserIndex, 1391, vbNullString, NpcList(.flags.TargetNPC.ArrayIndex).Char.charindex, vbWhite)  ' Msg1391=No perteneces a la legión oscura!!!
                 Exit Sub
             End If
