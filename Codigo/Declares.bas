@@ -1786,8 +1786,6 @@ Public Type t_ElementalResist
     ReducePctMin As Long        ' min del rango de pct (entero 0..100)
     ReducePctMax As Long        ' max del rango pct (>0 activa el rango; si 0 usa ReducePct fijo)
     ' --- resist-a-efecto (reduce el estado aplicado) -- Ola 1 ---
-    ReduceEffectMagnitudePct As Single
-    ReduceEffectDurationPct As Single
     ReduceEffectChancePct As Long
 End Type
 

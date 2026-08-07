@@ -217,8 +217,8 @@ Private Sub AddResistEntry(ByRef acc As t_ElementalResist, ByRef e As t_Elementa
     If e.Immune <> 0 Then acc.Immune = 1
     If e.ImmuneDamage <> 0 Then acc.ImmuneDamage = 1
     If e.ImmuneEffect <> 0 Then acc.ImmuneEffect = 1
-    acc.ReduceEffectMagnitudePct = acc.ReduceEffectMagnitudePct + e.ReduceEffectMagnitudePct
-    acc.ReduceEffectDurationPct = acc.ReduceEffectDurationPct + e.ReduceEffectDurationPct
+    ' 06.002 Ola 2: EffMag/EffDur retirados del esquema (se parseaban y acumulaban pero ningun
+    ' consumidor los aplicaba y ningun .dat los usa; implementarlos es rediseno de la creacion de EOT).
     acc.ReduceEffectChancePct = acc.ReduceEffectChancePct + e.ReduceEffectChancePct
 End Sub
 
@@ -365,10 +365,10 @@ End Function
 
 ' Dispara los procs de una fuente con el trigger dado contra un target.
 ' Devuelve el dano extra (kind=dmgBonus) ya reducido por la resistencia del target.
-Private Function FireProcs(ByRef src As t_ElementalSource, ByVal trig As e_ProcTrigger, ByVal targetIsNpc As Boolean, ByVal targetIndex As Integer, ByVal attackerIndex As Integer, ByVal attackerType As e_ReferenceType, ByVal logCtx As String) As Long
+Private Function FireProcs(ByRef src As t_ElementalSource, ByVal trig As e_ProcTrigger, ByVal targetIsNpc As Boolean, ByVal targetIndex As Integer, ByVal attackerIndex As Integer, ByVal attackerType As e_ReferenceType, ByVal logCtx As String, Optional ByVal onlyKind As Long = -1) As Long
     Dim total As Long, i As Integer
     For i = 1 To src.ProcCount
-        If src.Proc(i).Trigger = trig Then
+        If src.Proc(i).Trigger = trig And (onlyKind = -1 Or src.Proc(i).Kind = onlyKind) Then
             Dim ch As Long
             ch = src.Proc(i).ChancePct
             If ch < 0 Then ch = 0
@@ -551,6 +551,42 @@ Private Sub FireSlotThorns(ByVal ObjIndex As Integer, ByVal defenderUserIndex As
     If ObjIndex > 0 Then Call ResolveThorns(ObjData(ObjIndex).Elemental, defenderUserIndex, eUser, attackerIsNpc, attackerIndex, netDamage, attackType, logCtx)
 End Sub
 
+' 06.002 Ola 2: procs onDamaged de tipo applyState del defensor contra su atacante, POST-dano y
+' solo si el defensor sobrevivio (los dmgBonus onDamaged son las espinas: ResolveThorns). Antes el
+' applyState del NPC se disparaba pre-dano sin gate y el del gear de user no se disparaba nunca.
+Public Sub FireOnDamagedStates(ByRef defenderSrc As t_ElementalSource, ByVal defenderIndex As Integer, ByVal defenderType As e_ReferenceType, ByVal attackerIsNpc As Boolean, ByVal attackerIndex As Integer, ByVal logCtx As String)
+    On Error GoTo ErrHandler
+    If Not ElementalSystemEnabled() Then Exit Sub
+    If attackerIndex <= 0 Then Exit Sub
+    Call FireProcs(defenderSrc, eProcOnDamaged, attackerIsNpc, attackerIndex, defenderIndex, defenderType, logCtx & " onDmgState", eProcApplyState)
+    Exit Sub
+ErrHandler:
+    Call TraceError(Err.Number, Err.Description, "modElementalCombat.FireOnDamagedStates", Erl)
+End Sub
+
+' Espejo de FireUserThorns para los applyState: recorre los 7 slots de gear del user defensor.
+Public Sub FireUserOnDamagedStates(ByVal defenderUserIndex As Integer, ByVal attackerIsNpc As Boolean, ByVal attackerIndex As Integer, ByVal logCtx As String)
+    On Error GoTo ErrHandler
+    If Not ElementalSystemEnabled() Then Exit Sub
+    If defenderUserIndex <= 0 Or attackerIndex <= 0 Then Exit Sub
+    With UserList(defenderUserIndex).invent
+        Call FireSlotOnDamagedStates(.EquippedArmorObjIndex, defenderUserIndex, attackerIsNpc, attackerIndex, logCtx)
+        Call FireSlotOnDamagedStates(.EquippedHelmetObjIndex, defenderUserIndex, attackerIsNpc, attackerIndex, logCtx)
+        Call FireSlotOnDamagedStates(.EquippedShieldObjIndex, defenderUserIndex, attackerIsNpc, attackerIndex, logCtx)
+        Call FireSlotOnDamagedStates(.EquippedRingAccesoryObjIndex, defenderUserIndex, attackerIsNpc, attackerIndex, logCtx)
+        Call FireSlotOnDamagedStates(.EquippedAmuletAccesoryObjIndex, defenderUserIndex, attackerIsNpc, attackerIndex, logCtx)
+        Call FireSlotOnDamagedStates(.EquippedBackpackObjIndex, defenderUserIndex, attackerIsNpc, attackerIndex, logCtx)
+        Call FireSlotOnDamagedStates(.EquippedSaddleObjIndex, defenderUserIndex, attackerIsNpc, attackerIndex, logCtx)
+    End With
+    Exit Sub
+ErrHandler:
+    Call TraceError(Err.Number, Err.Description, "modElementalCombat.FireUserOnDamagedStates", Erl)
+End Sub
+
+Private Sub FireSlotOnDamagedStates(ByVal ObjIndex As Integer, ByVal defenderUserIndex As Integer, ByVal attackerIsNpc As Boolean, ByVal attackerIndex As Integer, ByVal logCtx As String)
+    If ObjIndex > 0 Then Call FireOnDamagedStates(ObjData(ObjIndex).Elemental, defenderUserIndex, eUser, attackerIsNpc, attackerIndex, logCtx)
+End Sub
+
 ' ============================================================================
 ' Punto de entrada gateado: camino user -> target (NPC o USER). Generalizado en la
 ' Ola 5 para habilitar PvP. Devuelve el dano elemental EXTRA (ya resistido por tipo).
@@ -609,15 +645,9 @@ Public Function ElementalDamageUserVsTarget(ByVal UserIndex As Integer, ByVal ta
             total = total + FireProcs(ObjData(orbIdx).Elemental, eProcOnHit, targetIsNpc, targetIndex, UserIndex, eUser, ctx & " orb")
         End If
     End If
-    ' Procs onDamaged del defensor: applyState (efectos) del NPC. El DANO (dmgBonus) lo aplica ResolveThorns
-    ' POST-dano (HP sink real, plan 20.002 espinas). Aca solo se disparan los efectos.
-    If targetIsNpc Then
-        Dim t As Integer
-        t = NpcList(targetIndex).Numero
-        If t > 0 Then
-            Call FireProcs(NpcInfoCache(t).Elemental, eProcOnDamaged, False, UserIndex, targetIndex, eNpc, ctx & " thorns")
-        End If
-    End If
+    ' 06.002 Ola 2: los procs onDamaged del defensor (dmgBonus=espinas, applyState=efectos) se
+    ' disparan POST-dano con gate de supervivencia en los call-sites de SistemaCombate
+    ' (ResolveThorns / FireOnDamagedStates). Aca ya no se dispara nada pre-dano.
     ' Color del numero elemental: tipo primario del arma base; si no tiene, del encantamiento.
     If WeaponObjIndex > 0 Then
         If ObjData(WeaponObjIndex).Elemental.CompCount > 0 Then
@@ -751,6 +781,12 @@ Public Function CanEnchantWeapon(ByVal UserIndex As Integer, ByVal WeaponObjInde
     End If
     If ObjData(WeaponObjIndex).Subtipo <> 11 Then
         outMsg = "Esa arma no se puede encantar."
+        Exit Function
+    End If
+    ' 06.002 Ola 2: un arma de proyectil encantada aplicaria el bono en cada disparo sin consumir
+    ' cargas jamas (el consumo melee vive en UsuarioAtaca). La municion tiene su propio encanto.
+    If ObjData(WeaponObjIndex).Proyectil > 0 Then
+        outMsg = "No podes encantar un arma de proyectil: encanta la municion."
         Exit Function
     End If
     ' CP3 (20.002 Step 7): no se puede encantar con un orbe elemental equipado (exclusividad)
@@ -1064,8 +1100,7 @@ Public Sub ParseElementalResistFromIni(ByRef Leer As clsIniManager, ByVal sect A
         rs.Resist(i).Immune = val(Leer.GetValue(sect, p & "Immune"))
         rs.Resist(i).ImmuneDamage = val(Leer.GetValue(sect, p & "ImmuneDmg"))
         rs.Resist(i).ImmuneEffect = val(Leer.GetValue(sect, p & "ImmuneEff"))
-        rs.Resist(i).ReduceEffectMagnitudePct = val(Leer.GetValue(sect, p & "EffMag"))
-        rs.Resist(i).ReduceEffectDurationPct = val(Leer.GetValue(sect, p & "EffDur"))
+        ' 06.002 Ola 2: claves EffMag/EffDur retiradas del esquema (nunca implementadas).
         rs.Resist(i).ReduceEffectChancePct = val(Leer.GetValue(sect, p & "EffChance"))
     Next i
     rs.Count = n
@@ -1096,6 +1131,9 @@ Public Function TryUniversalCrit(ByVal UserIndex As Integer, ByVal targetIsNpc A
         Dim bonus As Long
         bonus = Int(CDbl(baseDamage) * mUniversalCritMult)
         Dim nul As Boolean
+        ' 06.002 Ola 2: ReduceChancePct ya redujo la chance de critear arriba; dejarlo vivo
+        ' hacia que ApplyElementalResist lo rolee de nuevo para anular el bono (resistencia doble).
+        cr.ReduceChancePct = 0
         bonus = ApplyElementalResist(bonus, cr, DMG_TYPE_CRIT, nul)
         If bonus < 0 Then bonus = 0
         TryUniversalCrit = bonus

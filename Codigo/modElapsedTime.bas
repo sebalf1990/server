@@ -125,6 +125,7 @@ Option Explicit
 ' ==============================================================
 Private Declare Function timeGetTime Lib "winmm.dll" () As Long
 Private Const TICKS32 As Double = 4294967296#
+Private Const TICKS32_HALF As Double = 2147483648#
 
 ' New raw version (preferred)
 Public Function GetTickCountRaw() As Long
@@ -153,13 +154,32 @@ Public Function PosMod(ByVal a As Double, ByVal m As Long) As Long
     PosMod = CLng(r)
 End Function
 
+' 06.002 Ola 2: interpreta un Long como tick sin signo de 32 bits (0..2^32-1) en Double.
+Private Function Tick32ToUnsigned(ByVal v As Long) As Double
+    If v < 0 Then
+        Tick32ToUnsigned = CDbl(v) + TICKS32
+    Else
+        Tick32ToUnsigned = CDbl(v)
+    End If
+End Function
+
+' Vuelve del dominio sin signo (0..2^32-1) al patron de bits de un Long, sin overflow de CLng.
+Private Function Tick32ToSigned(ByVal u As Double) As Long
+    If u >= TICKS32_HALF Then
+        Tick32ToSigned = CLng(u - TICKS32)
+    Else
+        Tick32ToSigned = CLng(u)
+    End If
+End Function
+
 ' Add two tick values modulo 2^32 (wrap-safe)
+' 06.002 Ola 2: la version anterior hacia CLng de un Double en [2^31, 2^32) -> error 6 (overflow)
+' en la ventana pegada al wrap de timeGetTime (~49.7 dias de uptime de Windows).
 Public Function AddMod32(ByVal a As Long, ByVal b As Long) As Long
     Dim s As Double
-    s = CDbl(a And &HFFFFFFFF) + CDbl(b And &HFFFFFFFF)
-    ' reduce modulo 2^32
-    s = s - TICKS32 * Fix(s / TICKS32)
-    AddMod32 = CLng(s)
+    s = Tick32ToUnsigned(a) + Tick32ToUnsigned(b)
+    If s >= TICKS32 Then s = s - TICKS32
+    AddMod32 = Tick32ToSigned(s)
 End Function
 
 ' ==============================================================
@@ -198,6 +218,11 @@ Public Function DeadlinePassed(ByVal nowRaw As Long, ByVal deadline As Long) As 
     If deadline = 0 Then
         DeadlinePassed = True        ' treat 0 as "no deadline"
     Else
-        DeadlinePassed = (nowRaw - deadline) >= 0   ' wrap-safe TickAfter
+        ' 06.002 Ola 2: la resta directa de Longs desborda (error 6) cuando now y deadline quedan
+        ' en mitades opuestas del anillo de 2^32. Distancia sin signo: < 2^31 = deadline pasado.
+        Dim d As Double
+        d = Tick32ToUnsigned(nowRaw) - Tick32ToUnsigned(deadline)
+        If d < 0 Then d = d + TICKS32
+        DeadlinePassed = (d < TICKS32_HALF)
     End If
 End Function

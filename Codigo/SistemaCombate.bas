@@ -530,6 +530,9 @@ Private Sub UserDamageNpc(ByVal UserIndex As Integer, ByVal NpcIndex As Integer,
             Dim atkTypeN As e_ElementalDamageType
             atkTypeN = eDmgNone
             If elemDmg > 0 Then atkTypeN = modElementalCombat.DamageTypeFromColor(elemColor)
+            ' 06.002 Ola 2: applyState onDamaged del NPC, post-dano y con gate de supervivencia
+            ' (antes pre-dano sin gate). Va ANTES de las espinas: una espina letal puede matar al atacante.
+            If tThorns > 0 And netDmgN > 0 Then Call modElementalCombat.FireOnDamagedStates(NpcInfoCache(tThorns).Elemental, NpcIndex, eNpc, False, UserIndex, "U" & UserIndex & "->N" & NpcIndex)
             If tThorns > 0 And netDmgN > 0 Then Call modElementalCombat.ResolveThorns(NpcInfoCache(tThorns).Elemental, NpcIndex, eNpc, False, UserIndex, netDmgN, atkTypeN, "U" & UserIndex & "->N" & NpcIndex)
         End If
     End With
@@ -620,6 +623,9 @@ Private Function NpcDamage(ByVal NpcIndex As Integer, ByVal UserIndex As Integer
             Dim atkTypeNU As e_ElementalDamageType
             atkTypeNU = eDmgNone
             If elemDmgN > 0 Then atkTypeNU = modElementalCombat.DamageTypeFromColor(elemColorN)
+            ' 06.002 Ola 2: applyState onDamaged del gear del user (antes no se disparaba nunca).
+            ' Va ANTES de las espinas: una espina letal puede matar al NPC atacante.
+            If netNU > 0 Then Call modElementalCombat.FireUserOnDamagedStates(UserIndex, True, NpcIndex, "N" & NpcIndex & "->U" & UserIndex)
             If netNU > 0 Then Call modElementalCombat.FireUserThorns(UserIndex, True, NpcIndex, netNU, atkTypeNU, "N" & NpcIndex & "->U" & UserIndex)
         End If
     End If
@@ -682,19 +688,28 @@ Public Function NpcAtacaUser(ByVal NpcIndex As Integer, ByVal UserIndex As Integ
     End If
     Dim danio As Long
     danio = -1
+    ' 06.002 Ola 2: las espinas letales del user pueden matar al NPC atacante DENTRO de NpcDamage
+    ' (QuitarNPC resetea el slot y el respawn sincronico puede reusarlo). Capturar la referencia
+    ' versionada antes del golpe y no volver a tocar NpcList(NpcIndex) si dejo de ser valida.
+    Dim atacanteRef As t_NpcReference
+    Call SetNpcRef(atacanteRef, NpcIndex)
     If NpcImpacto(NpcIndex, UserIndex) Then
         danio = NpcDamage(NpcIndex, UserIndex)
-        '¿Puede envenenar?
-        ' Sistema venenos nuevo (TOGGLE26): tambien dispara si el NPC tiene perfil asignado en su template
-        If NpcList(NpcIndex).Veneno > 0 Then
-            Call NpcEnvenenarUser(UserIndex, NpcList(NpcIndex).Veneno, NpcIndex)
-        ElseIf IsFeatureEnabled("new_poison_system") And LenB(NpcInfoCache(NpcList(NpcIndex).Numero).PerfilVenenoAplica) > 0 Then
-            Call NpcEnvenenarUser(UserIndex, 0, NpcIndex)
+        If IsValidNpcRef(atacanteRef) Then
+            '¿Puede envenenar?
+            ' Sistema venenos nuevo (TOGGLE26): tambien dispara si el NPC tiene perfil asignado en su template
+            If NpcList(NpcIndex).Veneno > 0 Then
+                Call NpcEnvenenarUser(UserIndex, NpcList(NpcIndex).Veneno, NpcIndex)
+            ElseIf IsFeatureEnabled("new_poison_system") And LenB(NpcInfoCache(NpcList(NpcIndex).Numero).PerfilVenenoAplica) > 0 Then
+                Call NpcEnvenenarUser(UserIndex, 0, NpcIndex)
+            End If
         End If
     End If
-    Call SendData(SendTarget.ToNPCAliveArea, NpcIndex, PrepareMessageCharAtaca(NpcList(NpcIndex).Char.charindex, UserList(UserIndex).Char.charindex, danio))
-    If NpcList(NpcIndex).Char.WeaponAnim > 0 Then
-        Call SendData(SendTarget.ToNPCAliveArea, NpcIndex, PrepareMessageArmaMov(NpcList(NpcIndex).Char.charindex, 0))
+    If IsValidNpcRef(atacanteRef) Then
+        Call SendData(SendTarget.ToNPCAliveArea, NpcIndex, PrepareMessageCharAtaca(NpcList(NpcIndex).Char.charindex, UserList(UserIndex).Char.charindex, danio))
+        If NpcList(NpcIndex).Char.WeaponAnim > 0 Then
+            Call SendData(SendTarget.ToNPCAliveArea, NpcIndex, PrepareMessageArmaMov(NpcList(NpcIndex).Char.charindex, 0))
+        End If
     End If
     '-----Tal vez suba los skills------
     Call SubirSkill(UserIndex, Tacticas)
@@ -992,8 +1007,6 @@ Public Sub UsuarioAtaca(ByVal UserIndex As Integer)
         ' Sistema venenos (TOGGLE26): decremento de cargas + expiracion al swing, acierte o no.
         ' Va aca para incluir swings al aire (sin target).
         Call OnPoisonedWeaponSwing(UserIndex)
-        ' CP1 (20.002 Step 7): mismo punto, consumo de cargas del encantamiento elemental
-        Call modElementalCombat.OnEnchantedWeaponSwing(UserIndex)
         If .Counters.Trabajando Then
             Call WriteMacroTrabajoToggle(UserIndex, False)
         End If
@@ -1020,6 +1033,10 @@ Public Sub UsuarioAtaca(ByVal UserIndex As Integer)
         Else
             Call UserAttackPosition(UserIndex, AttackPos)
         End If
+        ' 06.002 Ola 2: el consumo de cargas del encantamiento va DESPUES de resolver el golpe
+        ' (como el ranged en Protocol): consumirlo antes borraba el cache al llegar a 0 y la
+        ' ultima carga nunca aplicaba su bono (encanto de 1 carga = no-op).
+        Call modElementalCombat.OnEnchantedWeaponSwing(UserIndex)
     End With
     Exit Sub
 UsuarioAtaca_Err:
@@ -1402,6 +1419,8 @@ Private Sub UserDamageToUser(ByVal AtacanteIndex As Integer, ByVal VictimaIndex 
             Dim atkTypeVU As e_ElementalDamageType
             atkTypeVU = eDmgNone
             If elemDmgU > 0 Then atkTypeVU = modElementalCombat.DamageTypeFromColor(elemColorU)
+            ' 06.002 Ola 2: applyState onDamaged del gear de la victima, antes de sus espinas.
+            If netVU > 0 Then Call modElementalCombat.FireUserOnDamagedStates(VictimaIndex, False, AtacanteIndex, "U" & AtacanteIndex & "->U" & VictimaIndex)
             If netVU > 0 Then Call modElementalCombat.FireUserThorns(VictimaIndex, False, AtacanteIndex, netVU, atkTypeVU, "U" & AtacanteIndex & "->U" & VictimaIndex)
         End If
     End With
