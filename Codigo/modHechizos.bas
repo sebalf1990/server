@@ -1626,8 +1626,37 @@ Sub HechizoEstadoUsuario(ByVal UserIndex As Integer, ByRef b As Boolean)
         Call InfoHechizo(UserIndex)
         b = True
     End If
+    ' --- Encantar Arma elemental (TOGGLE32 elemental_system): encanta el arma del target N ms ---
+    If modElementalCombat.ElementalSystemEnabled() And Hechizos(h).EnchantWeaponDurationMs > 0 Then
+        Dim ewWpn As Integer
+        ewWpn = UserList(targetUserIndex).invent.EquippedWeaponObjIndex
+        Dim ewMsgH As String
+        If Not modElementalCombat.CanEnchantWeapon(targetUserIndex, ewWpn, Hechizos(h).Elemental, ewMsgH) Then
+            Call WriteConsoleMsg(UserIndex, ewMsgH, e_FontTypeNames.FONTTYPE_INFO)
+            b = False
+            Exit Sub
+        End If
+        ' CP1 fix (paridad veneno): rechazar si el arma del objetivo ya tiene encantamiento activo
+        If modElementalCombat.IsWeaponEnchantedActive(targetUserIndex, ewWpn) Then
+            Call WriteConsoleMsg(UserIndex, "El arma del objetivo ya esta encantada.", e_FontTypeNames.FONTTYPE_INFO)
+            b = False
+            Exit Sub
+        End If
+        Call modElementalCombat.SetEnchantedWeapon(targetUserIndex, ewWpn, Hechizos(h).Elemental, Hechizos(h).CargasQueOtorga, Hechizos(h).EnchantWeaponDurationMs)
+        Call InfoHechizo(UserIndex)
+        Call WriteConsoleMsg(targetUserIndex, "Tu arma fue encantada (" & (Hechizos(h).EnchantWeaponDurationMs \ 1000) & "s).", e_FontTypeNames.FONTTYPE_FIGHT)
+        If targetUserIndex <> UserIndex Then Call WriteConsoleMsg(UserIndex, "Encantaste el arma de " & UserList(targetUserIndex).name & ".", e_FontTypeNames.FONTTYPE_FIGHT)
+        b = True
+        Exit Sub
+    End If
     ' --- Sistema venenos nuevo (TOGGLE26): TipoHechizoVeneno=1 unta arma/flechas del target ---
     If IsFeatureEnabled("new_poison_system") And Hechizos(h).TipoHechizoVeneno = 1 Then
+        ' CP3 (20.002 Step 7): el orbe elemental equipado del target anula/bloquea el untado de veneno
+        If modElementalCombat.HasElementalOrbEquipped(targetUserIndex) Then
+            Call WriteConsoleMsg(UserIndex, "El objetivo tiene un orbe equipado: no se puede untar veneno.", e_FontTypeNames.FONTTYPE_INFO)
+            b = False
+            Exit Sub
+        End If
         ' Target debe ser un usuario valido (self o aliado). No validamos hostilidad: aceptamos cualquier user.
         ' Si queres castear self con AutoLanzar=1 ya se controla en PuedeLanzar.
         If Hechizos(h).FamiliaVeneno < 1 Or Hechizos(h).FamiliaVeneno > 3 Or Hechizos(h).CargasQueOtorga <= 0 Then
@@ -1675,6 +1704,11 @@ Sub HechizoEstadoUsuario(ByVal UserIndex As Integer, ByRef b As Boolean)
                 Exit Sub
             End If
 
+            If modElementalCombat.IsAmmoEnchantedActive(targetUserIndex, equipAmmo) Then
+                Call WriteConsoleMsg(UserIndex, "Las flechas del objetivo ya estan encantadas.", e_FontTypeNames.FONTTYPE_INFO)
+                b = False
+                Exit Sub
+            End If
             With UserList(targetUserIndex).flags
                 .PoisonedAmmoObjIndex = equipAmmo
                 .PoisonedAmmoFamilia = Hechizos(h).FamiliaVeneno
@@ -1735,6 +1769,11 @@ Sub HechizoEstadoUsuario(ByVal UserIndex As Integer, ByRef b As Boolean)
         ' Si ya esta untada con MISMA arma activa y cargas restantes, rechazar
         If UserList(targetUserIndex).flags.PoisonedWeaponObjIndex = equipWpn And UserList(targetUserIndex).flags.PoisonedWeaponCargas > 0 Then
             Call WriteConsoleMsg(UserIndex, "El arma del objetivo ya esta envenenada.", e_FontTypeNames.FONTTYPE_INFO)
+            b = False
+            Exit Sub
+        End If
+        If modElementalCombat.IsWeaponEnchantedActive(targetUserIndex, equipWpn) Then
+            Call WriteConsoleMsg(UserIndex, "El arma del objetivo ya esta encantada.", e_FontTypeNames.FONTTYPE_INFO)
             b = False
             Exit Sub
         End If

@@ -25,9 +25,21 @@ Attribute VB_Name = "NPCs"
 '
 '
 '
-Public Const MaxRespawn             As Integer = 255
+Private Const RespawnQueueRetryIntervalSeconds As Long = 5
 Public Const NpcIndexHeapSize       As Integer = 10000
-Public RespawnList(1 To MaxRespawn) As t_Npc
+' Store only respawn data so queued NPCs stay independent from recycled NpcList slots.
+Private Type t_NpcRespawnQueueEntry
+    Active As Byte
+    InformarRespawn As Byte
+    RespawnFlag As Byte
+    NpcNumber As Integer
+    SndRespawn As Integer
+    SpawnMap As Integer
+    Orig As t_WorldPos
+    IntervaloRespawn As Long
+End Type
+Private RespawnList(1 To MaxNPCs)   As t_NpcRespawnQueueEntry
+Private RespawnQueueLastUsedIndex   As Integer
 Private IdNpcLibres                 As t_IndexHeap
 Option Explicit
 
@@ -229,9 +241,21 @@ Sub MuereNpc(ByVal NpcIndex As Integer, ByVal UserIndex As Integer)
     If TiempoRespw = 0 Then
         Call ReSpawnNpc(MiNPC)
     Else
-        MiNPC.flags.NPCActive = True
         Indice = ObtenerIndiceRespawn
-        RespawnList(Indice) = MiNPC
+        If Indice = 0 Then
+            Call LogError("Respawn queue full | NpcNumber=" & MiNPC.Numero & " | QueueCapacity=" & MaxNPCs)
+            Exit Sub
+        End If
+        With RespawnList(Indice)
+            .Active = 1
+            .InformarRespawn = MiNPC.InformarRespawn
+            .RespawnFlag = MiNPC.flags.Respawn
+            .NpcNumber = MiNPC.Numero
+            .SndRespawn = MiNPC.flags.SndRespawn
+            .SpawnMap = MiNPC.pos.Map
+            .Orig = MiNPC.Orig
+            .IntervaloRespawn = MiNPC.Contadores.IntervaloRespawn
+        End With
     End If
     Exit Sub
 ErrHandler:
@@ -920,13 +944,13 @@ Function UpdateNpcSpeed(ByVal NpcIndex As Integer)
         Else
             .Char.speeding = 210 / .IntervaloMovimiento
         End If
-        .Char.speeding = .Char.speeding * max(0, (1 + .Modifiers.MovementSpeed))
+        .Char.speeding = .Char.speeding * modElementalCombat.CappedSpeedMult(.Modifiers.MovementSpeed)
         Call SendData(SendTarget.ToNPCArea, NpcIndex, PrepareMessageSpeedingACT(.Char.charindex, .Char.speeding))
     End With
 End Function
 
 Function GetNpcSpeedModifiers(ByVal NpcIndex As Integer) As Single
-    GetNpcSpeedModifiers = max(0, (1 + NpcList(NpcIndex).Modifiers.MovementSpeed))
+    GetNpcSpeedModifiers = modElementalCombat.CappedSpeedMult(NpcList(NpcIndex).Modifiers.MovementSpeed)
 End Function
 
 Function GetNpcName(ByVal NpcNumber As Integer) As String
@@ -1057,6 +1081,9 @@ Private Sub LoadNpcInfoIntoCache(ByVal NpcNumber As Integer)
         .ResistChanceVenenoGenericoPct = Val(LeerNPCs.GetValue(SectionName, "ResistChanceVenenoGenericoPct"))
         .ResistDanoVenenoGenericoFlat = Val(LeerNPCs.GetValue(SectionName, "ResistDanoVenenoGenericoFlat"))
         .ResistDanoVenenoGenericoPct = Val(LeerNPCs.GetValue(SectionName, "ResistDanoVenenoGenericoPct"))
+        ' --- Sistema de danos elementales (TOGGLE32 elemental_system) ---
+        Call modElementalCombat.ParseElementalSourceFromIni(LeerNPCs, SectionName, .Elemental)
+        Call modElementalCombat.ParseElementalResistFromIni(LeerNPCs, SectionName, .ElementalResist)
         .Domable = Val(LeerNPCs.GetValue(SectionName, "Domable"))
         .AttackableByEveryone = Val(LeerNPCs.GetValue(SectionName, "AttackableByEveryone", 0))
         .MapEntryPrice = Val(LeerNPCs.GetValue(SectionName, "MapEntryPrice", 0))
@@ -1253,6 +1280,30 @@ Private Sub LoadNpcInfoIntoCache(ByVal NpcNumber As Integer)
             Next LoopC
         Else
             Erase .Caminata
+        End If
+        If .npcType = e_NPCType.Transporter Then
+            Dim cityCount As Integer
+            cityCount = val(LeerNPCs.GetValue(SectionName, "CityCount", 0))
+            .cityCount = cityCount
+            If cityCount > 0 Then
+                ReDim .CityNames(1 To cityCount)
+                ReDim .CityMap(1 To cityCount)
+                ReDim .CityX(1 To cityCount)
+                ReDim .CityY(1 To cityCount)
+                ReDim .CityPrice(1 To cityCount)
+                Dim ci As Integer
+                For ci = 1 To cityCount
+                    Dim entry As String
+                    entry = LeerNPCs.GetValue(SectionName, "City" & ci)
+                    .CityNames(ci) = ReadField(1, entry, Asc("-"))
+                    .CityMap(ci) = val(ReadField(2, entry, Asc("-")))
+                    .CityX(ci) = val(ReadField(3, entry, Asc("-")))
+                    .CityY(ci) = val(ReadField(4, entry, Asc("-")))
+                    .CityPrice(ci) = val(ReadField(5, entry, Asc("-")))
+                Next ci
+            End If
+        Else
+            .cityCount = 0
         End If
     End With
     Exit Sub
@@ -1518,6 +1569,26 @@ Private Sub InitializeNpcFromInfo(ByVal NpcIndex As Integer, _
             .NroCriaturas = 0
             Erase .Criaturas
         End If
+        If .npcType = e_NPCType.Transporter Then
+            .TransportCityCount = Info.cityCount
+            If .TransportCityCount > 0 Then
+                ReDim .TransportCityNames(1 To .TransportCityCount)
+                ReDim .TransportCityMap(1 To .TransportCityCount)
+                ReDim .TransportCityX(1 To .TransportCityCount)
+                ReDim .TransportCityY(1 To .TransportCityCount)
+                ReDim .TransportCityPrice(1 To .TransportCityCount)
+                Dim tc As Integer
+                For tc = 1 To .TransportCityCount
+                    .TransportCityNames(tc) = Info.CityNames(tc)
+                    .TransportCityMap(tc) = Info.CityMap(tc)
+                    .TransportCityX(tc) = Info.CityX(tc)
+                    .TransportCityY(tc) = Info.CityY(tc)
+                    .TransportCityPrice(tc) = Info.CityPrice(tc)
+                Next tc
+            End If
+        Else
+            .TransportCityCount = 0
+        End If
         Call ResetMask(.flags.StatusMask)
         .flags.NPCActive = True
         Call ResetMask(.flags.BehaviorFlags)
@@ -1719,14 +1790,87 @@ End Sub
 Public Function ObtenerIndiceRespawn() As Integer
     On Error GoTo ErrHandler
     Dim LoopC As Integer
-    For LoopC = 1 To MaxRespawn
-        If Not RespawnList(LoopC).flags.NPCActive Then Exit For
+    For LoopC = 1 To RespawnQueueLastUsedIndex
+        If RespawnList(LoopC).Active = 0 Then
+            ObtenerIndiceRespawn = LoopC
+            Exit Function
+        End If
     Next LoopC
-    ObtenerIndiceRespawn = LoopC
+    If RespawnQueueLastUsedIndex >= MaxNPCs Then
+        ObtenerIndiceRespawn = 0
+        Exit Function
+    End If
+    RespawnQueueLastUsedIndex = RespawnQueueLastUsedIndex + 1
+    ObtenerIndiceRespawn = RespawnQueueLastUsedIndex
     Exit Function
 ErrHandler:
     Call LogError("Error en ObtenerIndiceRespawn")
 End Function
+
+Private Sub ClearRespawnQueueSlot(ByVal QueueIndex As Integer)
+    With RespawnList(QueueIndex)
+        .Active = 0
+        .InformarRespawn = 0
+        .RespawnFlag = 0
+        .NpcNumber = 0
+        .SndRespawn = 0
+        .SpawnMap = 0
+        .Orig.Map = 0
+        .Orig.x = 0
+        .Orig.y = 0
+        .IntervaloRespawn = 0
+    End With
+End Sub
+
+Private Sub ReleaseRespawnQueueSlot(ByVal QueueIndex As Integer)
+    Call ClearRespawnQueueSlot(QueueIndex)
+    If QueueIndex <> RespawnQueueLastUsedIndex Then Exit Sub
+    Do While RespawnQueueLastUsedIndex > 0
+        If RespawnList(RespawnQueueLastUsedIndex).Active <> 0 Then Exit Do
+        RespawnQueueLastUsedIndex = RespawnQueueLastUsedIndex - 1
+    Loop
+End Sub
+
+Private Function RespawnQueuedNpc(ByRef QueueEntry As t_NpcRespawnQueueEntry) As Boolean
+    On Error GoTo ErrHandler
+    If QueueEntry.RespawnFlag <> 0 Then
+        RespawnQueuedNpc = True
+    Else
+        RespawnQueuedNpc = (CrearNPC(QueueEntry.NpcNumber, QueueEntry.SpawnMap, QueueEntry.Orig) <> 0)
+    End If
+    Exit Function
+ErrHandler:
+    Call TraceError(Err.Number, Err.Description, "NPCs.RespawnQueuedNpc", Erl)
+End Function
+
+Public Sub ProcessRespawnQueue()
+    On Error GoTo ErrHandler
+    Dim QueueIndex As Integer
+    Dim QueueEntry As t_NpcRespawnQueueEntry
+    For QueueIndex = 1 To RespawnQueueLastUsedIndex
+        If RespawnList(QueueIndex).Active <> 0 Then
+            If RespawnList(QueueIndex).IntervaloRespawn > 0 Then
+                RespawnList(QueueIndex).IntervaloRespawn = RespawnList(QueueIndex).IntervaloRespawn - 1
+            Else
+                QueueEntry = RespawnList(QueueIndex)
+                If RespawnQueuedNpc(QueueEntry) Then
+                    Call ReleaseRespawnQueueSlot(QueueIndex)
+                    If QueueEntry.InformarRespawn = 1 Then
+                        Call SendData(SendTarget.ToAll, 0, PrepareMessageLocaleMsg(MSG_VUELTO_MUNDO, QueueEntry.NpcNumber, e_FontTypeNames.FONTTYPE_EXP))
+                        If QueueEntry.SndRespawn > 0 Then
+                            Call SendData(SendTarget.ToAll, 0, PrepareMessagePlayWave(QueueEntry.SndRespawn, NO_3D_SOUND, NO_3D_SOUND))
+                        End If
+                    End If
+                Else
+                    RespawnList(QueueIndex).IntervaloRespawn = RespawnQueueRetryIntervalSeconds
+                End If
+            End If
+        End If
+    Next QueueIndex
+    Exit Sub
+ErrHandler:
+    Call TraceError(Err.Number, Err.Description, "NPCs.ProcessRespawnQueue", Erl)
+End Sub
 
 Sub QuitarMascota(ByVal UserIndex As Integer, ByVal NpcIndex As Integer)
     '***************************************************
@@ -1886,7 +2030,15 @@ Public Function DoDamageOrHeal(ByVal NpcIndex As Integer, _
         If SourceType = eUser Then
             DamageStr = PonerPuntos(Math.Abs(amount))
             If UserList(SourceIndex).ChatCombate = 1 Then
-                Call WriteLocaleMsg(SourceIndex, MSG_DEALT_DAMAGE_TO_CREATURE, e_FontTypeNames.FONTTYPE_FIGHT, DamageStr)
+                ' Plan 20.002 TP4: si el dano es elemental (e_dot con color de tipo), nombrar el tipo en consola.
+                Dim dmgTypeName As String
+                dmgTypeName = vbNullString
+                If DamageSourceType = e_dot Then dmgTypeName = modElementalCombat.DamageTypeNameFromColor(DamageColor)
+                If LenB(dmgTypeName) > 0 Then
+                    Call WriteLocaleMsg(SourceIndex, MSG_DEALT_TYPED_DAMAGE_TO_CREATURE, e_FontTypeNames.FONTTYPE_FIGHT, DamageStr & Chr(&HAC) & dmgTypeName)
+                Else
+                    Call WriteLocaleMsg(SourceIndex, MSG_DEALT_DAMAGE_TO_CREATURE, e_FontTypeNames.FONTTYPE_FIGHT, DamageStr)
+                End If
             End If
         End If
         amount = EffectsOverTime.TargetApplyDamageReduction(NpcList(NpcIndex).EffectOverTime, amount, SourceIndex, SourceType, DamageSourceType)

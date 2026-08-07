@@ -31,7 +31,10 @@ Public m_NameIndex As New Dictionary
 Public Function esCiudad(ByVal Map As Integer) As Boolean
     Dim i As Byte
     For i = 0 To UBound(TotalMapasCiudades)
-        If TotalMapasCiudades(i) = Map Then
+        ' 06.002: la lista viene de concatenar Ciudades.dat y una ciudad sin seccion (hoy Forgat
+        ' y Eldoria) deja elementos vacios; comparar String vacio = Integer da error 13 y mataba
+        ' CrearReto en silencio. val() coerciona seguro: "" -> 0 y nunca matchea un mapa real.
+        If val(TotalMapasCiudades(i)) = Map Then
             esCiudad = True
             Exit Function
         End If

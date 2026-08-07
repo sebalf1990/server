@@ -207,17 +207,25 @@ End Sub
 
 Public Sub CargarSpawnList()
     On Error GoTo CargarSpawnList_Err
+    'Optimizacion de arranque: cargar npcs.dat una sola vez en memoria con
+    'clsIniManager en vez de GetVar. GetVar (GetPrivateProfileString) reescanea
+    'el archivo COMPLETO por llamada; con NumNPCs ~9000 eran ~18000 escaneos de
+    'npcs.dat por boot. Mismo patron que LoadOBJData.
     Dim n As Integer, LoopC As Integer
-    n = val(GetVar(DatPath & "npcs.dat", "INIT", "NumNPCs"))
+    Dim Leer As clsIniManager
+    Set Leer = New clsIniManager
+    Call Leer.Initialize(DatPath & "npcs.dat")
+    n = val(Leer.GetValue("INIT", "NumNPCs"))
     ReDim SpawnList(n) As t_CriaturasEntrenador
     For LoopC = 1 To n
         SpawnList(LoopC).NpcIndex = LoopC
-        SpawnList(LoopC).NpcName = GetVar(DatPath & "npcs.dat", "NPC" & LoopC, "Name")
-        SpawnList(LoopC).PuedeInvocar = val(GetVar(DatPath & "npcs.dat", "NPC" & LoopC, "PuedeInvocar")) = 1
+        SpawnList(LoopC).NpcName = Leer.GetValue("NPC" & LoopC, "Name")
+        SpawnList(LoopC).PuedeInvocar = val(Leer.GetValue("NPC" & LoopC, "PuedeInvocar")) = 1
         If Len(SpawnList(LoopC).NpcName) = 0 Then
             SpawnList(LoopC).NpcName = "Nada"
         End If
     Next LoopC
+    Set Leer = Nothing
     Exit Sub
 CargarSpawnList_Err:
     Call TraceError(Err.Number, Err.Description, "ES.CargarSpawnList", Erl)
@@ -603,6 +611,11 @@ Public Sub CargarHechizos()
         ' --- Sistema venenos nuevo (TOGGLE26) ---
         Hechizos(Hechizo).FamiliaVeneno = val(Leer.GetValue("Hechizo" & Hechizo, "FamiliaVeneno"))
         Hechizos(Hechizo).ChanceAplicarPct = val(Leer.GetValue("Hechizo" & Hechizo, "ChanceAplicarPct"))
+        ' --- Sistema de danos elementales (TOGGLE32) ---
+        Hechizos(Hechizo).CritChance = val(Leer.GetValue("Hechizo" & Hechizo, "CritChance"))
+        Hechizos(Hechizo).CritMultiplier = val(Leer.GetValue("Hechizo" & Hechizo, "CritMultiplier"))
+        Call modElementalCombat.ParseElementalSourceFromIni(Leer, "Hechizo" & Hechizo, Hechizos(Hechizo).Elemental)
+        Hechizos(Hechizo).EnchantWeaponDurationMs = val(Leer.GetValue("Hechizo" & Hechizo, "EnchantWeaponDurationMs"))
         Hechizos(Hechizo).TickIntervaloMs = val(Leer.GetValue("Hechizo" & Hechizo, "TickIntervaloMs"))
         Hechizos(Hechizo).DuracionMs = val(Leer.GetValue("Hechizo" & Hechizo, "DuracionMs"))
         Hechizos(Hechizo).DanoModo = val(Leer.GetValue("Hechizo" & Hechizo, "DanoModo"))
@@ -710,6 +723,16 @@ Public Sub LoadEffectOverTime()
         EffectOverTime(i).SelfHealingBonus = val(Leer.GetValue("EOT" & i, "SelfHealingBonus"))
         EffectOverTime(i).MagicHealingBonus = val(Leer.GetValue("EOT" & i, "MagicHealingBonus"))
         EffectOverTime(i).ClientEffectTypeId = val(Leer.GetValue("EOT" & i, "ClientEffectTypeId"))
+        EffectOverTime(i).DamageColor = val(Leer.GetValue("EOT" & i, "DamageColor"))
+        EffectOverTime(i).ApplyMsg = Leer.GetValue("EOT" & i, "ApplyMsg")
+        EffectOverTime(i).DanoModo = val(Leer.GetValue("EOT" & i, "DanoModo"))
+        EffectOverTime(i).FactorPvP = val(Leer.GetValue("EOT" & i, "FactorPvP"))
+        EffectOverTime(i).FactorPvE = val(Leer.GetValue("EOT" & i, "FactorPvE"))
+        EffectOverTime(i).DanoPorStackMin = val(Leer.GetValue("EOT" & i, "DanoPorStackMin"))
+        EffectOverTime(i).DanoPorStackMax = val(Leer.GetValue("EOT" & i, "DanoPorStackMax"))
+        EffectOverTime(i).StacksMax = val(Leer.GetValue("EOT" & i, "StacksMax"))
+        EffectOverTime(i).GolpesQueSumanStacks = val(Leer.GetValue("EOT" & i, "GolpesQueSumanStacks"))
+        EffectOverTime(i).IntervaloDecayStackMs = val(Leer.GetValue("EOT" & i, "IntervaloDecayStackMs"))
         EffectOverTime(i).PhysicalLinearBonus = val(Leer.GetValue("EOT" & i, "PhysicalLinearBonus"))
         EffectOverTime(i).DefenseBonus = val(Leer.GetValue("EOT" & i, "DefenseBonus"))
         EffectOverTime(i).buffType = val(Leer.GetValue("EOT" & i, "BuffType"))
@@ -1150,6 +1173,7 @@ Sub LoadOBJData()
             ' --- Sistema de venenos nuevo (TOGGLE26 new_poison_system) ---
             .FamiliaVeneno = val(Leer.GetValue(ObjKey, "FamiliaVeneno"))
             .FamiliasCompatibles = Leer.GetValue(ObjKey, "FamiliasCompatibles")
+            .TiposElementalCompatibles = Leer.GetValue(ObjKey, "TiposElementalCompatibles")
             .ChanceAplicarPct = val(Leer.GetValue(ObjKey, "ChanceAplicarPct"))
             .TickIntervaloMs = val(Leer.GetValue(ObjKey, "TickIntervaloMs"))
             .DuracionMs = val(Leer.GetValue(ObjKey, "DuracionMs"))
@@ -1208,6 +1232,11 @@ Sub LoadOBJData()
             .InmunidadVenenoMenor = val(Leer.GetValue(ObjKey, "InmunidadVenenoMenor"))
             .InmunidadHemo = val(Leer.GetValue(ObjKey, "InmunidadHemo"))
             .InmunidadNeuro = val(Leer.GetValue(ObjKey, "InmunidadNeuro"))
+            ' --- Sistema de danos elementales (TOGGLE32 elemental_system) ---
+            Call modElementalCombat.ParseElementalSourceFromIni(Leer, ObjKey, .Elemental)
+            Call modElementalCombat.ParseElementalResistFromIni(Leer, ObjKey, .ElementalResist)
+            .EnchantWeaponDurationMs = val(Leer.GetValue(ObjKey, "EnchantWeaponDurationMs"))
+            .EnchantAmmoDurationMs = val(Leer.GetValue(ObjKey, "EnchantAmmoDurationMs"))
             If val(Leer.GetValue(ObjKey, "Bindable")) > 0 Then Call SetMask(.ObjFlags, e_ObjFlags.e_Bindable)
             If val(Leer.GetValue(ObjKey, "UseOnSafeAreaOnly")) > 0 Then Call SetMask(.ObjFlags, e_ObjFlags.e_UseOnSafeAreaOnly)
             Dim i As Integer
@@ -1496,6 +1525,10 @@ Sub LoadOBJData()
             'CHECK: !!! Esto es provisorio hasta que los de Dateo cambien los valores de string a numerico  -  Nunca más papu
             Dim n As Integer
             Dim s As String
+            Dim ListaRazasObjDat(1 To NUMRAZAS) As String
+            For i = 1 To NUMRAZAS
+                ListaRazasObjDat(i) = RaceToString(i)
+            Next i
             For i = 1 To NUMCLASES
                 s = UCase$(Leer.GetValue(ObjKey, "CP" & i))
                 n = 1
@@ -1507,10 +1540,11 @@ Sub LoadOBJData()
             For i = 1 To NUMRAZAS
                 s = UCase$(Leer.GetValue(ObjKey, "RP" & i))
                 n = 1
-                Do While LenB(s) > 0 And Tilde(ListaRazas(n)) <> Trim$(s)
+                Do While LenB(s) > 0 And N <= NUMRAZAS
+                    If Tilde(ListaRazasObjDat(N)) = Trim$(s) Then Exit Do
                     n = n + 1
                 Loop
-                .RazaProhibida(i) = IIf(LenB(s) > 0, n, 0)
+                .RazaProhibida(i) = IIf(LenB(s) > 0 And n <= NUMRAZAS, n, 0)
             Next i
             ' Skill requerido
             str = Leer.GetValue(ObjKey, "SkillRequerido")
@@ -1972,7 +2006,7 @@ Public Sub CargarMapaFormatoCSM(ByVal Map As Long, ByVal MAPFl As String)
                         End If
                     Else
                         ' Lo guardo en los logs + aparece en el Debug.Print
-                        Call TraceError(404, "NPC no existe en los .DAT's o está mal dateado. Posicion: " & Map & "-" & NPCs(i).x & "-" & NPCs(i).y, "ES.CargarMapaFormatoCSM")
+                        Call TraceError(404, "NPC no existe en los .DAT's o está mal dateado. NpcIndex: " & NumNpc & " Posicion: " & Map & "-" & NPCs(i).x & "-" & NPCs(i).y, "ES.CargarMapaFormatoCSM")
                     End If
                 End If
             Next i
@@ -1997,8 +2031,10 @@ Public Sub CargarMapaFormatoCSM(ByVal Map As Long, ByVal MAPFl As String)
             MapDat.restrict_mode = "0"
         End If
     End If
-    If SailingTiles * 100 / TotalTiles > SvrConfig.GetValue("FISHING_REQUIRED_PERCENT") And Not MapDat.Seguro Then
-        Call AddFishingPoolsToMap(Map)
+    If TotalTiles > 0 Then
+        If SailingTiles * 100 / TotalTiles > SvrConfig.GetValue("FISHING_REQUIRED_PERCENT") And Not MapDat.Seguro Then
+            Call AddFishingPoolsToMap(Map)
+        End If
     End If
     MapInfo(Map).map_name = MapDat.map_name
     MapInfo(Map).MapResource = Map
@@ -2050,7 +2086,7 @@ Public Sub CargarMapaFormatoCSM(ByVal Map As Long, ByVal MAPFl As String)
     Exit Sub
 ErrorHandler:
     Close fh
-    Call TraceError(Err.Number, Err.Description, "ES.CargarMapaFormatoCSM", Erl)
+    Call TraceError(Err.Number, Err.Description & " | Mapa: " & Map & " (" & MAPFl & ")", "ES.CargarMapaFormatoCSM", Erl)
 End Sub
 
 Sub AddFishingPoolsToMap(ByVal Map As Integer)
@@ -2152,8 +2188,18 @@ Sub LoadFeatureToggles()
     Dim Lector   As clsIniManager
     Dim Temporal As Long
     Set FeatureToggles = New Dictionary
-    If Not FileExist("feature_toggle.ini") Then
-        Exit Sub
+    ' 06.002 Ola 3: el check de existencia era relativo al CWD pero la carga usa IniPath;
+    ' arrancado desde otra carpeta los toggles no cargaban y TODO quedaba apagado en silencio.
+    If Not FileExist(IniPath & "feature_toggle.ini") Then
+        ' Transporte por template versionado (decision del dueno, 06.002 Ola 3): si falta el
+        ' archivo real (deploy nuevo), se crea desde el template y queda registrado en el log.
+        If FileExist(IniPath & "feature_toggle.ini.template") Then
+            Call FileSystem.FileCopy(IniPath & "feature_toggle.ini.template", IniPath & "feature_toggle.ini")
+            Call LogThis(0, "[FeatureToggles] feature_toggle.ini creado desde el template versionado", vbLogEventTypeWarning)
+        Else
+            Call LogThis(0, "[FeatureToggles] feature_toggle.ini NO ENCONTRADO en " & IniPath & " - todos los toggles quedan APAGADOS", vbLogEventTypeWarning)
+            Exit Sub
+        End If
     End If
     If frmMain.Visible Then frmMain.txStatus.Caption = "Cargando info de feature toggles."
     Set Lector = New clsIniManager
@@ -2172,6 +2218,9 @@ Sub LoadFeatureToggles()
         Call SetFeatureToggle(key, value)
     Next i
     Set Lector = Nothing
+    ' 06.002 Ola 3: verificacion explicita en boot del interruptor maestro del motor elemental
+    ' (la clave ausente = apagado en silencio; que quede registrado siempre).
+    Call LogThis(0, "[FeatureToggles] " & TOGGLECOUNT & " toggles cargados. elemental_system=" & IIf(IsFeatureEnabled("elemental_system"), "ON", "OFF"), vbLogEventTypeInformation)
     Exit Sub
 LoadFeatureToggles_Err:
     Set Lector = Nothing
@@ -3072,6 +3121,10 @@ Public Sub CargarDonadores()
 End Sub
 
 Public Function IsFeatureEnabled(ByVal featureName As String)
+    ' Step 6 (plan 20.002): veneno unificado bajo el toggle maestro elemental.
+    ' "new_poison_system" quedo aliased a "elemental_system" (un solo interruptor;
+    ' elemental_system=0 => veneno ancestral/legacy). Reversible: borrar la linea alias.
+    If featureName = "new_poison_system" Then featureName = "elemental_system"
     If FeatureToggles.Exists(featureName) Then
         IsFeatureEnabled = FeatureToggles.Item(featureName)
     Else

@@ -214,29 +214,11 @@ End Sub
 ' --- Logica propia ---
 Private Sub PerformTick()
     Dim TickDmg As Long
-    Dim targetMaxHp As Long
     Dim factor As Single
     factor = 1
-    Select Case DanoModo
-        Case 0 ' fijo
-            TickDmg = DanoMin
-        Case 1 ' rango
-            TickDmg = RandomNumber(DanoMin, DanoMax)
-        Case 2 ' pct_hp fijo
-            If DotInfo.TargetRef.RefType = eUser Then
-                targetMaxHp = UserList(DotInfo.TargetRef.ArrayIndex).Stats.MaxHp
-            Else
-                targetMaxHp = NpcList(DotInfo.TargetRef.ArrayIndex).Stats.MaxHp
-            End If
-            TickDmg = (CLng(DanoMin) * targetMaxHp) \ 100
-        Case 3 ' pct_hp rango
-            If DotInfo.TargetRef.RefType = eUser Then
-                targetMaxHp = UserList(DotInfo.TargetRef.ArrayIndex).Stats.MaxHp
-            Else
-                targetMaxHp = NpcList(DotInfo.TargetRef.ArrayIndex).Stats.MaxHp
-            End If
-            TickDmg = (CLng(RandomNumber(DanoMin, DanoMax)) * targetMaxHp) \ 100
-    End Select
+    ' Roll base del tick via receta unica compartida (modElementalCombat).
+    ' El veneno trabaja con dano positivo; se niega mas abajo al aplicar.
+    TickDmg = modElementalCombat.RollDotTickBase(DotInfo.TargetRef.ArrayIndex, DotInfo.TargetRef.RefType, DanoModo, DanoMin, DanoMax)
     ' Factor PvP/PvE
     If IsValidRef(Source) And Source.RefType = eUser And DotInfo.TargetRef.RefType = eUser Then
         factor = FactorPvP
@@ -245,16 +227,16 @@ Private Sub PerformTick()
     End If
     If factor <= 0 Then factor = 1
     TickDmg = CLng(TickDmg * factor)
-    ' Cascada de resistencia del target (familia 1 = Veneno Menor).
-    ' User: consulta items equipados (puede cambiar mid-tick).
-    ' NPC: consulta NpcInfoCache via GetNpcPoisonResist (deterministic per tipo NPC).
-    Dim resistT As t_PoisonResist
+    ' Resistencia al DAÑO del tipo Veneno (motor elemental unificado - Step 4).
+    ' La inmunidad/chance de no envenenarse es resist-al-EFECTO y se chequea al aplicar.
+    Dim rE As t_ElementalResist
+    Dim nulPoison As Boolean
     If DotInfo.TargetRef.RefType = eUser Then
-        resistT = GetUserPoisonResist(DotInfo.TargetRef.ArrayIndex, 1)
-        TickDmg = ApplyDamageResist(TickDmg, resistT)
+        rE = GetUserElementalResist(DotInfo.TargetRef.ArrayIndex, e_ElementalDamageType.eDmgPoison)
+        TickDmg = ApplyElementalResist(TickDmg, rE, e_ElementalDamageType.eDmgPoison, nulPoison)
     ElseIf DotInfo.TargetRef.RefType = eNpc Then
-        resistT = GetNpcPoisonResist(DotInfo.TargetRef.ArrayIndex, 1)
-        TickDmg = ApplyDamageResist(TickDmg, resistT)
+        rE = GetNpcElementalResist(DotInfo.TargetRef.ArrayIndex, e_ElementalDamageType.eDmgPoison)
+        TickDmg = ApplyElementalResist(TickDmg, rE, e_ElementalDamageType.eDmgPoison, nulPoison)
     End If
     If TickDmg <= 0 Then Exit Sub ' tick sin dano (resistencias / factores)
     If DotInfo.TargetRef.RefType = eUser Then

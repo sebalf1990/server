@@ -64,7 +64,8 @@ Private Sub SetEotEffect()
         TickTime = .TickTime
         TickCount = .Ticks
         If EffectInfo.TargetRef.RefType = eUser Then
-            If .ClientEffectTypeId > 0 Then Call WriteSendSkillCdUpdate(EffectInfo.TargetRef.ArrayIndex, .ClientEffectTypeId, EffectInfo.UniqueId, .TickTime, .buffType, TickCount)
+            ' 06.002 Ola 4: faltaba TotalTime (buffType caia como TotalTime y TickCount como SkillType).
+            If .ClientEffectTypeId > 0 Then Call WriteSendSkillCdUpdate(EffectInfo.TargetRef.ArrayIndex, .ClientEffectTypeId, EffectInfo.UniqueId, .TickTime, .TickTime, .buffType, TickCount)
         End If
     End With
 End Sub
@@ -82,19 +83,20 @@ Public Property Get IBaseEffectOverTime_UniqueId() As Long
 End Property
 
 Public Property Get IBaseEffectOverTime_CasterIsValid() As Boolean
-    IBaseEffectOverTime_CasterIsValid = IsValidRef(EffectInfo.TargetRef)
+    ' 06.002 Ola 4: exponian el TARGET como caster (rompia el dedup por caster de FindEffectOnTarget).
+    IBaseEffectOverTime_CasterIsValid = IsValidRef(Source)
 End Property
 
 Public Property Get IBaseEffectOverTime_CasterArrayIndex() As Integer
-    IBaseEffectOverTime_CasterArrayIndex = EffectInfo.TargetRef.ArrayIndex
+    IBaseEffectOverTime_CasterArrayIndex = Source.ArrayIndex
 End Property
 
 Public Property Get IBaseEffectOverTime_CasterRefType() As e_ReferenceType
-    IBaseEffectOverTime_CasterRefType = EffectInfo.TargetRef.RefType
+    IBaseEffectOverTime_CasterRefType = Source.RefType
 End Property
 
 Public Property Get IBaseEffectOverTime_CasterUserId() As Long
-    IBaseEffectOverTime_CasterUserId = EffectInfo.TargetRef.UserId
+    IBaseEffectOverTime_CasterUserId = Source.UserId
 End Property
 
 Public Property Get IBaseEffectOverTime_TargetIsValid() As Boolean

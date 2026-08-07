@@ -226,7 +226,11 @@ Private Function CanStartGlobalQuest(ByVal GlobalQuestIndex As Integer) As Boole
 
     With GlobalQuestInfo(GlobalQuestIndex)
         If LenB(.Name) = 0 Or .ObjectIndex <= 0 Or .GatheringThreshold <= 0 Then
-            Call LogError("Skipping invalid GlobalQuest " & GlobalQuestIndex & " " & .Name)
+            'GlobalQuest invalida/deshabilitada (p.ej. placeholder con ObjectIndex=0):
+            'se saltea en silencio. Antes esta rama logueaba por tick y spameaba el
+            'boot (32x "Skipping invalid GlobalQuest 1"). Para activar el evento
+            'Heroism, completar la entrada en GlobalQuests.dat (NPC boss, ObjectIndex,
+            'GatheringThreshold, StartDate/EndDate).
             Exit Function
         End If
     End With

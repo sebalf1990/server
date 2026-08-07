@@ -560,6 +560,7 @@ Sub Main()
     frmCargando.Label1(2).Caption = "Cargando EffectsOverTime.Dat"
     Call LoadEffectOverTime
     Call LoadPoisonProfiles
+    Call modElementalCombat.LoadDamageTypes
     frmCargando.Label1(2).Caption = "Cargando Objetos de Herrería"
     Call LoadArmasHerreria
     Call LoadArmadurasHerreria

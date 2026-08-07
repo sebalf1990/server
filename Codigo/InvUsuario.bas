@@ -728,9 +728,13 @@ Dim obj                         As t_ObjData
                     .invent.Object(Slot).Equipped = 0
                     .invent.EquippedWeaponObjIndex = 0
                     .invent.EquippedWeaponSlot = 0
-                    ' Sistema venenos (TOGGLE26): si el arma estaba untada, limpiar el estado
-                    If IsFeatureEnabled("new_poison_system") And .flags.PoisonedWeaponObjIndex > 0 Then
+                    ' Si el arma estaba untada, limpiar el estado (sin gate de toggle: criterio 06.002 ola 1)
+                    If .flags.PoisonedWeaponObjIndex > 0 Then
                         Call ClearPoisonedWeapon(UserIndex, "El veneno del arma se ha perdido al desequiparla.")
+                    End If
+                    ' 06.002 (decision del dueno): el encantamiento muere al desequipar (paridad con el veneno).
+                    If .flags.EnchantWeaponObjIndex > 0 Then
+                        Call ClearEnchantedWeapon(UserIndex, "El encantamiento del arma se ha perdido al desequiparla.")
                     End If
                     .Char.Arma_Aura = ""
                     Call SendData(SendTarget.ToPCAliveArea, UserIndex, PrepareMessageAuraToChar(.Char.charindex, 0, True, 1))
@@ -742,10 +746,12 @@ Dim obj                         As t_ObjData
                         Call WriteUpdateDM(UserIndex)
                     End If
                 Case e_OBJType.otArrows
-                    If IsFeatureEnabled("new_poison_system") Then
-                        If .invent.EquippedMunitionSlot = Slot Then
-                            Call ClearPoisonedAmmo(UserIndex, "Ya no tenes flechas envenenadas equipadas.", "desequipar_manual")
-                        End If
+                    If .invent.EquippedMunitionSlot = Slot Then
+                        ' Sin gate de toggle (criterio 06.002 ola 1: limpiar es seguro siempre).
+                        Call ClearPoisonedAmmo(UserIndex, "Ya no tenes flechas envenenadas equipadas.", "desequipar_manual")
+                        ' 06.002 (decision del dueno): el encantamiento muere al desequipar (paridad con el veneno).
+                        ' El disparo normal NO pasa por aca (QuitarUserInvItem solo desequipa al agotar el stack).
+                        Call ClearEnchantedAmmo(UserIndex, "El encantamiento de tus flechas se ha perdido al desequiparlas.")
                     End If
                     .invent.Object(Slot).Equipped = 0
                     .invent.EquippedMunitionObjIndex = 0
@@ -1214,7 +1220,6 @@ Dim Ropaje                      As Integer
                     .invent.Object(Slot).Equipped = 1
                     .invent.EquippedWeaponObjIndex = .invent.Object(Slot).ObjIndex
                     .invent.EquippedWeaponSlot = Slot
-                    Call ValidateEquippedArrow(UserIndex)
                     If obj.DosManos = 1 Then
                         If .invent.EquippedShieldObjIndex > 0 Then
                             Call Desequipar(UserIndex, .invent.EquippedShieldSlot)
@@ -1337,6 +1342,14 @@ Dim Ropaje                      As Integer
                 .invent.Object(Slot).Equipped = 1
                 .invent.EquippedAmuletAccesoryObjIndex = .invent.Object(Slot).ObjIndex
                 .invent.EquippedAmuletAccesorySlot = Slot
+                ' CP3 (20.002 Step 7): equipar un orbe elemental anula el encantamiento del arma (exclusividad)
+                If modElementalCombat.ElementalSystemEnabled() Then
+                    If modElementalCombat.HasElementalOrbEquipped(UserIndex) Then
+                        Call modElementalCombat.ClearEnchantedWeapon(UserIndex, "El orbe anula el encantamiento de tu arma.")
+                        If .flags.PoisonedWeaponObjIndex > 0 Then Call ClearPoisonedWeapon(UserIndex, "El orbe anula el veneno de tu arma.")
+                        If .flags.PoisonedAmmoObjIndex > 0 Then Call ClearPoisonedAmmo(UserIndex, "El orbe anula el veneno de tus flechas.", "orbe")
+                    End If
+                End If
                 Select Case obj.EfectoMagico
                     Case e_MagicItemEffect.eModifyAttributes    'Modif la fuerza, agilidad, carisma, etc
                         .Stats.UserAtributosBackUP(obj.QueAtributo) = .Stats.UserAtributosBackUP(obj.QueAtributo) + obj.CuantoAumento
@@ -1791,6 +1804,50 @@ Sub UseInvItem(ByVal UserIndex As Integer, ByVal Slot As Byte, ByVal ByClick As 
         ObjIndex = .invent.Object(Slot).ObjIndex
         .flags.TargetObjInvIndex = ObjIndex
         .flags.TargetObjInvSlot = Slot
+        ' --- Encantar Arma elemental (TOGGLE32): aceite/orbe con payload encantan el arma equipada ---
+        If modElementalCombat.ElementalSystemEnabled() And obj.EnchantWeaponDurationMs <> 0 Then
+            Dim ewMsg As String
+            If Not modElementalCombat.CanEnchantWeapon(UserIndex, .invent.EquippedWeaponObjIndex, obj.Elemental, ewMsg) Then
+                Call WriteConsoleMsg(UserIndex, ewMsg, e_FontTypeNames.FONTTYPE_INFO)
+                Exit Sub
+            End If
+            ' CP1 fix (paridad veneno): rechazar re-encantar si el arma ya tiene encantamiento activo
+            If modElementalCombat.IsWeaponEnchantedActive(UserIndex, .invent.EquippedWeaponObjIndex) Then
+                Call WriteConsoleMsg(UserIndex, "Tu arma ya esta encantada.", e_FontTypeNames.FONTTYPE_INFO)
+                Exit Sub
+            End If
+            Call modElementalCombat.SetEnchantedWeapon(UserIndex, .invent.EquippedWeaponObjIndex, obj.Elemental, obj.CargasQueOtorga, obj.EnchantWeaponDurationMs)
+            If obj.EnchantWeaponDurationMs < 0 Then
+                Call WriteConsoleMsg(UserIndex, "Encantaste tu arma de forma permanente.", e_FontTypeNames.FONTTYPE_FIGHT)
+            Else
+                Call WriteConsoleMsg(UserIndex, "Encantaste tu arma (" & (obj.EnchantWeaponDurationMs \ 1000) & "s).", e_FontTypeNames.FONTTYPE_FIGHT)
+            End If
+            Call QuitarUserInvItem(UserIndex, Slot, 1)
+            Call UpdateUserInv(False, UserIndex, Slot)
+            Exit Sub
+        End If
+
+        ' --- Encantar Flechas elemental (TOGGLE32, 20.002 CP1 ammo): aceite con payload encanta las flechas equipadas ---
+        If modElementalCombat.ElementalSystemEnabled() And obj.EnchantAmmoDurationMs <> 0 Then
+            Dim eaMsg As String
+            If Not modElementalCombat.CanEnchantAmmo(UserIndex, .invent.EquippedMunitionObjIndex, obj.Elemental, eaMsg) Then
+                Call WriteConsoleMsg(UserIndex, eaMsg, e_FontTypeNames.FONTTYPE_INFO)
+                Exit Sub
+            End If
+            If modElementalCombat.IsAmmoEnchantedActive(UserIndex, .invent.EquippedMunitionObjIndex) Then
+                Call WriteConsoleMsg(UserIndex, "Tus flechas ya estan encantadas.", e_FontTypeNames.FONTTYPE_INFO)
+                Exit Sub
+            End If
+            Call modElementalCombat.SetEnchantedAmmo(UserIndex, .invent.EquippedMunitionObjIndex, obj.Elemental, obj.CargasQueOtorga, obj.EnchantAmmoDurationMs)
+            If obj.EnchantAmmoDurationMs < 0 Then
+                Call WriteConsoleMsg(UserIndex, "Encantaste tus flechas de forma permanente.", e_FontTypeNames.FONTTYPE_FIGHT)
+            Else
+                Call WriteConsoleMsg(UserIndex, "Encantaste tus flechas (" & (obj.EnchantAmmoDurationMs \ 1000) & "s).", e_FontTypeNames.FONTTYPE_FIGHT)
+            End If
+            Call QuitarUserInvItem(UserIndex, Slot, 1)
+            Call UpdateUserInv(False, UserIndex, Slot)
+            Exit Sub
+        End If
 
         If obj.ProfesionId > 0 Then
             If obj.OBJType = e_OBJType.otUseOnce Then
@@ -2210,6 +2267,11 @@ Sub UseInvItem(ByVal UserIndex As Integer, ByVal Slot As Byte, ByVal ByClick As 
                     Case e_PotionType.AppliesPoisonToWeapon
                         ' --- Sistema venenos (TOGGLE26): vial contextual arma/flechas ---
                         If Not IsFeatureEnabled("new_poison_system") Then Exit Sub
+                        ' CP3 (20.002 Step 7): el orbe elemental equipado anula/bloquea el untado de veneno
+                        If modElementalCombat.HasElementalOrbEquipped(UserIndex) Then
+                            Call WriteConsoleMsg(UserIndex, "No podes untar veneno con un orbe equipado.", e_FontTypeNames.FONTTYPE_INFO)
+                            Exit Sub
+                        End If
                         If obj.FamiliaVeneno < 1 Or obj.FamiliaVeneno > 3 Or obj.CargasQueOtorga <= 0 Then
                             Call WriteConsoleMsg(UserIndex, "El vial de veneno no esta configurado correctamente.", e_FontTypeNames.FONTTYPE_INFO)
                             Exit Sub
@@ -2249,6 +2311,10 @@ Sub UseInvItem(ByVal UserIndex As Integer, ByVal Slot As Byte, ByVal ByClick As 
                                 Exit Sub
                             End If
 
+                            If modElementalCombat.IsAmmoEnchantedActive(UserIndex, equipAmmo) Then
+                                Call WriteConsoleMsg(UserIndex, "Tus flechas ya estan encantadas.", e_FontTypeNames.FONTTYPE_INFO)
+                                Exit Sub
+                            End If
                             .flags.PoisonedAmmoObjIndex = equipAmmo
                             .flags.PoisonedAmmoFamilia = obj.FamiliaVeneno
                             .flags.PoisonedAmmoCargas = obj.CargasQueOtorga
@@ -2303,6 +2369,10 @@ Sub UseInvItem(ByVal UserIndex As Integer, ByVal Slot As Byte, ByVal ByClick As 
                         ' Si el arma ya esta untada con MISMA familia, rechazar (no se superpone)
                         If .flags.PoisonedWeaponObjIndex = equipWpn And .flags.PoisonedWeaponCargas > 0 Then
                             Call WriteConsoleMsg(UserIndex, "Tu arma ya esta untada con veneno.", e_FontTypeNames.FONTTYPE_INFO)
+                            Exit Sub
+                        End If
+                        If modElementalCombat.IsWeaponEnchantedActive(UserIndex, equipWpn) Then
+                            Call WriteConsoleMsg(UserIndex, "Tu arma ya esta encantada.", e_FontTypeNames.FONTTYPE_INFO)
                             Exit Sub
                         End If
                         ' Aplicar untado
@@ -4380,9 +4450,6 @@ SkinRequireObject_Error:
 End Function
 Public Sub EquipArrow(ByVal UserIndex As Integer, ByVal Slot As Integer)
     On Error GoTo EquipArrow_Error
-    Dim bowIndex  As Integer
-    Dim BowCategory   As Byte
-    Dim ArrowCategory As Byte
     Dim ArrowObjIndex As Integer
     Dim maxItemsInventory As Integer
 
@@ -4400,36 +4467,10 @@ Public Sub EquipArrow(ByVal UserIndex As Integer, ByVal Slot As Integer)
         End If
         Debug.Assert ObjData(ArrowObjIndex).OBJType = e_OBJType.otArrows
 
-        bowIndex = .EquippedWeaponObjIndex
-        
-        ' No hay arco equipado
-        If bowIndex <= 0 Then
-            'Msg2145=Debes equipar un arco para usar flechas.
-            Call WriteLocaleMsg(UserIndex, MSG_DEBES_EQUIPAR_ARCO_USAR_FLECHAS, e_FontTypeNames.FONTTYPE_INFO)
-            Exit Sub
-        End If
+        ' 06.002 (decision del dueno): la municion se equipa SIEMPRE, sin exigir arco ni
+        ' categoria (sistema de tiers Bow/ArrowCategory eliminado). La compatibilidad
+        ' arma-municion se valida al DISPARAR (Subtipo vs Municion en ambos caminos).
 
-        If bowIndex < LBound(ObjData) Or bowIndex > UBound(ObjData) Then
-            Call LogError("EquipArrow invalid bow index: " & bowIndex & " user=" & UserList(UserIndex).name)
-            Exit Sub
-        End If
-        BowCategory = ObjData(bowIndex).BowCategory
-        ArrowCategory = ObjData(ArrowObjIndex).ArrowCategory
-
-        ' El arma equipada no es un arco
-        If ObjData(bowIndex).WeaponType <> eBow Then
-            'Msg2146=El arma equipada no permite usar flechas.
-            Call WriteLocaleMsg(UserIndex, MSG_NO_ARMA_EQUIPADA_PERMITE_USAR_FLECHAS, e_FontTypeNames.FONTTYPE_INFO)
-            Exit Sub
-        End If
-
-        ' No se permite flecha de mayor categoria que el arco
-        If ArrowCategory > BowCategory Then
-            'Msg2147=No podés equipar esta flecha con el arco actual.
-            Call WriteLocaleMsg(UserIndex, MSG_NO_PODES_EQUIPAR_FLECHA_ARCO_ACTUAL, e_FontTypeNames.FONTTYPE_INFO)
-            Exit Sub
-        End If
-        
         ' Quitar flecha previa
         If .EquippedMunitionObjIndex > 0 Then
             Call Desequipar(UserIndex, .EquippedMunitionSlot)
@@ -4443,35 +4484,6 @@ Public Sub EquipArrow(ByVal UserIndex As Integer, ByVal Slot As Integer)
     Exit Sub
 EquipArrow_Error:
     Call Logging.TraceError(Err.Number, Err.Description, "InvUsuario.EquipArrow", Erl())
-End Sub
-Public Sub ValidateEquippedArrow(ByVal UserIndex As Integer)
-    On Error GoTo ValidateEquippedArrow_Error
-    Dim bowIndex   As Integer
-    Dim arrowIndex As Integer
-
-    With UserList(UserIndex).invent
-        arrowIndex = .EquippedMunitionObjIndex
-        bowIndex = .EquippedWeaponObjIndex
-
-        ' No hay flecha equipada ? nada que validar
-        If arrowIndex <= 0 Then Exit Sub
-
-        ' No hay arma equipada ? no hacer nada
-        If bowIndex <= 0 Then Exit Sub
-
-        ' El arma equipada no es un arco ? no hacer nada
-        If ObjData(bowIndex).WeaponType <> eBow Then Exit Sub
-
-        ' Se desequipa la flecha al cambiar a un arco de menor categoría
-        If ObjData(bowIndex).BowCategory < ObjData(arrowIndex).ArrowCategory Then
-            Call Desequipar(UserIndex, .EquippedMunitionSlot)
-            'Msg2148=La flecha fue desequipada porque no es compatible con el arco actual.
-            Call WriteLocaleMsg(UserIndex, MSG_NO_FLECHA_FUE_DESEQUIPADA_PORQUE_COMPATIBLE_ARCO_ACTUAL, e_FontTypeNames.FONTTYPE_INFO)
-        End If
-    End With
-    Exit Sub
-ValidateEquippedArrow_Error:
-    Call Logging.TraceError(Err.Number, Err.Description, "InvUsuario.ValidateEquippedArrow", Erl())
 End Sub
 Public Function TryRepairFishingRod(ByVal UserIndex As Integer, ByVal oldSlot As Byte, ByVal newSlot As Byte) As Boolean
     On Error GoTo TryRepairFishingRod_Error

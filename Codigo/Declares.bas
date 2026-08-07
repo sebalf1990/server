@@ -1344,6 +1344,8 @@ Public Enum e_NPCType
     AO20ShopPjs = 22
     EventMaster = 23
     ArenaGuard = 24
+    
+    Transporter = 26
 End Enum
 
 Public Const MIN_APUÑALAR As Byte = 10
@@ -1713,6 +1715,104 @@ Public Enum e_TargetEffectType
     eNegative = 2
 End Enum
 
+' ============================================================================
+' === Sistema de danos elementales unificado (TOGGLE32 elemental_system) =====
+' Plan 20.002. Capa ADITIVA sobre el combate fisico (core intacto).
+' Registro PROPIO de tipos de dano; NO reutiliza e_ElementalTags (afinidad NPC oficial).
+' Ids 1..7 son built-in; 8..MAX_DAMAGE_TYPE_ID quedan extensibles por data.
+' Luz/Oscuridad quedan RESERVADOS al oficial: no se declaran aca.
+' ============================================================================
+Public Const MAX_DAMAGE_COMPONENTS As Byte = 4    ' componentes de dano tipado por fuente
+Public Const MAX_ELEMENTAL_PROCS   As Byte = 4    ' procs on-hit por fuente
+Public Const MAX_ELEMENTAL_RESISTS As Byte = 8    ' entradas de resistencia por entidad
+Public Const MAX_DAMAGE_TYPE_ID    As Long = 16   ' techo de ids de tipo (headroom para data)
+Public Const ELEMENTAL_RESIST_CAP_DEFAULT As Single = 0.75  ' techo default de reduccion %
+
+Public Enum e_ElementalDamageType
+    eDmgNone = 0
+    eDmgPhysical = 1
+    eDmgFire = 2
+    eDmgFrost = 3
+    eDmgPoison = 4
+    eDmgAcid = 5
+    eDmgArcane = 6
+    eDmgBleed = 7
+End Enum
+
+Public Enum e_ProcTrigger
+    eProcOnHit = 0       ' atacante: al golpear
+    eProcOnDamaged = 1   ' defensor: al ser golpeado (auras / thorns)
+End Enum
+
+Public Enum e_ProcKind
+    eProcDamageBonus = 0  ' suma dano extra tipado
+    eProcApplyState = 1   ' aplica un efecto del catalogo (EOT) -- real en Ola 1
+End Enum
+
+Public Type t_DamageComponent
+    DamageType As e_ElementalDamageType
+    MinDamage As Long
+    MaxDamage As Long
+End Type
+
+Public Type t_ElementalProc
+    ChancePct As Long           ' 0..100
+    Kind As e_ProcKind
+    Trigger As e_ProcTrigger
+    DamageType As e_ElementalDamageType  ' eProcDamageBonus
+    MinDamage As Long           ' eProcDamageBonus
+    MaxDamage As Long           ' eProcDamageBonus
+    EotId As Integer            ' eProcApplyState (preset EffectsOverTime.dat) -- Ola 1
+    ' --- Espinas / Thorns (plan 20.002): config del proc onDamaged ---
+    ReflectPct As Long          ' 0 = fijo (Min/Max); >0 = reflejo % del dano neto recibido
+    Physical As Byte            ' 1 = dano fisico; 0 = elemental (usa DamageType)
+    BypassResist As Byte        ' 1 = directo; 0 = resistido (armadura si fisico, resist de tipo si elemental)
+    Lethal As Byte              ' 1 = puede matar; 0 = deja al atacante en 1 HP
+    ReflectMirror As Byte       ' 1 = espejo: el dano devuelto toma el TIPO del golpe del atacante (espinas)
+End Type
+
+Public Type t_ElementalResist
+    DamageType As e_ElementalDamageType
+    ' --- resist-a-dano (reduce el numero del componente) ---
+    ReduceChancePct As Long     ' 0..100: chance de anular el componente entero
+    ReduceFlat As Long          ' resta plana (fijo legacy)
+    ReducePct As Single         ' 0..1: reduccion porcentual (fijo legacy)
+    Immune As Byte              ' 1 = inmunidad a daño Y efecto (legacy: ambos)
+    ImmuneDamage As Byte        ' 1 = inmune solo al daño (el efecto puede aplicarse)
+    ImmuneEffect As Byte        ' 1 = inmune solo al efecto (el daño entra)
+    ' --- rango aleatorio (Step 4: preservar el veneno). Activos solo si *Max > 0 ---
+    ReduceFlatMin As Long       ' min del rango de resta plana
+    ReduceFlatMax As Long       ' max del rango (>0 activa el rango; si 0 usa ReduceFlat fijo)
+    ReducePctMin As Long        ' min del rango de pct (entero 0..100)
+    ReducePctMax As Long        ' max del rango pct (>0 activa el rango; si 0 usa ReducePct fijo)
+    ' --- resist-a-efecto (reduce el estado aplicado) -- Ola 1 ---
+    ReduceEffectChancePct As Long
+End Type
+
+' Carrier ofensivo: lo que una fuente (arma/municion/hechizo/npc) inflige.
+Public Type t_ElementalSource
+    CompCount As Byte
+    Comp(1 To MAX_DAMAGE_COMPONENTS) As t_DamageComponent
+    ProcCount As Byte
+    Proc(1 To MAX_ELEMENTAL_PROCS) As t_ElementalProc
+End Type
+
+' Carrier defensivo: resistencias por tipo de una entidad (item equipable / npc).
+Public Type t_ElementalResistSet
+    Count As Byte
+    Resist(1 To MAX_ELEMENTAL_RESISTS) As t_ElementalResist
+End Type
+
+' Metadata data-driven de un tipo de dano (DamageTypes.dat). Tuneable sin recompilar.
+Public Type t_DamageTypeInfo
+    nombre As String
+    NumberColor As Long          ' color del numero de dano (cliente, Ola 1)
+    DefaultParticle As Integer   ' particula default del tipo
+    ResistCapPct As Single       ' techo de reduccion para este tipo (0 = usa default)
+    TagElementalRelacionado As Long ' puente futuro al e_ElementalTags oficial (0 = ninguno)
+    Defined As Byte              ' 1 si vino del .dat
+End Type
+
 Public Type t_Hechizo
     AutoLanzar As Byte
     TargetEffectType As e_TargetEffectType
@@ -1833,6 +1933,12 @@ Public Type t_Hechizo
     CuraHemoValor As Integer
     CuraNeuro As Byte
     CuraNeuroValor As Integer
+    ' --- Sistema de danos elementales (TOGGLE32 elemental_system) ---
+    Elemental As t_ElementalSource
+    ' --- Crit magico por hechizo (plan 20.002 Ola 2; wiring de cast pendiente) ---
+    CritChance As Long       ' 0..100; 0 = el hechizo nunca critea
+    CritMultiplier As Single ' multiplicador del dano en crit (ej 1.5)
+    EnchantWeaponDurationMs As Long  ' >0 = el hechizo encanta el arma del target N ms (payload=Elemental)
 End Type
 
 Public Type t_ActiveModifiers
@@ -1904,6 +2010,16 @@ Public Type t_EffectOverTime
     ApplyStatusMask As Long
     SecondaryTargetModifier As Single
     RequireTransform As Integer
+    DamageColor As Long          ' color del numero de dano por tick (0 = rojo default)
+    ApplyMsg As String           ' mensaje al atacante cuando el efecto se aplica (vacio = sin mensaje)
+    DanoModo As Byte             ' 0=fijo/rango (TickPower), 2=%HP del target (TickPower como %)
+    FactorPvP As Single          ' multiplicador del tick vs jugador (0 = 1)
+    FactorPvE As Single          ' multiplicador del tick vs NPC (0 = 1)
+    DanoPorStackMin As Long      ' dano extra por stack (negativo); 0 = sin stacks
+    DanoPorStackMax As Long
+    StacksMax As Integer         ' >1 habilita stacks; <=1 = DoT comun
+    GolpesQueSumanStacks As Integer
+    IntervaloDecayStackMs As Long ' ms sin pegar para perder 1 stack (0 = sin decay)
 End Type
 
 Public Enum e_DamageResult
@@ -2429,6 +2545,7 @@ Public Type t_ObjData
     ' Comun a armas (Subtipo=10/11), viales (TipoPocion=24) y pociones curativas (TipoPocion=25)
     FamiliaVeneno As Byte               ' 0=ninguna, 1=Menor, 2=Hemo, 3=Neuro
     FamiliasCompatibles As String       ' CSV para armas envenenables Subtipo=11 (ej "1,2,3")
+    TiposElementalCompatibles As String ' CP2 (20.002 Step 7): CSV de tipos que acepta el arma Subtipo=11 (ej "2,3"); vacio = todos
     ChanceAplicarPct As Long
     TickIntervaloMs As Long
     DuracionMs As Long
@@ -2488,6 +2605,11 @@ Public Type t_ObjData
     InmunidadVenenoMenor As Byte
     InmunidadHemo As Byte
     InmunidadNeuro As Byte
+    ' --- Sistema de danos elementales (TOGGLE32 elemental_system) ---
+    Elemental As t_ElementalSource
+    ElementalResist As t_ElementalResistSet
+    EnchantWeaponDurationMs As Long  ' >0 = al usar el item encanta el arma N ms; <0 = permanente (demo)
+    EnchantAmmoDurationMs As Long    ' >0 = al usar el item encanta las flechas equipadas N ms; <0 = permanente (20.002 CP1)
 End Type
 
 '[Pablo ToxicWaste]
@@ -2758,6 +2880,18 @@ Public Type t_UserFlags
     PoisonedWeaponRegenManaReduccionPct As Long
     PoisonedWeaponRegenManaReduccionFija As Long
     PoisonedWeaponBloqueaRegenManaTotal As Byte
+    ' --- Encantar Arma elemental (TOGGLE32 elemental_system) ---
+    EnchantWeaponObjIndex As Integer
+    EnchantWeaponDeadline As Long
+    EnchantWeaponPermanent As Byte
+    EnchantWeaponCargas As Integer      ' CP1 (20.002 Step 7): 0 = sin limite de cargas (solo tiempo/permanente)
+    EnchantWeaponSource As t_ElementalSource
+    ' --- Encantar Flechas elemental (TOGGLE32, 20.002 CP1 ammo): cache del stack de flechas encantado ---
+    EnchantedAmmoObjIndex As Integer
+    EnchantedAmmoDeadline As Long
+    EnchantedAmmoPermanent As Byte
+    EnchantedAmmoCargas As Integer
+    EnchantedAmmoSource As t_ElementalSource
     ' Untado de municion (TOGGLE26): cache independiente para el stack de flechas equipado.
     PoisonedAmmoObjIndex As Integer
     PoisonedAmmoFamilia As Byte
@@ -2992,6 +3126,8 @@ Public Type t_QuestStats
     NumQuestsDone As Integer
     QuestsDone() As Integer
 End Type
+
+Public Const SUBASTA_OFERTA_MAXIMA As Long = 1999999
 
 ' ------------- FACCIONES -------------
 Public Type t_Facciones
@@ -3514,6 +3650,15 @@ Public Type t_NpcInfoCache
     ResistChanceVenenoGenericoPct As Long
     ResistDanoVenenoGenericoFlat As Long
     ResistDanoVenenoGenericoPct As Long
+    ' --- Sistema de danos elementales (TOGGLE32 elemental_system) ---
+    Elemental As t_ElementalSource
+    ElementalResist As t_ElementalResistSet
+    CityCount       As Integer
+    CityNames()     As String
+    CityMap()       As Integer
+    CityX()         As Integer
+    CityY()         As Integer
+    CityPrice()     As Long
 End Type
 
 Public Enum e_TipoAI
@@ -3638,6 +3783,13 @@ Public Type t_Npc
     DisabledInBattleServer As Byte
     EsMaestroProfesion As Byte
     ProfesionEnsenada As Integer
+    OnlyEnabledInBattleServer As Byte
+    TransportCityCount  As Integer
+    TransportCityNames() As String
+    TransportCityMap()   As Integer
+    TransportCityX()     As Integer
+    TransportCityY()     As Integer
+    TransportCityPrice() As Long
 End Type
 
 '**********************************************************

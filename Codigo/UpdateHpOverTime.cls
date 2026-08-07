@@ -49,6 +49,18 @@ Dim TickEffect           As Integer
 Dim Modifiers            As Integer
 Dim EffectBonus          As Single
 Dim SecondTargetModifier As Single
+Dim TickDmgColor         As Long
+Dim DotDanoModo          As Byte
+Dim DotFactorPvP         As Single
+Dim DotFactorPvE         As Single
+Dim StacksActuales       As Integer
+Dim GolpesAcum           As Integer
+Dim TimeSinceLastDecay   As Long
+Dim DotStacksMax         As Integer
+Dim DotPerStackMin       As Long
+Dim DotPerStackMax       As Long
+Dim DotGolpesQueSuman    As Integer
+Dim DotDecayMs           As Long
 Private DotInfo          As t_BaseDotInfo
 Private Source           As t_AnyReference
 
@@ -60,6 +72,9 @@ Public Sub Setup(ByVal SourceIndex As Integer, _
                  ByVal Id As Long)
     TimeSinceLastTick = 0
     TickCount = 0
+    StacksActuales = 1
+    GolpesAcum = 0
+    TimeSinceLastDecay = 0
     Call SetBaseDot(DotInfo, TargetIndex, TargetType, Id, EffectId)
     Call SetRef(Source, SourceIndex, SourceType)
     With EffectOverTime(EffectId)
@@ -68,10 +83,20 @@ Public Sub Setup(ByVal SourceIndex As Integer, _
         TargetTicks = .Ticks
         TickTime = .TickTime
         TickEffect = .TickFX
+        If .DamageColor <> 0 Then TickDmgColor = .DamageColor Else TickDmgColor = vbRed
+        DotDanoModo = .DanoModo
+        If .FactorPvP > 0 Then DotFactorPvP = .FactorPvP Else DotFactorPvP = 1
+        If .FactorPvE > 0 Then DotFactorPvE = .FactorPvE Else DotFactorPvE = 1
+        DotPerStackMin = .DanoPorStackMin
+        DotPerStackMax = .DanoPorStackMax
+        DotStacksMax = .StacksMax
+        DotGolpesQueSuman = .GolpesQueSumanStacks
+        If DotGolpesQueSuman <= 0 Then DotGolpesQueSuman = 1
+        DotDecayMs = .IntervaloDecayStackMs
         Modifiers = .EffectModifiers
         SecondTargetModifier = 1 - .SecondaryTargetModifier
         If DotInfo.TargetRef.RefType = eUser And EffectOverTime(DotInfo.EotId).ClientEffectTypeId > 0 Then Call WriteSendSkillCdUpdate(TargetIndex, .ClientEffectTypeId, Id, _
-                .TickTime * TargetTicks, .TickTime * TargetTicks, .buffType)
+                .TickTime * TargetTicks, .TickTime * TargetTicks, .buffType, StacksActuales)
     End With
     EffectBonus = 1
     If IsValidRef(Source) Then
@@ -148,6 +173,19 @@ Public Property Get IBaseEffectOverTime_EffectType() As e_EffectType
 End Property
 
 Public Sub IBaseEffectOverTime_Update(ByVal DeltaTime As Long)
+    If DotStacksMax > 1 And DotDecayMs > 0 Then
+        TimeSinceLastDecay = TimeSinceLastDecay + DeltaTime
+        If TimeSinceLastDecay >= DotDecayMs Then
+            TimeSinceLastDecay = 0
+            ' Decay baja stack pero NUNCA llega a 0 (piso en 1, como el veneno Hemo).
+            ' Solo el fin de los ticks (TickCount >= TargetTicks) termina el efecto.
+            If StacksActuales > 1 Then
+                StacksActuales = StacksActuales - 1
+                If DotInfo.TargetRef.RefType = eUser And EffectOverTime(DotInfo.EotId).ClientEffectTypeId > 0 Then _
+                    Call WriteUpdatePoisonStacks(DotInfo.TargetRef.ArrayIndex, DotInfo.UniqueId, StacksActuales)
+            End If
+        End If
+    End If
     If TickCount >= TargetTicks Or Not IsValidRef(DotInfo.TargetRef) Then
         DotInfo.RemoveEffect = True
         Exit Sub
@@ -171,9 +209,17 @@ End Property
 Public Function IBaseEffectOverTime_Reset(ByVal SourceUserId As Integer, ByVal SourceType As e_ReferenceType, ByVal NewEffectId As Integer) As Boolean
     IBaseEffectOverTime_Reset = True
     TickCount = 0
+    If DotStacksMax > 1 Then
+        GolpesAcum = GolpesAcum + 1
+        If GolpesAcum >= DotGolpesQueSuman Then
+            GolpesAcum = 0
+            If StacksActuales < DotStacksMax Then StacksActuales = StacksActuales + 1
+        End If
+        TimeSinceLastDecay = 0
+    End If
     If DotInfo.TargetRef.RefType = eUser And EffectOverTime(DotInfo.EotId).ClientEffectTypeId > 0 Then
         Call WriteSendSkillCdUpdate(DotInfo.TargetRef.ArrayIndex, EffectOverTime(DotInfo.EotId).ClientEffectTypeId, DotInfo.UniqueId, (TickTime * TargetTicks) - _
-                TimeSinceLastTick, TickTime * TargetTicks, EffectOverTime(DotInfo.EotId).buffType)
+                TimeSinceLastTick, TickTime * TargetTicks, EffectOverTime(DotInfo.EotId).buffType, StacksActuales)
     End If
 End Function
 
@@ -217,8 +263,8 @@ End Sub
 
 Public Function IBaseEffectOverTime_ChangeTarget(ByVal NewTargetIndex As Integer, ByVal NewTargetType As e_ReferenceType) As Boolean
     If DotInfo.TargetRef.RefType = eUser Then
-        If EffectOverTime(DotInfo.EotId).ClientEffectTypeId > 0 Then Call WriteSendSkillCdUpdate(DotInfo.TargetRef.ArrayIndex, DotInfo.EotId, DotInfo.UniqueId, 0, 0, _
-                EffectOverTime(DotInfo.EotId).buffType)
+        If EffectOverTime(DotInfo.EotId).ClientEffectTypeId > 0 Then Call WriteSendSkillCdUpdate(DotInfo.TargetRef.ArrayIndex, EffectOverTime(DotInfo.EotId).ClientEffectTypeId, _
+                DotInfo.UniqueId, 0, 0, EffectOverTime(DotInfo.EotId).buffType)
     End If
     Call SetRef(DotInfo.TargetRef, NewTargetIndex, NewTargetType)
     If DotInfo.TargetRef.RefType = eUser Then
@@ -240,8 +286,32 @@ Public Sub IBaseEffectOverTime_TargetChangeTerrain()
 End Sub
 
 Public Sub PerformAction()
-    Dim TickHP As Integer
-    TickHP = RandomNumber(DotHpMin, DotHpMax) * EffectBonus
+    Dim rawTick As Long
+    ' Roll base via receta unica compartida con el veneno (modElementalCombat).
+    ' Compatibilidad: el modo 0 historico del DoT generico = rango random (modo 1),
+    ' asi todos los presets eHealthModifier actuales (DanoModo ausente=0) siguen
+    ' randomizando igual que antes. Los valores negativos del preset se preservan.
+    Dim modoEff As Byte
+    modoEff = DotDanoModo
+    If modoEff = 0 Then modoEff = 1
+    rawTick = modElementalCombat.RollDotTickBase(DotInfo.TargetRef.ArrayIndex, DotInfo.TargetRef.RefType, modoEff, CLng(DotHpMin), CLng(DotHpMax))
+    If DotStacksMax > 1 Then
+        Dim perStack As Long
+        If DotPerStackMax <> 0 And DotPerStackMax <> DotPerStackMin Then
+            perStack = RandomNumber(DotPerStackMin, DotPerStackMax)
+        Else
+            perStack = DotPerStackMin
+        End If
+        rawTick = rawTick + StacksActuales * perStack
+    End If
+    Dim TickHP As Long
+    TickHP = rawTick * EffectBonus
+    ' Factor PvP/PvE por tipo de target
+    If DotInfo.TargetRef.RefType = e_ReferenceType.eUser Then
+        TickHP = TickHP * DotFactorPvP
+    ElseIf DotInfo.TargetRef.RefType = e_ReferenceType.eNpc Then
+        TickHP = TickHP * DotFactorPvE
+    End If
     If DotInfo.TargetRef.RefType = e_ReferenceType.eUser Then
         If IsSet(Modifiers, e_ModifierTypes.MagicReduction) Then
             TickHP = TickHP * UserMod.GetMagicDamageReduction(UserList(DotInfo.TargetRef.ArrayIndex))
@@ -258,9 +328,9 @@ Public Sub PerformAction()
                     TickHP = TickHP * DivineBloodHealingMultiplierBonus
                 End If
             End If
-            Call UserMod.DoDamageOrHeal(DotInfo.TargetRef.ArrayIndex, Source.ArrayIndex, Source.RefType, TickHP, e_dot, DotInfo.EotId)
+            Call UserMod.DoDamageOrHeal(DotInfo.TargetRef.ArrayIndex, Source.ArrayIndex, Source.RefType, TickHP, e_dot, DotInfo.EotId, DamageColor:=TickDmgColor)
         Else
-            Call UserMod.DoDamageOrHeal(DotInfo.TargetRef.ArrayIndex, 0, e_ReferenceType.eNone, TickHP, e_dot, DotInfo.EotId)
+            Call UserMod.DoDamageOrHeal(DotInfo.TargetRef.ArrayIndex, 0, e_ReferenceType.eNone, TickHP, e_dot, DotInfo.EotId, DamageColor:=TickDmgColor)
         End If
         If TickEffect > 0 Then
             If IsVisible(UserList(DotInfo.TargetRef.ArrayIndex)) Then
@@ -283,9 +353,9 @@ Public Sub PerformAction()
         End If
         TickHP = TickHP * SecondTargetModifier
         If IsValidRef(Source) Then
-            Call NPCs.DoDamageOrHeal(DotInfo.TargetRef.ArrayIndex, Source.ArrayIndex, Source.RefType, TickHP, e_dot, DotInfo.EotId)
+            Call NPCs.DoDamageOrHeal(DotInfo.TargetRef.ArrayIndex, Source.ArrayIndex, Source.RefType, TickHP, e_dot, DotInfo.EotId, TickDmgColor)
         Else
-            Call NPCs.DoDamageOrHeal(DotInfo.TargetRef.ArrayIndex, 0, e_ReferenceType.eNone, TickHP, e_dot, DotInfo.EotId)
+            Call NPCs.DoDamageOrHeal(DotInfo.TargetRef.ArrayIndex, 0, e_ReferenceType.eNone, TickHP, e_dot, DotInfo.EotId, TickDmgColor)
         End If
         If TickEffect > 0 Then Call SendData(SendTarget.ToNPCAliveArea, DotInfo.TargetRef.ArrayIndex, PrepareMessageCreateFX(NpcList( _
            DotInfo.TargetRef.ArrayIndex).Char.charindex, TickEffect, 0, NpcList(DotInfo.TargetRef.ArrayIndex).pos.x, NpcList(DotInfo.TargetRef.ArrayIndex).pos.y))

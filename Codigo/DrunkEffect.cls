@@ -158,7 +158,8 @@ Public Sub IBaseEffectOverTime_OnRemove()
     If DumbActive Then
         DumbActive = False
         Call WriteDumbNoMore(DotInfo.TargetRef.ArrayIndex)
-        Call WriteSendSkillCdUpdate(DotInfo.TargetRef.ArrayIndex, EffectOverTime(DotInfo.EotId).ClientEffectTypeId, DotInfo.UniqueId, 0, EffectOverTime(DotInfo.EotId).buffType, _
+        ' 06.002 Ola 4: faltaba TotalTime en la llamada (buffType caia como TotalTime y StackCount como SkillType).
+        Call WriteSendSkillCdUpdate(DotInfo.TargetRef.ArrayIndex, EffectOverTime(DotInfo.EotId).ClientEffectTypeId, DotInfo.UniqueId, 0, 0, EffectOverTime(DotInfo.EotId).buffType, _
                 StackCount)
     End If
 End Sub

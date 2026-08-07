@@ -56,6 +56,7 @@ Public Sub Setup(ByVal SourceIndex As Integer, _
     Call SetRef(Source, SourceIndex, SourceType)
     Debug.Print "setting new id: " & Id & " to: " & DotInfo.UniqueId & " on target: " & TargetIndex
     TimeSinceLastTick = 0
+    Modifier = 0 ' 06.002 Ola 1: la instancia reciclada del pool arrastra el valor del uso anterior
     With EffectOverTime(EffectId)
         TickTime = .TickTime
         RequireTransform = .RequireTransform
@@ -182,8 +183,8 @@ End Sub
 
 Public Function IBaseEffectOverTime_ChangeTarget(ByVal NewTargetIndex As Integer, ByVal NewTargetType As e_ReferenceType) As Boolean
     If DotInfo.TargetRef.RefType = eUser Then
-        If EffectOverTime(DotInfo.EotId).ClientEffectTypeId > 0 Then Call WriteSendSkillCdUpdate(DotInfo.TargetRef.ArrayIndex, DotInfo.EotId, DotInfo.UniqueId, 0, 0, _
-                EffectOverTime(DotInfo.EotId).buffType)
+        If EffectOverTime(DotInfo.EotId).ClientEffectTypeId > 0 Then Call WriteSendSkillCdUpdate(DotInfo.TargetRef.ArrayIndex, EffectOverTime(DotInfo.EotId).ClientEffectTypeId, _
+                DotInfo.UniqueId, 0, 0, EffectOverTime(DotInfo.EotId).buffType)
     End If
     Call EffectsOverTime.RemoveEotModifier(DotInfo.TargetRef, EffectOverTime(DotInfo.EotId), Modifier)
     Call SetRef(DotInfo.TargetRef, NewTargetIndex, NewTargetType)
