@@ -286,7 +286,9 @@ Private Sub SetupUserBasicInfo(ByRef User As t_User, ByRef RS As ADODB.Recordset
         .genero = RS!genre_id
         .raza = RS!race_id
         .clase = RS!class_id
-        .Hogar = RS!home_id
+        ' Sanea al cargar: un pj que quedo con home_id invalido se repara solo al
+        ' loguear, sin necesidad de tocar la base.
+        .Hogar = SanitizeHogar(RS!home_id, "carga de personaje " & .name)
         .Desc = RS!Description
         .Stats.GLD = RS!gold
         .Stats.Banco = RS!bank_gold

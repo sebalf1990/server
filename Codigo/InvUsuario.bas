@@ -2554,6 +2554,7 @@ Sub UseInvItem(ByVal UserIndex As Integer, ByVal Slot As Byte, ByVal ByClick As 
                                 DeDonde = Penthar
                             Case Else
                                 DeDonde = Ullathorpe
+                                Call LogError("Hogar fuera de rango al usar la runa de hogar: " & .Hogar)
                         End Select
                         Map = DeDonde.Map
                         x = DeDonde.x

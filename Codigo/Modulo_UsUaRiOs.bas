@@ -1615,7 +1615,9 @@ Select Case UserList(UserIndex).Hogar
     Case e_Ciudad.cArkhein: char_home = CIUDAD_ARKHEIN
     Case e_Ciudad.cEldoria: char_home = CIUDAD_ELDORIA
     Case e_Ciudad.cPenthar: char_home = CIUDAD_PENTHAR
-    Case Else: char_home = CIUDAD_ULLATHORPE
+    ' Este Case Else tapaba el diagnostico: un GM haciendo /stats sobre un pj roto
+    ' leia Ullathorpe y descartaba la hipotesis correcta.
+    Case Else: char_home = CIUDAD_ULLATHORPE: Call LogError("Hogar fuera de rango en /stats: " & UserList(UserIndex).Hogar)
 End Select
     Call WriteLocaleMsg(sendIndex, MSG_CHARACTER_HOME, e_FontTypeNames.FONTTYPE_INFO, char_home)
 

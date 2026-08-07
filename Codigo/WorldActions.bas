@@ -332,7 +332,9 @@ Private Function GetCityName(ByVal city As e_Ciudad) As String
         Case e_Ciudad.cPenthar
             GetCityName = "Penthar"
         Case Else
+            ' Antes devolvia Ullathorpe callado y eso tapaba gobernadores mal dateados.
             GetCityName = "Ullathorpe"
+            Call LogError("GetCityName recibio una ciudad invalida: " & city)
     End Select
 End Function
 
@@ -369,6 +371,13 @@ Private Sub HandleGovernorNpcInteraction(ByVal UserIndex As Integer, ByVal NpcIn
         Exit Sub
     End If
 
+    ' Si el NPC no declara GobernadorDe (o lo declara fuera de rango) Val() da 0, y
+    ' antes eso terminaba en Hogar=0 con dos Case Else diciendole al jugador que
+    ' quedaba de Ullathorpe. Ahora no se ofrece nada y queda en el log.
+    If Gobernador.GobernadorDe < 1 Or Gobernador.GobernadorDe > NUMCIUDADES Then
+        Call LogError("El NPC " & Gobernador.Numero & " (" & Gobernador.name & ") es Gobernador pero su GobernadorDe es invalido: " & Gobernador.GobernadorDe)
+        Exit Sub
+    End If
     UserList(UserIndex).PosibleHogar = Gobernador.GobernadorDe
     DeDonde = GetCityName(UserList(UserIndex).PosibleHogar)
     UserList(UserIndex).flags.pregunta = 3

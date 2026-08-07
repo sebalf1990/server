@@ -30,6 +30,21 @@ Option Explicit
 Public Const NUMCIUDADES          As Byte = 9
 Public Ciudades(1 To NUMCIUDADES) As t_WorldPos
 
+' Unico lugar que decide si un Hogar es valido. e_Ciudad va de cUllathorpe=1 a
+' cPenthar=9 y el array Ciudades es 1 To NUMCIUDADES, asi que un 0 (el que deja
+' Val() cuando el .dat no declara GobernadorDe) da error 9 al indexar.
+' Devuelve cUllathorpe si el valor no sirve, y DEJA RASTRO: el problema real esta
+' en el dato o en quien asigno, y hay que poder encontrarlo.
+Public Function SanitizeHogar(ByVal Valor As Long, ByVal Contexto As String) As e_Ciudad
+    If Valor >= 1 And Valor <= NUMCIUDADES Then
+        SanitizeHogar = CByte(Valor)
+    Else
+        SanitizeHogar = e_Ciudad.cUllathorpe
+        Call LogError("Hogar invalido (" & Valor & ") en " & Contexto & ". Se usa Ullathorpe. Revisar GobernadorDe del NPC o home_id en la base.")
+    End If
+End Function
+
+
 Public Sub goHome(ByVal UserIndex As Integer)
     On Error GoTo goHome_Err
     With UserList(UserIndex)

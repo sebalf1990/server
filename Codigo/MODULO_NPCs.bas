@@ -994,10 +994,60 @@ Public Sub BuildNpcInfoCache()
         End If
     Next i
     NpcInfoCacheInitialized = True
+    Call ValidateNpcContracts
     Exit Sub
 ErrHandler:
     Call TraceError(Err.Number, Err.Description, "NPCs.BuildNpcInfoCache", Erl)
 End Sub
+
+' Hay claves del .dat que son obligatorias segun el NpcType, y cuando faltan el
+' Val() de la clave ausente da 0, que suele ser un valor valido pero equivocado.
+' Asi nacieron dos bugs que solo se descubrieron jugando: gobernadores sin
+' GobernadorDe (el jugador quedaba con Hogar=0) y el Rey de Arkhein sin Faccion
+' (reclutaba para la Armada Real). Esto los saca a la luz en el arranque.
+' Se consulta el .dat directamente porque lo que importa es si la clave ESTA
+' DECLARADA: un Faccion=0 explicito es valido, uno ausente no.
+Private Sub ValidateNpcContracts()
+    On Error GoTo ErrHandler
+    If LeerNPCs Is Nothing Then Exit Sub
+    Dim i          As Long
+    Dim nodeName   As String
+    Dim Tipo       As Long
+    Dim Faltantes  As String
+    Dim Total      As Long
+    For i = 0 To LeerNPCs.NodesCount - 1
+        nodeName = LeerNPCs.GetNode(i)
+        If Left$(nodeName, 3) = "NPC" Then
+            Tipo = Val(LeerNPCs.GetValue(nodeName, "NpcType"))
+            Faltantes = vbNullString
+            Select Case Tipo
+                Case e_NPCType.Gobernador
+                    Faltantes = MissingNpcKeys(nodeName, "GobernadorDe")
+                Case e_NPCType.Enlistador
+                    Faltantes = MissingNpcKeys(nodeName, "Faccion")
+                Case e_NPCType.GuardiaReal, e_NPCType.GuardiasCaos
+                    Faltantes = MissingNpcKeys(nodeName, "Alineacion") & MissingNpcKeys(nodeName, "Faccion")
+            End Select
+            If LenB(Faltantes) <> 0 Then
+                Total = Total + 1
+                Call LogError("Contrato de NPC incompleto: " & nodeName & " (NpcType=" & Tipo & ") no declara:" & Faltantes)
+            End If
+        End If
+    Next i
+    If Total > 0 Then
+        Call LogError("ValidateNpcContracts: " & Total & " NPC(s) con claves obligatorias faltantes. Ver lineas anteriores.")
+    End If
+    Exit Sub
+ErrHandler:
+    Call TraceError(Err.Number, Err.Description, "NPCs.ValidateNpcContracts", Erl)
+End Sub
+
+' Devuelve cadena vacia si la clave esta declarada, o un espacio + el nombre si falta.
+Private Function MissingNpcKeys(ByVal SectionName As String, ByVal Clave As String) As String
+    If LenB(LeerNPCs.GetValue(SectionName, Clave)) = 0 Then
+        MissingNpcKeys = " " & Clave
+    End If
+End Function
 
 Private Sub LoadNpcInfoIntoCache(ByVal NpcNumber As Integer)
     On Error GoTo ErrHandler

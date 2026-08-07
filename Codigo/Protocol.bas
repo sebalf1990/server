@@ -6780,7 +6780,7 @@ Private Sub HandleResponderPregunta(ByVal UserIndex As Integer)
                     Call VolverCiudadano(UserIndex)
                 Case 3
                     Log = "Repuesta Afirmativa 3"
-                    UserList(UserIndex).Hogar = UserList(UserIndex).PosibleHogar
+                    UserList(UserIndex).Hogar = SanitizeHogar(UserList(UserIndex).PosibleHogar, "gobernador -> Hogar")
                     Select Case UserList(UserIndex).Hogar
                         Case e_Ciudad.cUllathorpe
                             DeDonde = "Ullathorpe"
@@ -6801,7 +6801,9 @@ Private Sub HandleResponderPregunta(ByVal UserIndex As Integer)
                         Case e_Ciudad.cPenthar
                             DeDonde = " Penthar"
                         Case Else
+                            ' No deberia entrar nunca: SanitizeHogar ya acoto el valor.
                             DeDonde = "Ullathorpe"
+                            Call LogError("Hogar fuera de rango al confirmar ciudadania: " & UserList(UserIndex).Hogar)
                     End Select
                     If IsValidNpcRef(UserList(UserIndex).flags.TargetNPC) Then
                         Call WriteLocaleChatOverHead(UserIndex, 1421, GetUserDisplayName(UserIndex) & "¬" & DeDonde, NpcList(UserList( _
@@ -6905,7 +6907,9 @@ Private Sub HandleResponderPregunta(ByVal UserIndex As Integer)
                         Case e_Ciudad.cPenthar
                             DeDonde = " Penthar"
                         Case Else
+                            ' No deberia entrar nunca: SanitizeHogar ya acoto el valor.
                             DeDonde = "Ullathorpe"
+                            Call LogError("PosibleHogar fuera de rango al rechazar la ciudadania: " & UserList(UserIndex).PosibleHogar)
                     End Select
                     If IsValidNpcRef(UserList(UserIndex).flags.TargetNPC) Then
                         Call WriteLocaleChatOverHead(UserIndex, 1423, GetUserDisplayName(UserIndex) & "¬" & DeDonde, NpcList(UserList( _
