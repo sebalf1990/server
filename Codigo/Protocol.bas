@@ -936,11 +936,9 @@ Public Function HandleIncomingData(ByVal ConnectionID As Long, ByVal Message As 
 End Function
 
 #If PYMMO = 0 Then
-    Private Function Sha256Hex(ByVal s As String) As String
-        Dim b() As Byte
-        b = StrConv(s, vbFromUnicode)
-        Sha256Hex = LCase$(hashHexFromBytes(b, API_HASH_SHA256))
-    End Function
+    ' El hashing de passwords se removio en el plan 29.001: el contrato pasa a
+    ' argon2id y la unica implementacion vive en la web. El server pregunta por
+    ' HTTP (ver AccountBridge_VerifyLogin) en vez de computar y comparar.
 
     Private Sub HandleCreateAccount(ByVal ConnectionID As Long)
         On Error GoTo HandleCreateAccount_Err:
@@ -955,23 +953,34 @@ End Function
             Call KickConnection(ConnectionID)
             Exit Sub
         End If
+        ' Este toggle ya no habilita nada (plan 29.001): con o sin el, el alta
+        ' in-game corta mas abajo, porque el hash argon2id lo computa solo la
+        ' web. Se conserva el chequeo para que el mensaje siga siendo el mismo.
+        If Not AccountBridge_AllowIngameRegistration() Then
+            Call WriteErrorMsg(UserIndex, "El registro se hace desde la web: " & AccountBridge_RegisterUrl())
+            Call CloseSocket(UserIndex)
+            Exit Sub
+        End If
         If (username = "" Or Password = "" Or LenB(Password) <= 3) Then
             Call WriteErrorMsg(UserIndex, "Parametros incorrectos")
             Call CloseSocket(UserIndex)
             Exit Sub
         End If
-        Dim Result As ADODB.Recordset
-        Dim salt As String
-        salt = RandomString(32)
-        Dim pwHash As String
-        pwHash = Sha256Hex(salt & Password)
-        Set Result = Query("INSERT INTO account (email, password, salt, validate_code) VALUES (?,?,?,?)", LCase(username), pwHash, salt, "123")
-        If (Result Is Nothing) Then
-            Call WriteErrorMsg(UserIndex, "Ya hay una cuenta asociada con ese email")
+        If Not CheckMailString(username) Then
+            Call WriteErrorMsg(UserIndex, "El email ingresado no es valido")
             Call CloseSocket(UserIndex)
             Exit Sub
         End If
-        Set Result = Query("SELECT id FROM account WHERE email=?", username)
+        ' El alta in-game no puede crear credenciales (plan 29.001): el hash es
+        ' argon2id y lo computa unicamente la web. Dejar que este camino escriba
+        ' una password produciria una cuenta que despues nadie puede verificar,
+        ' asi que se corta explicitamente. Para reactivar el alta hay que
+        ' delegarla al endpoint web, igual que se delego el login.
+        Call WriteErrorMsg(UserIndex, "El registro se hace desde la web: " & AccountBridge_RegisterUrl())
+        Call CloseSocket(UserIndex)
+        Exit Sub
+        Dim Result As ADODB.Recordset
+        Set Result = Query("SELECT id FROM account WHERE email=?", LCase$(username))
         UserList(UserIndex).AccountID = Result!Id
         Dim Personajes() As t_PersonajeCuenta
         Call WriteAccountCharacterList(UserIndex, Personajes, 0)
@@ -998,39 +1007,67 @@ Private Sub HandleLoginAccount(ByVal ConnectionID As Long)
         Call CloseSocket(UserIndex)
         Exit Sub
     End If
-    Dim Result As ADODB.Recordset
-    Set Result = Query("SELECT * FROM account WHERE UPPER(email)=UPPER(?)", username)
-    If (Result.EOF) Then
-        Call WriteErrorMsg(UserIndex, "Usuario o Contraseña erronea.")
+    ' Verificacion DELEGADA a la web (plan 29.001). El server ya no lee
+    ' account.password ni lo compara: pregunta por HTTP y actua segun la
+    ' respuesta. Con eso desaparecen los dos gates que decidian "hasheado vs
+    ' plaintext" por LONGITUD y el rehash perezoso que reescribia la fila.
+    Dim verifyResult As Long
+    Dim accountId    As Long
+    Dim isValidated  As Boolean
+    Dim isBanned     As Boolean
+    Dim isDeleted    As Boolean
+    Dim attempt      As Integer
+    ' Mapa de personajes GM de esta cuenta (plan 31.001, ola 5). Viene en la
+    ' misma respuesta del verify-login, vacio si la cuenta no tiene ninguno.
+    Dim gmChars      As String
+
+    For attempt = 1 To 2
+        verifyResult = AccountBridge_VerifyLogin(username, Password, accountId, isValidated, isBanned, isDeleted, gmChars)
+        If verifyResult <> VERIFY_LOGIN_REJECTED Then Exit For
+        ' Rechazo en el primer intento: puede haber un alta o un reset del
+        ' bridge todavia sin aplicar. La web valida contra ESTA misma base (la
+        ' lee en modo solo lectura), asi que si la op no se aplico todavia
+        ' tampoco la ve. Forzamos un poll y reintentamos UNA vez, igual que
+        ' hacia el camino viejo (pull-on-login-attempt).
+        If attempt = 1 Then Call AccountBridge_Poll
+    Next attempt
+
+    If verifyResult = VERIFY_LOGIN_ERROR Then
+        ' El servicio de cuentas no contesto. NO es una clave equivocada, y
+        ' decirle eso al jugador lo manda a resetear una password que esta bien.
+        Call WriteErrorMsg(UserIndex, "El servicio de cuentas no esta disponible en este momento. Proba de nuevo en unos minutos.")
         Call CloseSocket(UserIndex)
         Exit Sub
     End If
-    Dim storedPw As String
-    Dim storedSalt As String
-    Dim pwOk As Boolean
-    storedPw = Result!password & ""
-    storedSalt = Result!salt & ""
-    If (Len(storedPw) = 64 And Len(storedSalt) = 32 And storedSalt <> storedPw) Then
-        pwOk = (LCase$(storedPw) = Sha256Hex(storedSalt & Password))
-    Else
-        pwOk = (storedPw = Password)
-    End If
-    If (Not pwOk) Then
+
+    If verifyResult <> VERIFY_LOGIN_OK Then
         Call WriteErrorMsg(UserIndex, "Usuario o clave erronea.")
         Call CloseSocket(UserIndex)
         Exit Sub
     End If
-    UserList(UserIndex).AccountID = Result!Id
-    If (Len(storedPw) <> 64) Then
-        Dim migSalt As String
-        Dim migHash As String
-        migSalt = RandomString(32)
-        migHash = Sha256Hex(migSalt & Password)
-        Call Execute("UPDATE account SET password=?, salt=? WHERE id=?", migHash, migSalt, Result!Id)
+
+    If isDeleted Then
+        Call WriteErrorMsg(UserIndex, "Esta cuenta fue eliminada.")
+        Call CloseSocket(UserIndex)
+        Exit Sub
     End If
+
+    If isBanned Then
+        Call WriteErrorMsg(UserIndex, "Esta cuenta se encuentra baneada.")
+        Call CloseSocket(UserIndex)
+        Exit Sub
+    End If
+
+    UserList(UserIndex).AccountID = accountId
+    ' EL VINCULO CUENTA-RANGO, GUARDADO (plan 31.001, ola 5, decision D6).
+    ' Va pegado al AccountID porque son el mismo dato: quien es esta cuenta y
+    ' que personajes suyos son GM. El rango NO se aplica todavia -aca todavia
+    ' no se sabe con que personaje va a entrar-, se aplica al conectar, en
+    ' Modulo_UsUaRiOs.ConnectUser_Check via Admin.UserDarPrivilegioLevel.
+    UserList(UserIndex).GmCharsBridge = gmChars
     Dim Personajes(1 To 10) As t_PersonajeCuenta
     Dim count               As Long
-    count = GetPersonajesCuentaDatabase(Result!Id, Personajes)
+    count = GetPersonajesCuentaDatabase(accountId, Personajes)
     Call WriteAccountCharacterList(UserIndex, Personajes, count)
     Exit Sub
 LoginAccount_Err:
@@ -1408,6 +1445,16 @@ Private Sub HandleLoginNewChar(ByVal ConnectionID As Long)
         Exit Sub
     End If
 
+    ' ANTI-ROBO DE NOMBRE DE GM (obsoleto en el camino nuevo, plan 31.001 ola 5).
+    ' Existe porque los privilegios salian de una lista de NOMBRES en Server.ini:
+    ' sin este chequeo, cualquiera se creaba un personaje llamado igual que un GM
+    ' y heredaba su rango. Con el bridge prendido el vinculo pasa a ser
+    ' ESTRUCTURAL -el rango viaja adentro del login de la cuenta duena, no hay
+    ' lista global de nombres que robar-, asi que este chequeo ya no protege nada
+    ' ahi. Se conserva porque sigue siendo la unica proteccion del camino de
+    ' fallback (bridge apagado, dev local, privilegios desde Server.ini).
+    ' NOTA: este bloque vive dentro de #If PYMMO = 1, y este proyecto compila con
+    ' PYMMO = 0, asi que hoy NO entra al binario. Ver docs/flags-de-compilacion-vb6.md.
     If EsGmChar(username) Then
         If AdministratorAccounts(UCase$(username)) <> UCase$(CuentaEmail) Then
             Call WriteShowMessageBox(UserIndex, MSG_USERNAME_ALREADY_TAKEN, vbNullString)
@@ -1478,9 +1525,27 @@ Private Sub HandleLoginNewChar(ByVal UserIndex As Integer)
 
         End If
 
-        'Check if we reached MAX_PERSONAJES for this account after updateing the UserList(userindex).AccountID in the if above
-        If GetPersonajesCountByIDDatabase(UserList(UserIndex).AccountID) >= MAX_PERSONAJES Then
-            Call CloseSocket(UserIndex)
+        ' Plan 30.001: el cupo del TIER limita lo que se consigue gratis, o sea
+        ' crear. Comprar en el mercado NO lo limita el tier, solo el techo
+        ' absoluto (ver ApplyMaoTransfer en ModAccountBridge.bas): esa compra ya
+        ' fue pagada. Antes los dos limites estaban CRUZADOS - se podian crear 10
+        ' sin mirar el tier, y en cambio recibir uno comprado rebotaba con
+        ' target_over_cap por el cupo del tier, despues de que el comprador pago.
+        Dim maxPjForTier As Long
+        maxPjForTier = MaxCharacterForTier(GetPatronTierFromAccountID(UserList(UserIndex).AccountID))
+        If maxPjForTier > MAX_PERSONAJES Then maxPjForTier = MAX_PERSONAJES
+        Dim pjActuales As Byte
+        pjActuales = GetPersonajesCountByIDDatabase(UserList(UserIndex).AccountID)
+        If pjActuales >= maxPjForTier Then
+            ' El aviso lleva el cupo real y cuantos tiene: Msg1779 usa los
+            ' placeholders 1 y 2, separados por Chr$(172), que es el separador de
+            ' campos que espera Locale_Parse_ServerMessage en el cliente.
+            Call WriteShowMessageBox(UserIndex, MSG_UPGRADE_ACCOUNT_TO_CREATE_MORE_CHARS, _
+                                     maxPjForTier & Chr$(172) & pjActuales)
+            ' NO se cierra el socket. Antes el cliente mostraba el aviso y acto
+            ' seguido "Ha ocurrido un error al conectar con el servidor", con lo
+            ' cual un bloqueo esperado se leia como una falla del juego. Queda en
+            ' la pantalla de creacion y el jugador puede volver atras.
             Exit Sub
         End If
         
@@ -3171,6 +3236,7 @@ Private Sub HandleModifySkills(ByVal UserIndex As Integer)
             Exit Sub
         End If
         '<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<<
+        Dim huboRechazo As Boolean
         With .Stats
             For i = 1 To NUMSKILLS
                 If points(i) > 0 And IsFeatureEnabled("professions_learnable") Then
@@ -3178,6 +3244,7 @@ Private Sub HandleModifySkills(ByVal UserIndex As Integer)
                         If Not TieneProfesionAprendida(UserIndex, CInt(i)) Then
                             Call WriteLocaleMsg(UserIndex, MSG_PROF_SKILL_BLOQUEADA, e_FontTypeNames.FONTTYPE_INFO)
                             points(i) = 0
+                            huboRechazo = True
                         End If
                     End If
                 End If
@@ -3195,6 +3262,9 @@ Private Sub HandleModifySkills(ByVal UserIndex As Integer)
                 End If
             Next i
         End With
+        ' Plan 04.001: si se rechazaron puntos, resincronizar SkillPts del cliente
+        ' (los descuenta de forma optimista y quedaban como gastados hasta relogear).
+        If huboRechazo Then Call WriteLevelUp(UserIndex, .Stats.SkillPts)
     End With
     Exit Sub
 HandleModifySkills_Err:
@@ -6512,11 +6582,10 @@ ErrHandler:
 End Sub
 
 Private Sub HandleComenzarTorneo(ByVal UserIndex As Integer)
+    ' TORNEO LEGACY ENTERRADO (2026-08-05). Ver ModTorneos.bas.
     On Error GoTo ErrHandler
     With UserList(UserIndex)
-        If EsGM(UserIndex) Then
-            Call ComenzarTorneoOk
-        End If
+        Call WriteConsoleMsg(UserIndex, "El sistema de torneos legacy fue retirado. Usa el sistema de eventos/lobby.", e_FontTypeNames.FONTTYPE_INFO)
     End With
     Exit Sub
 ErrHandler:
@@ -7817,6 +7886,8 @@ Private Sub HandleResetChar(ByVal UserIndex As Integer)
                 Call WriteUpdateUserStats(User.ArrayIndex)
                 Call WriteLevelUp(User.ArrayIndex, .Stats.SkillPts)
             End With
+            ' Plan 04.001: /RESET tambien limpia profesiones y contador de olvidos.
+            Call ResetUserProfessions(User.ArrayIndex)
             'Msg1280= Personaje reseteado a nivel 1.
             Call WriteLocaleMsg(UserIndex, MSG_PERSONAJE_RESETEADO_NIVEL, e_FontTypeNames.FONTTYPE_INFO)
         End If
@@ -7918,43 +7989,12 @@ End Sub
 
 Private Sub HandlePublicarPersonajeMAO(ByVal UserIndex As Integer)
     On Error GoTo HandlePublicarPersonajeMAO_Err:
+    ' MAO plan 16.002: la publicacion se hace desde la web (op lock_character
+    ' del bridge), no in-game. Se drena el Int32 del precio que envia el cliente
+    ' (para no desalinear el buffer del packet) y se redirige al jugador a la web.
     Dim Valor As Long
     Valor = reader.ReadInt32
-    If Valor <= MinimumPriceMao Then
-        'Msg1281= El valor de venta del personaje debe ser mayor que $¬1
-        Call WriteLocaleMsg(UserIndex, MSG_VALOR_VENTA_PERSONAJE_DEBE_MAYOR, e_FontTypeNames.FONTTYPE_INFO, MinimumPriceMao)
-        Exit Sub
-    End If
-    With UserList(UserIndex)
-        ' Para recibir el ID del user
-        Dim RS As ADODB.Recordset
-        Set RS = Query("select is_locked_in_mao from user where id = ?;", .Id)
-        If EsGM(UserIndex) Then
-            'Msg1282= No podes vender un gm.
-            Call WriteLocaleMsg(UserIndex, MSG_NO_PODES_VENDER_GM, e_FontTypeNames.FONTTYPE_INFO)
-            Exit Sub
-        End If
-        If CBool(RS!is_locked_in_mao) Then
-            'Msg1283= El personaje ya está publicado.
-            Call WriteLocaleMsg(UserIndex, MSG_PERSONAJE_PUBLICADO, e_FontTypeNames.FONTTYPE_INFO)
-            Exit Sub
-        End If
-        If .Stats.ELV < MinimumLevelMao Then
-            'Msg1284= No puedes publicar un personaje menor a nivel ¬1
-            Call WriteLocaleMsg(UserIndex, MSG_NO_PUEDES_PUBLICAR_PERSONAJE_MENOR_NIVEL, e_FontTypeNames.FONTTYPE_INFO, MinimumLevelMao)
-            Exit Sub
-        End If
-        If .Stats.GLD < GoldPriceMao Then
-            'Msg1291= El costo para vender tu personajes es de ¬1 monedas de oro, no tienes esa cantidad.
-            Call WriteLocaleMsg(UserIndex, MSG_NO_COSTO_VENDER_PERSONAJES_MONEDAS_ORO_TIENES_ESA_CANTIDAD, e_FontTypeNames.FONTTYPE_INFOBOLD, GoldPriceMao)
-            Exit Sub
-        Else
-            .Stats.GLD = .Stats.GLD - GoldPriceMao
-            Call WriteUpdateGold(UserIndex)
-        End If
-        Call Execute("update user set price_in_mao = ?, is_locked_in_mao = 1 where id = ?;", Valor, .Id)
-        Call modNetwork.Kick(UserList(UserIndex).ConnectionDetails.ConnID, "El personaje fue publicado.")
-    End With
+    Call WriteConsoleMsg(UserIndex, "El mercado de personajes se maneja desde la web. Publica tu personaje desde tu cuenta en el sitio oficial.", e_FontTypeNames.FONTTYPE_INFO)
     Exit Sub
 HandlePublicarPersonajeMAO_Err:
     Call TraceError(Err.Number, Err.Description, "Protocol.HandlePublicarPersonajeMAO", Erl)

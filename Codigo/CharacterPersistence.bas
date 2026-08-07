@@ -249,7 +249,7 @@ Public Function LoadCharacterFromDB(ByVal UserIndex As Integer) As Boolean
         Call SetupUserPets(UserList(UserIndex))
         Call SetupUserBankInventory(UserList(UserIndex))
         Call SetupUserSkills(UserList(UserIndex))
-        Call SetupUserProfessions(UserList(UserIndex))
+        If Not SetupUserProfessions(UserList(UserIndex)) Then Exit Function
         Call SetupUserQuests(UserList(UserIndex))
         Call SetupUserQuestsDone(UserList(UserIndex))
         ' Load additional inventories.
@@ -497,21 +497,25 @@ End Sub
 ''' </summary>
 ''' <param name="tier">The user tier.</param>
 ''' <returns>The maximum number of characters allowed.</returns>
+' Plan 30.001: el cupo YA NO cuelga de #If DEBUGGING.
+' Antes la rama DEBUGGING devolvia 10 fijo ignorando el tier, y como el binario
+' se compila con DEBUGGING = 1 (ver docs/flags-de-compilacion-vb6.md) el cupo por
+' tier NUNCA se aplicaba: cualquier cuenta gratuita podia crear 10 personajes y
+' el beneficio de la suscripcion existia en el codigo pero no en el binario.
+' Una regla de negocio no debe colgar de un flag de debug: asi quedaba imposible
+' de probar en desarrollo. Si en desarrollo hacen falta mas personajes, se le
+' pone un tier alto a la cuenta (account.is_active_patron), no se puentea la regla.
 Public Function MaxCharacterForTier(ByVal tier As e_TipoUsuario)
-    #If DEBUGGING Then
-        MaxCharacterForTier = 10
-    #Else
-        Select Case tier
-            Case e_TipoUsuario.tAventurero
-                MaxCharacterForTier = 3
-            Case e_TipoUsuario.tHeroe
-                MaxCharacterForTier = 5
-            Case e_TipoUsuario.tLeyenda
-                MaxCharacterForTier = 10
-            Case Else
-                MaxCharacterForTier = 1
-        End Select
-    #End If
+    Select Case tier
+        Case e_TipoUsuario.tAventurero
+            MaxCharacterForTier = 6
+        Case e_TipoUsuario.tHeroe
+            MaxCharacterForTier = 8
+        Case e_TipoUsuario.tLeyenda
+            MaxCharacterForTier = 10
+        Case Else
+            MaxCharacterForTier = 4
+    End Select
 End Function
 
 Public Function GetPatronTierFromAccountID(ByVal account_id) As e_TipoUsuario
@@ -1697,16 +1701,19 @@ SaveInventorySkins_Error:
     Call Logging.TraceError(Err.Number, Err.Description, "CharacterPersistence.SaveInventorySkins Nick: " & UserList(UserIndex).name, Erl())
 
 End Function
-Private Sub SetupUserProfessions(ByRef User As t_User)
+Private Function SetupUserProfessions(ByRef User As t_User) As Boolean
+    ' Plan 04.001: si la carga falla, el login se aborta. Antes seguia con 0 profesiones
+    ' en memoria y el save del logout las borraba de la DB (DELETE de reconciliacion).
     On Error GoTo SetupUserProfessions_Err
     Dim RS    As ADODB.Recordset
     Dim slot  As Byte
+    SetupUserProfessions = False
     For slot = 1 To PROF_MAX_SLOTS
         User.Professions(slot) = 0
     Next slot
     slot = 1
     Set RS = Query("SELECT profession_id FROM user_professions WHERE user_id = ? ORDER BY learned_at ASC;", User.Id)
-    If RS Is Nothing Then Exit Sub
+    If RS Is Nothing Then Exit Function
     Do While Not RS.EOF
         If slot > PROF_MAX_SLOTS Then Exit Do
         User.Professions(slot) = CInt(RS!profession_id)
@@ -1714,10 +1721,11 @@ Private Sub SetupUserProfessions(ByRef User As t_User)
         RS.MoveNext
     Loop
     Call RS.Close
-    Exit Sub
+    SetupUserProfessions = True
+    Exit Function
 SetupUserProfessions_Err:
     Call LogDatabaseError("Error en SetupUserProfessions: " & User.name & ". " & Err.Number & " - " & Err.Description)
-End Sub
+End Function
 
 Private Sub SaveCharacterProfessionsDB(ByRef U As t_User, ByRef QueryBreakdown As String)
     On Error GoTo SaveCharacterProfessionsDB_Err

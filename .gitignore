@@ -28,6 +28,7 @@ Configuracion.ini
 feature_toggle.ini
 Logs/numusers.log
 Database.db
+database*.db
 AoServerTools.dll
 AOACServer.pdb
 .aider*
@@ -44,4 +45,12 @@ migrations_debug.log
 *.bkp
 *bkp.db
 test_ado*.vbs
-"Empty_db - copia.db"
+Empty_db - copia.db
+
+# Variables de entorno (secretos de runtime): nunca versionar
+.env
+.env.*
+**/.env
+**/.env.*
+!.env.example
+!**/.env.example

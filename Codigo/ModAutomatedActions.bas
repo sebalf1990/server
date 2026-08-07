@@ -39,18 +39,26 @@ Public Sub RunAutomatedActions()
         With UserList(UserIndex)
             If .flags.UserLogged Then
                 If .AutomatedAction.IsActive Then
-                    Select Case .AutomatedAction.skill
-                        Case e_Skill.Talar
-                            Call ChopWood(UserIndex)
-                        Case e_Skill.Mineria
-                            Call MineMinerals(UserIndex)
-                        Case e_Skill.Pescar
-                            Call PerformFishing(UserIndex)
-                        Case e_Skill.Smelting
-                            Call SmeltMinerals(UserIndex)
-                        Case Else
-                            Debug.Assert False
-                    End Select
+                    ' Plan 04.001: revalidar la profesion en cada tick. Olvidarla en pleno
+                    ' loop cortaba el permiso pero la accion seguia corriendo y subiendo skill.
+                    ' Smelting revalida adentro (modSmelting exige Mineria por su cuenta).
+                    If (.AutomatedAction.skill = e_Skill.Talar Or .AutomatedAction.skill = e_Skill.Mineria Or .AutomatedAction.skill = e_Skill.Pescar) And Not TieneProfesionAprendida(UserIndex, CInt(.AutomatedAction.skill)) Then
+                        Call WriteLocaleMsg(UserIndex, MSG_PROF_NO_APRENDIDA, e_FontTypeNames.FONTTYPE_INFO)
+                        Call ResetUserAutomatedActions(UserIndex)
+                    Else
+                        Select Case .AutomatedAction.skill
+                            Case e_Skill.Talar
+                                Call ChopWood(UserIndex)
+                            Case e_Skill.Mineria
+                                Call MineMinerals(UserIndex)
+                            Case e_Skill.Pescar
+                                Call PerformFishing(UserIndex)
+                            Case e_Skill.Smelting
+                                Call SmeltMinerals(UserIndex)
+                            Case Else
+                                Debug.Assert False
+                        End Select
+                    End If
                 End If
             End If
         End With

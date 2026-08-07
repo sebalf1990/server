@@ -1006,6 +1006,13 @@ Sub ResetBasicUserInfo(ByVal UserIndex As Integer)
         .Cuenta = vbNullString
         .Id = -1
         .AccountID = -1
+        ' Plan 31.001 (ola 5): el mapa de personajes GM se limpia JUNTO con
+        ' el AccountID porque tiene exactamente su misma vida. Si quedara
+        ' pegado, el proximo jugador que caiga en este slot heredaria los
+        ' rangos GM de la cuenta anterior: seria la UNICA forma de que este
+        ' diseno eleve privilegios, y por eso se limpia donde ya se limpia
+        ' la cuenta.
+        .GmCharsBridge = vbNullString
         .Desc = vbNullString
         .DescRM = vbNullString
         .pos.Map = 0

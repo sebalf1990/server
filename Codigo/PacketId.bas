@@ -240,6 +240,7 @@ Public Enum ServerPacketID
     eNpcRadarPartyMember
     eNpcRadarClanMember
     eUpdatePoisonStacks ' Sistema venenos TOGGLE26: contador stacks de Hemo (solo al dueno)
+    eProfessionsUpdate  ' Plan 04.001: vista resuelta de profesiones (7 bytes, skills 17..23)
     eMaxPacket
     [PacketCount]
 End Enum
@@ -496,9 +497,9 @@ Public Enum ClientPacketID
     eCrearEvento
     eBanTemporal
     eCancelarExit
-    eCrearTorneo
-    eComenzarTorneo
-    eCancelarTorneo
+    eCrearTorneo            ' DEPRECADO 2026-08-05: torneo legacy enterrado, el handler rechaza
+    eComenzarTorneo         ' DEPRECADO 2026-08-05
+    eCancelarTorneo         ' DEPRECADO 2026-08-05
     eBusquedaTesoro
     eCompletarViaje
     eBovedaMoveItem

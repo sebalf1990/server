@@ -593,7 +593,8 @@ Sub MakeNPCChar(ByVal toMap As Boolean, sndIndex As Integer, NpcIndex As Integer
                         End If
                         
                         If UserDoneQuest(sndIndex, .QuestNumber(q)) Or Not UserDoneQuest(sndIndex, QuestList(.QuestNumber(q)).RequiredQuest) Or UserList(sndIndex).Stats.ELV < _
-                                QuestList(.QuestNumber(q)).RequiredLevel Or (QuestList(.QuestNumber(q)).RequiredClassesCount > 0 And Not validClass) Then
+                                QuestList(.QuestNumber(q)).RequiredLevel Or (QuestList(.QuestNumber(q)).RequiredClassesCount > 0 And Not validClass) _
+                                Or (QuestList(.QuestNumber(q)).Trabajador And IsFeatureEnabled("professions_learnable") And QuestList(.QuestNumber(q)).RequiredProfession > 0 And Not TieneProfesionAprendida(sndIndex, QuestList(.QuestNumber(q)).RequiredProfession)) Then
                             Simbolo = 2
                         Else
                             Simbolo = 1
