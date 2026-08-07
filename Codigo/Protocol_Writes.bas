@@ -1415,9 +1415,15 @@ End Sub
 Public Sub WriteInventoryUnlockSlots(ByVal UserIndex As Integer)
     On Error GoTo WriteInventoryUnlockSlots_Err
     With UserList(UserIndex)
-        If .Stats.tipoUsuario <> tNormal Then
+        ' 07.001: va por el TIER EFECTIVO, no por la suscripcion real, porque el server ya le
+        ' habilito los slots al admin (getMaxInventorySlots) y sin este paquete el cliente no
+        ' los desbloquearia. Es un paquete PRIVADO (ToIndex): no delata al admin como
+        ' suscriptor; la estrella del nick viaja por otro paquete y sigue saliendo del tier real.
+        Dim tierBeneficios As e_TipoUsuario
+        tierBeneficios = TierEfectivoDeBeneficios(UserIndex)
+        If tierBeneficios <> tNormal Then
             Call Writer.WriteInt16(ServerPacketID.eInventoryUnlockSlots)
-            Select Case .Stats.tipoUsuario
+            Select Case tierBeneficios
                 Case tLeyenda
                     Call Writer.WriteInt8(3)
                 Case tHeroe

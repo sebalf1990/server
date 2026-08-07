@@ -73,13 +73,37 @@ Public Function GetAvailableUserSlot() As Integer
     GetAvailableUserSlot = AvailableUserSlot.currentIndex
 End Function
 
+' Tier que se usa para RESOLVER BENEFICIOS (slots de inventario, mapas y tiles premium,
+' skins...). Para un Admin/Dios devuelve el tope sin importar su suscripcion real.
+' NUNCA usar para dibujar ni para enviar al cliente: para eso esta .Stats.tipoUsuario,
+' que refleja la suscripcion de verdad y es lo que pinta la estrella del nick.
+Public Function TierEfectivoDeBeneficios(ByVal UserIndex As Integer) As e_TipoUsuario
+    On Error GoTo TierEfectivoDeBeneficios_Error
+    If UserIndex <= 0 Then Exit Function
+    If (UserList(UserIndex).flags.Privilegios And (e_PlayerType.Admin Or e_PlayerType.Dios)) <> 0 Then
+        TierEfectivoDeBeneficios = e_TipoUsuario.tLeyenda
+        Exit Function
+    End If
+    TierEfectivoDeBeneficios = UserList(UserIndex).Stats.tipoUsuario
+    Exit Function
+TierEfectivoDeBeneficios_Error:
+    Call Logging.TraceError(Err.Number, Err.Description, "UserMod.TierEfectivoDeBeneficios", Erl())
+    TierEfectivoDeBeneficios = UserList(UserIndex).Stats.tipoUsuario
+End Function
+
+' True si el tier es cualquiera de los tres pagos.
+Public Function EsTierDeSuscriptor(ByVal t As e_TipoUsuario) As Boolean
+    EsTierDeSuscriptor = (t = e_TipoUsuario.tAventurero Or t = e_TipoUsuario.tHeroe Or t = e_TipoUsuario.tLeyenda)
+End Function
+
 Public Function IsPatreon(ByVal UserIndex As Integer) As Boolean
     
    On Error GoTo IsPatreon_Error
 
-    With UserList(UserIndex).Stats
-        IsPatreon = .tipoUsuario = e_TipoUsuario.tAventurero Or .tipoUsuario = e_TipoUsuario.tHeroe Or .tipoUsuario = e_TipoUsuario.tLeyenda
-    End With
+    ' 07.001: "goza de los beneficios", que NO es lo mismo que "es suscriptor". Un Admin o
+    ' Dios los tiene sin estar suscripto (decision del dueno 2026-08-07) para poder probar el
+    ' juego completo. La MARCA VISUAL del nick NO cambia: sale de .Stats.tipoUsuario crudo.
+    IsPatreon = EsTierDeSuscriptor(TierEfectivoDeBeneficios(UserIndex))
 
    On Error GoTo 0
    Exit Function
@@ -2446,7 +2470,7 @@ Public Function getMaxInventorySlots(ByVal UserIndex As Integer) As Byte
     On Error GoTo getMaxInventorySlots_Err
     getMaxInventorySlots = MAX_USERINVENTORY_SLOTS
     With UserList(UserIndex)
-        getMaxInventorySlots = get_num_inv_slots_from_tier(.Stats.tipoUsuario)
+        getMaxInventorySlots = get_num_inv_slots_from_tier(TierEfectivoDeBeneficios(UserIndex))
     End With
     Exit Function
 getMaxInventorySlots_Err:

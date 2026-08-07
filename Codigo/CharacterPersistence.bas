@@ -260,7 +260,8 @@ Public Function LoadCharacterFromDB(ByVal UserIndex As Integer) As Boolean
         Call Execute("update account set last_ip = ? where id = ?", .ConnectionDetails.IP, .AccountID)
         .Stats.Creditos = 0
         ' If the user is a patron-type, load the house key.
-        If .Stats.tipoUsuario = tAventurero Or .Stats.tipoUsuario = tHeroe Or .Stats.tipoUsuario = tLeyenda Then
+        ' 07.001: por tier efectivo, asi un Admin/Dios tambien la carga (decision del dueno).
+        If EsTierDeSuscriptor(TierEfectivoDeBeneficios(UserIndex)) Then
             Call db_load_house_key(UserList(UserIndex))
         End If
     End With

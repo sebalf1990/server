@@ -42,7 +42,7 @@ Public Function IsObjecIndextInInventory(ByVal UserIndex As Integer, ByVal ObjIn
     Dim maxItemsInventory As Integer
     Dim currentObjIndex   As Integer
     With UserList(UserIndex)
-        maxItemsInventory = get_num_inv_slots_from_tier(.Stats.tipoUsuario)
+        maxItemsInventory = get_num_inv_slots_from_tier(TierEfectivoDeBeneficios(UserIndex))
         ' Search inventory for the object
         For i = 1 To maxItemsInventory
             currentObjIndex = .invent.Object(i).ObjIndex
@@ -65,7 +65,7 @@ Public Function get_object_amount_from_inventory(ByVal user_index, ByVal obj_ind
     Dim i                 As Integer
     Dim maxItemsInventory As Integer
     With UserList(user_index)
-        maxItemsInventory = get_num_inv_slots_from_tier(.Stats.tipoUsuario)
+        maxItemsInventory = get_num_inv_slots_from_tier(TierEfectivoDeBeneficios(user_index))
         ' Search inventory for the object
         For i = 1 To maxItemsInventory
             If .invent.Object(i).ObjIndex = obj_index Then
@@ -1171,7 +1171,7 @@ Dim Ropaje                      As Integer
 
     On Error GoTo ErrHandler
     With UserList(UserIndex)
-        If Slot > get_num_inv_slots_from_tier(.Stats.tipoUsuario) Then
+        If Slot > get_num_inv_slots_from_tier(TierEfectivoDeBeneficios(UserIndex)) Then
             'Patreon slot
             'TODO: Send msg to client...WriteLocaleMsg
             Exit Sub
@@ -3150,7 +3150,7 @@ Public Function IsConsumableFreeZone(ByVal UserIndex As Integer) As Boolean
     ' Verificar si está en zona con trigger activo
     isTriggerZone = (triggerStatus = e_Trigger6.TRIGGER6_PERMITE)
     ' Verificar si es un usuario con tier de suscripción
-    isTierUser = (UserList(UserIndex).Stats.tipoUsuario = tAventurero Or UserList(UserIndex).Stats.tipoUsuario = tHeroe Or UserList(UserIndex).Stats.tipoUsuario = tLeyenda)
+    isTierUser = IsPatreon(UserIndex)
     ' Zona de casas/sotanos arenas: mapas del 600 al 749 con trigger activo
     isHouseZone = (currentMap >= 600 And currentMap <= 749 And isTriggerZone)
     ' Zonas especiales fijas donde no se consumen pociones
@@ -4454,7 +4454,7 @@ Public Sub EquipArrow(ByVal UserIndex As Integer, ByVal Slot As Integer)
     Dim maxItemsInventory As Integer
 
     With UserList(UserIndex).invent
-        maxItemsInventory = get_num_inv_slots_from_tier(UserList(UserIndex).Stats.tipoUsuario)
+        maxItemsInventory = get_num_inv_slots_from_tier(TierEfectivoDeBeneficios(UserIndex))
         If Slot < 1 Or Slot > maxItemsInventory Then
             Call LogError("EquipArrow invalid slot: " & Slot & " max=" & maxItemsInventory & " user=" & UserList(UserIndex).name)
             Exit Sub
