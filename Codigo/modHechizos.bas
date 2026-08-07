@@ -3759,6 +3759,7 @@ Sub HechizoCombinados(ByVal UserIndex As Integer, ByRef b As Boolean, ByRef IsAl
         ' Prevengo daño negativo
         If Damage < 0 Then Damage = 0
         If UserIndex <> targetUserIndex Then
+            Call checkHechizosEfectividad(UserIndex, targetUserIndex)
             Call UsuarioAtacadoPorUsuario(UserIndex, targetUserIndex)
         End If
         enviarInfoHechizo = True
@@ -3989,8 +3990,24 @@ Sub HechizoCombinados(ByVal UserIndex As Integer, ByRef b As Boolean, ByRef IsAl
             Call WriteLocaleMsg(UserIndex, MSG_CANNOT_ATTACK_YOURSELF, e_FontTypeNames.FONTTYPE_FIGHT)
             Exit Sub
         End If
+        If UserList(tU).Counters.TiempoDeInmunidadParalisisNoMagicas > 0 Then
+            Call WriteConsoleMsg(UserIndex, PrepareMessageLocaleMsg(MSG_NO_PUEDE_VOLVER_SER_PARALIZADO_TAN_RAPIDO, UserList(tU).name, e_FontTypeNames.FONTTYPE_FIGHT))
+            Exit Sub
+        End If
+        If Not UserMod.CanMove(UserList(tU).flags, UserList(tU).Counters) Then
+            ' Msg661=No podes inmovilizar un objetivo que no puede moverse.
+            Call WriteLocaleMsg(UserIndex, MSG_NO_PODES_INMOVILIZAR_OBJETIVO_PUEDE_MOVERSE, e_FontTypeNames.FONTTYPE_FIGHT)
+            Exit Sub
+        End If
+        If IsSet(UserList(tU).flags.StatusMask, eCCInmunity) Then
+            Call WriteLocaleMsg(UserIndex, MsgCCInunity, e_FontTypeNames.FONTTYPE_FIGHT)
+            Exit Sub
+        End If
+        ' Upstream 31859c99: sin estas 4 validaciones se podia recastear el combinado sobre
+        ' un objetivo ya controlado y extender la duracion indefinidamente (exploit PvP).
         If Not PuedeAtacar(UserIndex, tU) Then Exit Sub
         If UserIndex <> tU Then
+            Call checkHechizosEfectividad(UserIndex, tU)
             Call UsuarioAtacadoPorUsuario(UserIndex, tU)
         End If
         enviarInfoHechizo = True
@@ -4007,8 +4024,24 @@ Sub HechizoCombinados(ByVal UserIndex As Integer, ByRef b As Boolean, ByRef IsAl
             Call WriteLocaleMsg(UserIndex, MSG_CANNOT_ATTACK_YOURSELF, e_FontTypeNames.FONTTYPE_FIGHT)
             Exit Sub
         End If
+        If UserList(tU).Counters.TiempoDeInmunidadParalisisNoMagicas > 0 Then
+            Call WriteConsoleMsg(UserIndex, PrepareMessageLocaleMsg(MSG_NO_PUEDE_VOLVER_SER_INMOVILIZADO_TAN_RAPIDO, UserList(tU).name, e_FontTypeNames.FONTTYPE_FIGHT))
+            Exit Sub
+        End If
+        If Not UserMod.CanMove(UserList(tU).flags, UserList(tU).Counters) Then
+            ' Msg661=No podes inmovilizar un objetivo que no puede moverse.
+            Call WriteLocaleMsg(UserIndex, MSG_NO_PODES_INMOVILIZAR_OBJETIVO_PUEDE_MOVERSE, e_FontTypeNames.FONTTYPE_FIGHT)
+            Exit Sub
+        End If
+        If IsSet(UserList(tU).flags.StatusMask, eCCInmunity) Then
+            Call WriteLocaleMsg(UserIndex, MsgCCInunity, e_FontTypeNames.FONTTYPE_FIGHT)
+            Exit Sub
+        End If
+        ' Upstream 31859c99: sin estas 4 validaciones se podia recastear el combinado sobre
+        ' un objetivo ya controlado y extender la duracion indefinidamente (exploit PvP).
         If Not PuedeAtacar(UserIndex, tU) Then Exit Sub
         If UserIndex <> tU Then
+            Call checkHechizosEfectividad(UserIndex, tU)
             Call UsuarioAtacadoPorUsuario(UserIndex, tU)
         End If
         enviarInfoHechizo = True

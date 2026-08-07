@@ -124,6 +124,9 @@ Public Sub RemoveUpdateScenario(ByRef Index As Integer)
             ActiveUpdateSlots.currentIndex = ActiveUpdateSlots.currentIndex - 1
             AvailableUpdateSlots.currentIndex = AvailableUpdateSlots.currentIndex + 1
             AvailableUpdateSlots.IndexInfo(AvailableUpdateSlots.currentIndex) = Index
+            ' Upstream fd53ef5c: sin este corte el loop sigue sobre posiciones ya movidas y el
+            ' mismo escenario se procesa dos veces en la misma pasada -> Overflow en UpdateAll.
+            Exit For
         End If
     Next
 End Sub
