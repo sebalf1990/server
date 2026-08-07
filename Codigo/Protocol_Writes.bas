@@ -51,8 +51,7 @@ End Function
         ' Antes frmConnect lo tenia hardcodeado en 10 y por eso nunca frenaba.
         ' El server sigue siendo la barrera real: esto es solo para avisar antes.
         Dim maxChars As Long
-        maxChars = MaxCharacterForTier(GetPatronTierFromAccountID(UserList(UserIndex).AccountID))
-        If maxChars > MAX_PERSONAJES Then maxChars = MAX_PERSONAJES
+        maxChars = MaxCharacterForAccount(UserIndex)
         Call Writer.WriteInt(maxChars)
         Dim i As Long
         For i = 1 To count

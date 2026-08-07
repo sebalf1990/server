@@ -27,6 +27,10 @@ Attribute VB_Name = "Admin"
 '
 Option Explicit
 Public AdministratorAccounts As Dictionary
+' Cuentas (email) EXENTAS del cupo de personajes: solo Admines y Dioses del Server.ini
+' (decision del dueno 2026-08-07). No incluye SemiDioses/Consejeros/RM: esos siguen
+' con el cupo de su tier. Se llena en loadAdministrativeUsers (FileIO.bas).
+Public UnlimitedCharAccounts As Dictionary
 
 Public Type t_Motd
     texto As String

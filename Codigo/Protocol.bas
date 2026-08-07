@@ -1472,10 +1472,8 @@ Private Sub HandleLoginNewChar(ByVal ConnectionID As Long)
     Dim num_pc As Byte
     num_pc = GetPersonajesCountByIDDatabase(UserList(UserIndex).AccountID)
     Debug.Assert num_pc > 0
-    Dim user_tier As e_TipoUsuario
-    user_tier = GetPatronTierFromAccountID(UserList(UserIndex).AccountID)
     Dim max_pc_for_tier As Byte
-    max_pc_for_tier = MaxCharacterForTier(user_tier)
+    max_pc_for_tier = MaxCharacterForAccount(UserIndex)
     Debug.Assert max_pc_for_tier > 0
 
     If num_pc >= Min(max_pc_for_tier, MAX_PERSONAJES) Then
@@ -1532,8 +1530,7 @@ Private Sub HandleLoginNewChar(ByVal UserIndex As Integer)
         ' sin mirar el tier, y en cambio recibir uno comprado rebotaba con
         ' target_over_cap por el cupo del tier, despues de que el comprador pago.
         Dim maxPjForTier As Long
-        maxPjForTier = MaxCharacterForTier(GetPatronTierFromAccountID(UserList(UserIndex).AccountID))
-        If maxPjForTier > MAX_PERSONAJES Then maxPjForTier = MAX_PERSONAJES
+        maxPjForTier = MaxCharacterForAccount(UserIndex)
         Dim pjActuales As Byte
         pjActuales = GetPersonajesCountByIDDatabase(UserList(UserIndex).AccountID)
         If pjActuales >= maxPjForTier Then

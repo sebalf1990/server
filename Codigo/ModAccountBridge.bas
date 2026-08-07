@@ -260,6 +260,33 @@ End Function
 ' Cualquier error de parseo cae en User y se logea: un mapa raro no puede ni
 ' elevar ni romper el login.
 ' ---------------------------------------------------------------------------
+' True si el mapa de GMs de la cuenta trae AL MENOS un personaje admin o dios.
+' Lo usa el cupo de personajes (esos dos rangos quedan exentos, decision del dueno
+' 2026-08-07). SemiDios/Consejero/RM NO: siguen con el cupo de su tier.
+' Mismo criterio de seguridad que PrivilegiosDePersonaje: lo que no se entiende no eleva.
+Public Function AccountBridge_MapaTieneAdminODios(ByVal gmChars As String) As Boolean
+    On Error GoTo MapaTieneAdminODios_Err
+    Dim entradas() As String
+    Dim partes()   As String
+    Dim i          As Long
+    Dim rango      As e_PlayerType
+    If LenB(Trim$(gmChars)) = 0 Then Exit Function
+    entradas = Split(gmChars, ",")
+    For i = 0 To UBound(entradas)
+        partes = Split(entradas(i), "=")
+        If UBound(partes) = 1 Then
+            rango = RangoDesdeTexto(partes(1))
+            If (rango And e_PlayerType.Admin) <> 0 Or (rango And e_PlayerType.Dios) <> 0 Then
+                AccountBridge_MapaTieneAdminODios = True
+                Exit Function
+            End If
+        End If
+    Next i
+    Exit Function
+MapaTieneAdminODios_Err:
+    Call LogError("AccountBridge_MapaTieneAdminODios error: " & Err.Description)
+End Function
+
 Public Function AccountBridge_PrivilegiosDePersonaje(ByVal gmChars As String, _
                                                      ByVal charName As String) As e_PlayerType
     On Error GoTo PrivilegiosDePersonaje_Err

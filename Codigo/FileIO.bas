@@ -231,6 +231,63 @@ CargarSpawnList_Err:
     Call TraceError(Err.Number, Err.Description, "ES.CargarSpawnList", Erl)
 End Sub
 
+' Cupo de personajes de una cuenta, ya resuelto: las cuentas de Admin/Dios declaradas
+' en Server.ini quedan EXENTAS (techo absoluto MAX_PERSONAJES); el resto usa su tier.
+' Un solo punto de verdad para los 3 call-sites del cupo (aviso al cliente, creacion
+' y transferencia de mercado). Decision del dueno 2026-08-07.
+Public Function MaxCharacterForAccount(ByVal UserIndex As Integer) As Long
+    On Error GoTo MaxCharacterForAccount_Err
+    If EsCuentaSinCupoDePersonajes(UserIndex) Then
+        MaxCharacterForAccount = MAX_PERSONAJES
+        Exit Function
+    End If
+    MaxCharacterForAccount = MaxCharacterForTier(GetPatronTierFromAccountID(UserList(UserIndex).AccountID))
+    If MaxCharacterForAccount > MAX_PERSONAJES Then MaxCharacterForAccount = MAX_PERSONAJES
+    Exit Function
+MaxCharacterForAccount_Err:
+    Call TraceError(Err.Number, Err.Description, "ES.MaxCharacterForAccount", Erl)
+    ' Ante error, el cupo mas restrictivo (nunca regalar personajes por una falla)
+    MaxCharacterForAccount = MaxCharacterForTier(e_TipoUsuario.tNormal)
+End Function
+
+' True si la cuenta tiene un personaje Admin o Dios. Mira las DOS fuentes de staff que
+' conviven en el proyecto: el mapa que manda la web al loguear (fuente moderna, plan
+' 31.001) y las secciones [Admines]/[Dioses] de Server.ini (clasica / fallback).
+Public Function EsCuentaSinCupoDePersonajes(ByVal UserIndex As Integer) As Boolean
+    On Error GoTo EsCuentaSinCupoDePersonajes_Err
+    If UserIndex <= 0 Then Exit Function
+    ' 1) Bridge de la web (es la fuente viva en local y en produccion)
+    If AccountBridge_Enabled() Then
+        If AccountBridge_MapaTieneAdminODios(UserList(UserIndex).GmCharsBridge) Then
+            EsCuentaSinCupoDePersonajes = True
+            Exit Function
+        End If
+    End If
+    ' 2) Server.ini (declaracion clasica Nick|Email)
+    EsCuentaSinCupoDePersonajes = IsUnlimitedCharAccount(UserList(UserIndex).AccountID)
+    Exit Function
+EsCuentaSinCupoDePersonajes_Err:
+    Call TraceError(Err.Number, Err.Description, "ES.EsCuentaSinCupoDePersonajes", Erl)
+End Function
+
+' True si la cuenta es de un Admin o Dios declarado en Server.ini (por email).
+Public Function IsUnlimitedCharAccount(ByVal account_id As Long) As Boolean
+    On Error GoTo IsUnlimitedCharAccount_Err
+    If UnlimitedCharAccounts Is Nothing Then Exit Function
+    If UnlimitedCharAccounts.count = 0 Then Exit Function
+    If account_id <= 0 Then Exit Function
+    Dim RS As ADODB.Recordset
+    Set RS = Query("SELECT email FROM account WHERE id = ?;", account_id)
+    If RS Is Nothing Then Exit Function
+    If RS.EOF Then Exit Function
+    IsUnlimitedCharAccount = UnlimitedCharAccounts.Exists(UCase$(Trim$(RS!Email & "")))
+    Call RS.Close
+    Set RS = Nothing
+    Exit Function
+IsUnlimitedCharAccount_Err:
+    Call TraceError(Err.Number, Err.Description, "ES.IsUnlimitedCharAccount", Erl)
+End Function
+
 Function EsAdmin(ByRef name As String) As Boolean
     '***************************************************
     'Author: Unknown
@@ -333,6 +390,8 @@ Public Sub loadAdministrativeUsers()
     Dim name As String
     ' Anti-choreo de GM's
     Set AdministratorAccounts = New Dictionary
+    ' Cuentas exentas del cupo de personajes (solo Admin y Dios)
+    Set UnlimitedCharAccounts = New Dictionary
     Dim TempName() As String
     ' Public container
     Set Administradores = New clsIniManager
@@ -350,6 +409,8 @@ Public Sub loadAdministrativeUsers()
         If UBound(TempName()) > 0 Then
             ' AdministratorAccounts("Nick") = "Email"
             AdministratorAccounts(TempName(0)) = TempName(1)
+            ' Sin cupo de personajes: la cuenta del admin (decision del dueno 2026-08-07)
+            UnlimitedCharAccounts(TempName(1)) = 1
             ' Add key
             Call Administradores.ChangeValue("Admin", TempName(0), "1")
         End If
@@ -363,6 +424,8 @@ Public Sub loadAdministrativeUsers()
         If UBound(TempName()) > 0 Then
             ' AdministratorAccounts("Nick") = "Email"
             AdministratorAccounts(TempName(0)) = TempName(1)
+            ' Sin cupo de personajes: la cuenta del dios (decision del dueno 2026-08-07)
+            UnlimitedCharAccounts(TempName(1)) = 1
             ' Add key
             Call Administradores.ChangeValue("Dios", TempName(0), "1")
         End If
