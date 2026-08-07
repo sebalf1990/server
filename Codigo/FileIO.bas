@@ -2188,8 +2188,18 @@ Sub LoadFeatureToggles()
     Dim Lector   As clsIniManager
     Dim Temporal As Long
     Set FeatureToggles = New Dictionary
-    If Not FileExist("feature_toggle.ini") Then
-        Exit Sub
+    ' 06.002 Ola 3: el check de existencia era relativo al CWD pero la carga usa IniPath;
+    ' arrancado desde otra carpeta los toggles no cargaban y TODO quedaba apagado en silencio.
+    If Not FileExist(IniPath & "feature_toggle.ini") Then
+        ' Transporte por template versionado (decision del dueno, 06.002 Ola 3): si falta el
+        ' archivo real (deploy nuevo), se crea desde el template y queda registrado en el log.
+        If FileExist(IniPath & "feature_toggle.ini.template") Then
+            Call FileSystem.FileCopy(IniPath & "feature_toggle.ini.template", IniPath & "feature_toggle.ini")
+            Call LogThis(0, "[FeatureToggles] feature_toggle.ini creado desde el template versionado", vbLogEventTypeWarning)
+        Else
+            Call LogThis(0, "[FeatureToggles] feature_toggle.ini NO ENCONTRADO en " & IniPath & " - todos los toggles quedan APAGADOS", vbLogEventTypeWarning)
+            Exit Sub
+        End If
     End If
     If frmMain.Visible Then frmMain.txStatus.Caption = "Cargando info de feature toggles."
     Set Lector = New clsIniManager
@@ -2208,6 +2218,9 @@ Sub LoadFeatureToggles()
         Call SetFeatureToggle(key, value)
     Next i
     Set Lector = Nothing
+    ' 06.002 Ola 3: verificacion explicita en boot del interruptor maestro del motor elemental
+    ' (la clave ausente = apagado en silencio; que quede registrado siempre).
+    Call LogThis(0, "[FeatureToggles] " & TOGGLECOUNT & " toggles cargados. elemental_system=" & IIf(IsFeatureEnabled("elemental_system"), "ON", "OFF"), vbLogEventTypeInformation)
     Exit Sub
 LoadFeatureToggles_Err:
     Set Lector = Nothing

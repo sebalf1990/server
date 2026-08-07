@@ -23,6 +23,8 @@ Public DamageTypeRegLoaded As Boolean
 
 ' Crit universal (plan 20.002 Ola 2). Config data-driven desde DamageTypes.dat [INIT].
 Public Const DMG_TYPE_CRIT As Long = 15   ' clave de resistencia para crit (fisico+magico)
+' 06.002 Ola 3: cap duro del crit universal configurable; un valor de test (50) llego al .dat vivo.
+Private Const MAX_UNIVERSAL_CRIT_CHANCE_PCT As Single = 25
 Private mUniversalCritChance As Single
 Private mUniversalCritMult As Single
 
@@ -87,9 +89,20 @@ Public Sub LoadDamageTypes()
     If LenB(dir(fname)) = 0 Then Exit Sub
     Dim Leer As New clsIniManager
     Call Leer.Initialize(fname)
+    ' 06.002 Ola 3: clamps de carga. Un CritChancePct de test (50) llego a produccion en el .dat;
+    ' el guardrail evita que un valor fuera de rango entre en silencio.
     If val(Leer.GetValue("INIT", "CritChancePct")) > 0 Then mUniversalCritChance = val(Leer.GetValue("INIT", "CritChancePct"))
+    If mUniversalCritChance > MAX_UNIVERSAL_CRIT_CHANCE_PCT Then
+        Call LogThis(0, "[DamageTypes] CritChancePct=" & mUniversalCritChance & " fuera de rango, clampeado a " & MAX_UNIVERSAL_CRIT_CHANCE_PCT, vbLogEventTypeWarning)
+        mUniversalCritChance = MAX_UNIVERSAL_CRIT_CHANCE_PCT
+    End If
     If val(Leer.GetValue("INIT", "CritMult")) > 0 Then mUniversalCritMult = val(Leer.GetValue("INIT", "CritMult"))
     If val(Leer.GetValue("INIT", "SlowFloorPct")) > 0 Then mElementalSlowFloor = val(Leer.GetValue("INIT", "SlowFloorPct"))
+    If mElementalSlowFloor > 1 Then
+        ' Escrito como porcentaje (45) en vez de fraccion (0.45): interpretarlo, no congelar el juego.
+        Call LogThis(0, "[DamageTypes] SlowFloorPct=" & mElementalSlowFloor & " interpretado como porcentaje -> " & (mElementalSlowFloor / 100), vbLogEventTypeWarning)
+        mElementalSlowFloor = mElementalSlowFloor / 100
+    End If
     Dim count As Long, i As Long, sect As String, idv As Long
     count = val(Leer.GetValue("INIT", "TypeCount"))
     For i = 1 To count
@@ -390,7 +403,11 @@ Private Function FireProcs(ByRef src As t_ElementalSource, ByVal trig As e_ProcT
                         Call ElementalLog(logCtx & " PROC dmgBonus " & DamageTypeName(c.DamageType) & " final=" & fd)
                     Case eProcApplyState
                         ' Aplica el preset (EotId) respetando inmunidad / resist-a-efecto del tipo del proc.
-                        If src.Proc(i).EotId > 0 Then
+                        ' 06.002 Ola 3: EotId fuera del catalogo (dat mal tipeado, ej ElemProc1Eot=999) tiraba
+                        ' error 9 y abortaba TODO el dano elemental del golpe. Se ignora solo ese proc.
+                        If src.Proc(i).EotId > UBound(EffectOverTime) Then
+                            Call ElementalLog(logCtx & " PROC applyState EotId=" & src.Proc(i).EotId & " FUERA DE CATALOGO (ignorado)")
+                        ElseIf src.Proc(i).EotId > 0 Then
                             Dim rr As t_ElementalResist
                             rr = GetTargetResist(targetIsNpc, targetIndex, src.Proc(i).DamageType)
                             If rr.Immune <> 0 Or rr.ImmuneEffect <> 0 Then
