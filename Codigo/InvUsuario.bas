@@ -1214,7 +1214,6 @@ Dim Ropaje                      As Integer
                     .invent.Object(Slot).Equipped = 1
                     .invent.EquippedWeaponObjIndex = .invent.Object(Slot).ObjIndex
                     .invent.EquippedWeaponSlot = Slot
-                    Call ValidateEquippedArrow(UserIndex)
                     If obj.DosManos = 1 Then
                         If .invent.EquippedShieldObjIndex > 0 Then
                             Call Desequipar(UserIndex, .invent.EquippedShieldSlot)
@@ -4445,9 +4444,6 @@ SkinRequireObject_Error:
 End Function
 Public Sub EquipArrow(ByVal UserIndex As Integer, ByVal Slot As Integer)
     On Error GoTo EquipArrow_Error
-    Dim bowIndex  As Integer
-    Dim BowCategory   As Byte
-    Dim ArrowCategory As Byte
     Dim ArrowObjIndex As Integer
     Dim maxItemsInventory As Integer
 
@@ -4465,36 +4461,10 @@ Public Sub EquipArrow(ByVal UserIndex As Integer, ByVal Slot As Integer)
         End If
         Debug.Assert ObjData(ArrowObjIndex).OBJType = e_OBJType.otArrows
 
-        bowIndex = .EquippedWeaponObjIndex
-        
-        ' No hay arco equipado
-        If bowIndex <= 0 Then
-            'Msg2145=Debes equipar un arco para usar flechas.
-            Call WriteLocaleMsg(UserIndex, MSG_DEBES_EQUIPAR_ARCO_USAR_FLECHAS, e_FontTypeNames.FONTTYPE_INFO)
-            Exit Sub
-        End If
+        ' 06.002 (decision del dueno): la municion se equipa SIEMPRE, sin exigir arco ni
+        ' categoria (sistema de tiers Bow/ArrowCategory eliminado). La compatibilidad
+        ' arma-municion se valida al DISPARAR (Subtipo vs Municion en ambos caminos).
 
-        If bowIndex < LBound(ObjData) Or bowIndex > UBound(ObjData) Then
-            Call LogError("EquipArrow invalid bow index: " & bowIndex & " user=" & UserList(UserIndex).name)
-            Exit Sub
-        End If
-        BowCategory = ObjData(bowIndex).BowCategory
-        ArrowCategory = ObjData(ArrowObjIndex).ArrowCategory
-
-        ' El arma equipada no es un arco
-        If ObjData(bowIndex).WeaponType <> eBow Then
-            'Msg2146=El arma equipada no permite usar flechas.
-            Call WriteLocaleMsg(UserIndex, MSG_NO_ARMA_EQUIPADA_PERMITE_USAR_FLECHAS, e_FontTypeNames.FONTTYPE_INFO)
-            Exit Sub
-        End If
-
-        ' No se permite flecha de mayor categoria que el arco
-        If ArrowCategory > BowCategory Then
-            'Msg2147=No podés equipar esta flecha con el arco actual.
-            Call WriteLocaleMsg(UserIndex, MSG_NO_PODES_EQUIPAR_FLECHA_ARCO_ACTUAL, e_FontTypeNames.FONTTYPE_INFO)
-            Exit Sub
-        End If
-        
         ' Quitar flecha previa
         If .EquippedMunitionObjIndex > 0 Then
             Call Desequipar(UserIndex, .EquippedMunitionSlot)
@@ -4508,35 +4478,6 @@ Public Sub EquipArrow(ByVal UserIndex As Integer, ByVal Slot As Integer)
     Exit Sub
 EquipArrow_Error:
     Call Logging.TraceError(Err.Number, Err.Description, "InvUsuario.EquipArrow", Erl())
-End Sub
-Public Sub ValidateEquippedArrow(ByVal UserIndex As Integer)
-    On Error GoTo ValidateEquippedArrow_Error
-    Dim bowIndex   As Integer
-    Dim arrowIndex As Integer
-
-    With UserList(UserIndex).invent
-        arrowIndex = .EquippedMunitionObjIndex
-        bowIndex = .EquippedWeaponObjIndex
-
-        ' No hay flecha equipada ? nada que validar
-        If arrowIndex <= 0 Then Exit Sub
-
-        ' No hay arma equipada ? no hacer nada
-        If bowIndex <= 0 Then Exit Sub
-
-        ' El arma equipada no es un arco ? no hacer nada
-        If ObjData(bowIndex).WeaponType <> eBow Then Exit Sub
-
-        ' Se desequipa la flecha al cambiar a un arco de menor categoría
-        If ObjData(bowIndex).BowCategory < ObjData(arrowIndex).ArrowCategory Then
-            Call Desequipar(UserIndex, .EquippedMunitionSlot)
-            'Msg2148=La flecha fue desequipada porque no es compatible con el arco actual.
-            Call WriteLocaleMsg(UserIndex, MSG_NO_FLECHA_FUE_DESEQUIPADA_PORQUE_COMPATIBLE_ARCO_ACTUAL, e_FontTypeNames.FONTTYPE_INFO)
-        End If
-    End With
-    Exit Sub
-ValidateEquippedArrow_Error:
-    Call Logging.TraceError(Err.Number, Err.Description, "InvUsuario.ValidateEquippedArrow", Erl())
 End Sub
 Public Function TryRepairFishingRod(ByVal UserIndex As Integer, ByVal oldSlot As Byte, ByVal newSlot As Byte) As Boolean
     On Error GoTo TryRepairFishingRod_Error

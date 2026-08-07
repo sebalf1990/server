@@ -2756,6 +2756,10 @@ Public Sub ThrowProjectileToTarget(ByVal UserIndex As Integer, ByVal TargetIndex
             AmunitionState = 1
         ElseIf .Object(.EquippedMunitionSlot).amount < 1 Then
             AmunitionState = 1
+        ElseIf ObjData(.EquippedMunitionObjIndex).Subtipo <> WeaponData.Municion Then
+            ' 06.002: mismo check de compatibilidad que el camino A (Protocol): con la municion
+            ' equipable siempre, una bala en un arco debe rechazarse aca, no al equipar.
+            AmunitionState = 1
         End If
         If AmunitionState <> 0 Then
             If AmunitionState = 1 Then
