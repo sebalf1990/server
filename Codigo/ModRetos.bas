@@ -809,6 +809,9 @@ End Function
 
 Public Function PuedeRetoConMensaje(ByVal UserIndex As Integer) As Boolean
     With UserList(UserIndex)
+        ' 07.001: paridad con PuedeReto, que si valida la posicion. Un UserIndex sin
+        ' posicion valida no puede retar (y ademas evita indexar MapData con mapa 0).
+        If .pos.Map = 0 Or .pos.x = 0 Or .pos.y = 0 Then Exit Function
         If .flags.EnReto Then
             Call WriteConsoleMsg(UserIndex, PrepareMessageLocaleMsg(MSG_ENCUENTRAS_RETO, vbNullString, e_FontTypeNames.FONTTYPE_INFO)) ' Msg1974=Ya te encuentras en un reto.
             Exit Function
