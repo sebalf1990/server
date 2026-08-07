@@ -728,9 +728,13 @@ Dim obj                         As t_ObjData
                     .invent.Object(Slot).Equipped = 0
                     .invent.EquippedWeaponObjIndex = 0
                     .invent.EquippedWeaponSlot = 0
-                    ' Sistema venenos (TOGGLE26): si el arma estaba untada, limpiar el estado
-                    If IsFeatureEnabled("new_poison_system") And .flags.PoisonedWeaponObjIndex > 0 Then
+                    ' Si el arma estaba untada, limpiar el estado (sin gate de toggle: criterio 06.002 ola 1)
+                    If .flags.PoisonedWeaponObjIndex > 0 Then
                         Call ClearPoisonedWeapon(UserIndex, "El veneno del arma se ha perdido al desequiparla.")
+                    End If
+                    ' 06.002 (decision del dueno): el encantamiento muere al desequipar (paridad con el veneno).
+                    If .flags.EnchantWeaponObjIndex > 0 Then
+                        Call ClearEnchantedWeapon(UserIndex, "El encantamiento del arma se ha perdido al desequiparla.")
                     End If
                     .Char.Arma_Aura = ""
                     Call SendData(SendTarget.ToPCAliveArea, UserIndex, PrepareMessageAuraToChar(.Char.charindex, 0, True, 1))
@@ -742,10 +746,12 @@ Dim obj                         As t_ObjData
                         Call WriteUpdateDM(UserIndex)
                     End If
                 Case e_OBJType.otArrows
-                    If IsFeatureEnabled("new_poison_system") Then
-                        If .invent.EquippedMunitionSlot = Slot Then
-                            Call ClearPoisonedAmmo(UserIndex, "Ya no tenes flechas envenenadas equipadas.", "desequipar_manual")
-                        End If
+                    If .invent.EquippedMunitionSlot = Slot Then
+                        ' Sin gate de toggle (criterio 06.002 ola 1: limpiar es seguro siempre).
+                        Call ClearPoisonedAmmo(UserIndex, "Ya no tenes flechas envenenadas equipadas.", "desequipar_manual")
+                        ' 06.002 (decision del dueno): el encantamiento muere al desequipar (paridad con el veneno).
+                        ' El disparo normal NO pasa por aca (QuitarUserInvItem solo desequipa al agotar el stack).
+                        Call ClearEnchantedAmmo(UserIndex, "El encantamiento de tus flechas se ha perdido al desequiparlas.")
                     End If
                     .invent.Object(Slot).Equipped = 0
                     .invent.EquippedMunitionObjIndex = 0
