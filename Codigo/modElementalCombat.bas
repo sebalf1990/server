@@ -25,6 +25,9 @@ Public DamageTypeRegLoaded As Boolean
 Public Const DMG_TYPE_CRIT As Long = 15   ' clave de resistencia para crit (fisico+magico)
 ' 06.002 Ola 3: cap duro del crit universal configurable; un valor de test (50) llego al .dat vivo.
 Private Const MAX_UNIVERSAL_CRIT_CHANCE_PCT As Single = 25
+' 06.002 Ola 4: ids de icono del HUD (Effects.ini, data-driven por EffectCount en el cliente).
+Private Const CLIENT_EFFECT_ENCHANTED_AMMO As Integer = 57
+Private Const CLIENT_EFFECT_ENCHANTED_WEAPON As Integer = 58
 Private mUniversalCritChance As Single
 Private mUniversalCritMult As Single
 
@@ -713,6 +716,9 @@ Public Sub OnEnchantedWeaponSwing(ByVal UserIndex As Integer)
             .EnchantWeaponCargas = .EnchantWeaponCargas - 1
             If .EnchantWeaponCargas <= 0 Then
                 Call ClearEnchantedWeapon(UserIndex, "El encantamiento de tu arma se ha agotado.")
+            Else
+                ' 06.002 Ola 4: contador de cargas vivo en el HUD (espejo de OnEnchantedAmmoSwing).
+                Call WriteUpdatePoisonStacks(UserIndex, .EnchantWeaponObjIndex, .EnchantWeaponCargas)
             End If
         End If
     End With
@@ -742,8 +748,10 @@ End Sub
 Public Sub ClearEnchantedWeapon(ByVal UserIndex As Integer, Optional ByVal msg As String = "")
     On Error GoTo ErrHandler
     If UserIndex <= 0 Then Exit Sub
+    Dim oldObj As Integer
     With UserList(UserIndex).flags
         If .EnchantWeaponObjIndex = 0 And .EnchantWeaponCargas = 0 And .EnchantWeaponPermanent = 0 Then Exit Sub
+        oldObj = .EnchantWeaponObjIndex
         Dim emptySrc As t_ElementalSource
         .EnchantWeaponObjIndex = 0
         .EnchantWeaponDeadline = 0
@@ -751,6 +759,8 @@ Public Sub ClearEnchantedWeapon(ByVal UserIndex As Integer, Optional ByVal msg A
         .EnchantWeaponCargas = 0
         .EnchantWeaponSource = emptySrc
     End With
+    ' 06.002 Ola 4: apaga el icono de estado (espejo de ClearEnchantedAmmo).
+    If oldObj > 0 Then Call WriteSendSkillCdUpdate(UserIndex, CLIENT_EFFECT_ENCHANTED_WEAPON, CLng(oldObj), 0, 0, eDebuff, 0)
     If LenB(msg) > 0 Then Call WriteConsoleMsg(UserIndex, msg, e_FontTypeNames.FONTTYPE_INFO)
     Exit Sub
 ErrHandler:
@@ -832,6 +842,8 @@ End Function
 
 ' CP3 (20.002 Step 7): setter unificado del encantamiento de arma (aceite/hechizo). Un solo punto de verdad.
 Public Sub SetEnchantedWeapon(ByVal UserIndex As Integer, ByVal WeaponObjIndex As Integer, ByRef src As t_ElementalSource, ByVal cargas As Integer, ByVal durationMs As Long)
+    Dim oldObj As Integer
+    oldObj = UserList(UserIndex).flags.EnchantWeaponObjIndex
     With UserList(UserIndex).flags
         .EnchantWeaponObjIndex = WeaponObjIndex
         .EnchantWeaponSource = src
@@ -844,6 +856,12 @@ Public Sub SetEnchantedWeapon(ByVal UserIndex As Integer, ByVal WeaponObjIndex A
             .EnchantWeaponDeadline = AddMod32(GetTickCountRaw(), durationMs)
         End If
     End With
+    ' 06.002 Ola 4: icono de estado del arma encantada en el HUD (asimetria con flechas resuelta).
+    ' Si habia un encantamiento previo sobre OTRA arma, apagar su icono para no dejarlo inmortal.
+    If oldObj > 0 And oldObj <> WeaponObjIndex Then Call WriteSendSkillCdUpdate(UserIndex, CLIENT_EFFECT_ENCHANTED_WEAPON, CLng(oldObj), 0, 0, eDebuff, 0)
+    Dim iconDur As Long
+    If durationMs < 0 Then iconDur = -1 Else iconDur = durationMs
+    Call WriteSendSkillCdUpdate(UserIndex, CLIENT_EFFECT_ENCHANTED_WEAPON, CLng(WeaponObjIndex), iconDur, iconDur, eDebuff, cargas)
 End Sub
 
 ' ============================================================================
@@ -886,6 +904,11 @@ End Function
 
 ' Setter del encantamiento de flechas (aceite/hechizo). durationMs<0 = permanente.
 Public Sub SetEnchantedAmmo(ByVal UserIndex As Integer, ByVal AmmoObjIndex As Integer, ByRef src As t_ElementalSource, ByVal cargas As Integer, ByVal durationMs As Long)
+    ' 06.002 Ola 4: si habia un encantamiento previo sobre OTRA municion, apagar su icono
+    ' (quedaba un "Flechas Encantadas" inmortal al cambiar de stack).
+    Dim oldObj As Integer
+    oldObj = UserList(UserIndex).flags.EnchantedAmmoObjIndex
+    If oldObj > 0 And oldObj <> AmmoObjIndex Then Call WriteSendSkillCdUpdate(UserIndex, CLIENT_EFFECT_ENCHANTED_AMMO, CLng(oldObj), 0, 0, eDebuff, 0)
     With UserList(UserIndex).flags
         .EnchantedAmmoObjIndex = AmmoObjIndex
         .EnchantedAmmoSource = src
@@ -901,7 +924,7 @@ Public Sub SetEnchantedAmmo(ByVal UserIndex As Integer, ByVal AmmoObjIndex As In
     ' Icono de estado en el HUD del tirador (espejo del veneno WritePoisonedAmmoIcon). Effect57 = Flechas Encantadas.
     Dim iconDur As Long
     If durationMs < 0 Then iconDur = -1 Else iconDur = durationMs
-    Call WriteSendSkillCdUpdate(UserIndex, 57, CLng(AmmoObjIndex), iconDur, iconDur, eDebuff, cargas)
+    Call WriteSendSkillCdUpdate(UserIndex, CLIENT_EFFECT_ENCHANTED_AMMO, CLng(AmmoObjIndex), iconDur, iconDur, eDebuff, cargas)
 End Sub
 
 ' Consumo al disparar: 1 carga por flecha disparada (espejo de OnEnchantedWeaponSwing).
@@ -964,7 +987,7 @@ Public Sub ClearEnchantedAmmo(ByVal UserIndex As Integer, Optional ByVal msg As 
         .EnchantedAmmoSource = emptySrc
     End With
     ' Apaga el icono de estado del tirador (Effect57).
-    If oldObj > 0 Then Call WriteSendSkillCdUpdate(UserIndex, 57, CLng(oldObj), 0, 0, eDebuff, 0)
+    If oldObj > 0 Then Call WriteSendSkillCdUpdate(UserIndex, CLIENT_EFFECT_ENCHANTED_AMMO, CLng(oldObj), 0, 0, eDebuff, 0)
     If LenB(msg) > 0 Then Call WriteConsoleMsg(UserIndex, msg, e_FontTypeNames.FONTTYPE_INFO)
     Exit Sub
 ErrHandler:
