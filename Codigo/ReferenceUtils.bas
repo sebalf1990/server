@@ -123,7 +123,7 @@ End Sub
 
 Public Function DoDamageToTarget(ByVal UserIndex As Integer, _
                                  ByRef TargetRef As t_AnyReference, _
-                                 ByVal Damage As Integer, _
+                                 ByVal Damage As Long, _
                                  ByVal DamageType As e_DamageSourceType, _
                                  ByVal ObjIndex As Integer) As e_DamageResult
     If Not IsValidRef(TargetRef) Then
@@ -138,7 +138,7 @@ End Function
 
 Public Function NpcDoDamageToTarget(ByVal NpcIndex As Integer, _
                                     ByRef TargetRef As t_AnyReference, _
-                                    ByVal Damage As Integer, _
+                                     ByVal Damage As Long, _
                                     ByVal DamageType As e_DamageSourceType, _
                                     ByVal ObjIndex As Integer) As e_DamageResult
     If Not IsValidRef(TargetRef) Then
@@ -153,7 +153,7 @@ End Function
 
 Public Function RefDoDamageToTarget(ByRef SourceRef As t_AnyReference, _
                                     ByRef TargetRef As t_AnyReference, _
-                                    ByVal Damage As Integer, _
+                                     ByVal Damage As Long, _
                                     ByVal DamageType As e_DamageSourceType, _
                                     ByVal ObjIndex As Integer) As e_DamageResult
     If Not IsValidRef(SourceRef) Then

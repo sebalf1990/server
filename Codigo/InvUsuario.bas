@@ -3501,7 +3501,10 @@ Public Sub UseArpon(ByVal UserIndex As Integer)
         Dim ObjIndex As Integer
         ObjIndex = .invent.Object(.flags.UsingItemSlot).ObjIndex
         Call UpdateCd(UserIndex, ObjData(ObjIndex).cdType)
-        Dim Damage As Integer
+        ' As Long, no Integer: GetUserDamageWithItem devuelve Long. Es el mismo caso que ya
+        ' mordio en NpcDamage -- con Integer, un golpe alto desborda, el error 6 se lo traga
+        ' el handler y el ataque se pierde en silencio.
+        Dim Damage As Long
         Damage = GetUserDamageWithItem(UserIndex, ObjIndex, 0, TargetRef.RefType)
         If TargetRef.RefType = eUser Then
             UserList(TargetRef.ArrayIndex).Counters.timeFx = 3

@@ -59,7 +59,11 @@ Private p_GuildNumber           As Integer      'Numero de guild en el mundo
 Private p_GuildId               As Long
 Private p_GuildLevel            As Integer
 Private p_CurrentExp            As Long
-Private p_RequiredExp           As Integer
+' Long, no Integer: la curva de experiencia de clan llega a 75000 (Clanes.dat, [GUILDEXP]),
+' muy por encima del tope de 32767. Hoy el campo no se usa, pero si alguien lo cablea al
+' valor real con Integer, el overflow lo traga el manejador de error y el clan deja de subir
+' de nivel sin que nadie se entere. Ya paso una vez con GetRequiredExpForGuildLevel.
+Private p_RequiredExp           As Long
 Private p_GuildNews             As String
 Private Const NEWSLENGTH        As Integer = 1024
 Private Const DESCLENGTH        As Integer = 256

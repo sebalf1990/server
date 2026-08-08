@@ -750,7 +750,7 @@ Public Function NpcDamageNpc(ByVal Atacante As Integer, ByVal Victima As Integer
     If Damage < 0 Then Damage = 0
 
     ' Aplicamos el daño real en el juego (usa la lógica existente)
-    Call NpcDamageToNpc(Atacante, Victima, CInt(Damage))
+    Call NpcDamageToNpc(Atacante, Victima, Damage)
 
     ' Devolvemos el daño para que el caller lo mande al cliente
     NpcDamageNpc = Damage
@@ -758,7 +758,7 @@ End Function
 
 Public Function NpcDamageToNpc(ByVal attackerIndex As Integer, _
                                ByVal TargetIndex As Integer, _
-                               ByVal Damage As Integer) As e_DamageResult
+                                 ByVal Damage As Long) As e_DamageResult
     On Error GoTo NpcDamageNpc_Err
 
     With NpcList(attackerIndex)

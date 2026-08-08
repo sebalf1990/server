@@ -423,6 +423,9 @@ Function TieneHechizo(ByVal i As Integer, ByVal UserIndex As Integer) As Boolean
     Next
     Exit Function
 ErrHandler:
+    ' Devolver False por un error se lee como "no tiene el hechizo": bloquea recetas de
+    ' crafteo y hace que las quests informen requisitos no cumplidos que el jugador si cumple.
+    Call TraceError(Err.Number, Err.Description, "modHechizos.TieneHechizo", Erl)
 End Function
 
 Sub AgregarHechizo(ByVal UserIndex As Integer, ByVal Slot As Integer)

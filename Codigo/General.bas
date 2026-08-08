@@ -1693,6 +1693,10 @@ Public Function CheckMailString(ByVal sString As String) As Boolean
         'Finale
         CheckMailString = True
     End If
+' Este label esta vacio A PROPOSITO, y ademas NO es solo el manejador de error: es la
+' caida natural de la funcion (no hay Exit Function arriba). Ponerle un TraceError
+' logearia en CADA validacion exitosa en vez de en las fallidas. Si algun dia hay que
+' registrar los errores de aca, primero hay que separar los dos caminos.
 errHnd:
 End Function
 

@@ -3095,7 +3095,9 @@ Public Type t_UserCounters
     ' Sistema venenos (TOGGLE26): cooldown global de pociones curativas + cooldown Hemo parcial
     LastPoisonCurePotion As Long
     LastPoisonHemoPartialPotion As Long
-    PoisonedWeaponTimerTick As Integer
+    ' Long como el resto de los que guardan ticks: GetTickCountRaw devuelve milisegundos
+    ' desde el arranque, que superan 32767 en 33 segundos. Con Integer desborda enseguida.
+    PoisonedWeaponTimerTick As Long
     CuentaRegresiva As Integer
     TimerBarra As Integer
     LastResetTick As Long

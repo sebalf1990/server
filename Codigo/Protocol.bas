@@ -1096,6 +1096,16 @@ ErrHandler:
 End Sub
 
 #End If
+' ####################################################################
+' CODIGO MUERTO: las ~394 lineas que siguen, hasta el "#ElseIf PYMMO = 0"
+' de mas abajo, NO entran al binario: Server.VBP compila con PYMMO = 0.
+' Es el sistema de cuentas VIEJO (login server externo, token de sesion
+' cifrado, tabla "tokens").
+' EL LOGIN QUE SI CORRE ESTA AL LADO, en el bloque PYMMO = 0 de mas arriba
+' y en el #ElseIf de mas abajo. Si estas depurando un login y llegaste
+' aca, estas en el archivo correcto pero en la mitad muerta.
+' Ver docs/flags-de-compilacion-vb6.md.
+' ####################################################################
 #If PYMMO = 1 Then
 
 

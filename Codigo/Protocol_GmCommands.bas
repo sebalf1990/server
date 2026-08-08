@@ -30,6 +30,11 @@ Option Explicit
 
 ' Habilitar/deshabilitar logging del radar (poner True para diagnostico)
 Private Const RADAR_DEBUG_LOGGING As Boolean = False
+' Diagnostico viejo, apagado. Escribe a la ruta fija c:\tmp\radar_debug.log, o sea
+' fuera de App.Path y fuera del sistema de logging del server (Logging.bas, con niveles
+' y retencion). Si hace falta volver a diagnosticar el radar, usar LogThis con nivel
+' DEBUG en vez de reactivar esto. Ojo: el gate es de runtime, no de compilacion, asi que
+' los argumentos de cada llamada se arman igual antes de descartarse.
 
 Public Sub RadarDebugLog(ByVal msg As String)
     If Not RADAR_DEBUG_LOGGING Then Exit Sub

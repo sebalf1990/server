@@ -2773,13 +2773,20 @@ Public Function StunPlayer(ByVal UserIndex As Integer, ByRef Counters As t_UserC
     ' Respect anti-chain-stun window: allow new stun only after immune window passes
     Dim immuneUntil As Long
     immuneUntil = AddMod32(Counters.StunEndTime, PlayerInmuneTime) ' old end + immunity
-    If TickAfter(nowRaw, immuneUntil) Then
+    ' DeadlinePassed y no TickAfter: TickAfter hace la resta cruda de Longs, que desborda
+    ' (error 6) cuando el tick de ahora y el limite caen en mitades opuestas del anillo de
+    ' 2^32 -- pasa con el uptime de Windows cruzando los ~24,85 dias. Ese error lo tragaba el
+    ' handler vacio de abajo y la funcion salia devolviendo False: el stun no se aplicaba, sin
+    ' efecto visual, sin mensaje y sin log. DeadlinePassed (modElapsedTime.bas:217) se escribio
+    ' justo para esto en el plan 06.002; StunPlayer se habia quedado con la version vieja.
+    If DeadlinePassed(nowRaw, immuneUntil) Then
         ' Apply (or re-apply) stun: set absolute deadline using modulo-2^32 add
         Counters.StunEndTime = AddMod32(nowRaw, PlayerStunTime)
         StunPlayer = True
     End If
     Exit Function
 eh:
+    Call TraceError(Err.Number, Err.Description, "Modulo_UsUaRiOs.StunPlayer", Erl)
 End Function
 
 Public Function CanUseItem(ByRef flags As t_UserFlags, ByRef Counters As t_UserCounters) As Boolean
