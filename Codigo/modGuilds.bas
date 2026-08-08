@@ -1097,7 +1097,12 @@ CheckClanExp_Err:
 End Sub
 
 Public Function GetRequiredExpForGuildLevel(ByVal CurrentLevel As Integer) As Long
-    If CurrentLevel >= LBound(ExpLevelUpGuild) And CurrentLevel <= UBound(ExpLevelUpGuild) Then
+    'Cero significa "nivel maximo alcanzado" para el cliente: es el centinela que leen
+    'HandleGuildNews y HandleGuildLeaderInfo. Por eso ningun nivel intermedio puede
+    'requerir cero -- ver [GUILDEXP] en Clanes.dat, donde GuildExpLevel1 vale 300 y no 0.
+    If CurrentLevel >= MAX_LEVEL_GUILD Then
+        GetRequiredExpForGuildLevel = 0
+    ElseIf CurrentLevel >= LBound(ExpLevelUpGuild) And CurrentLevel <= UBound(ExpLevelUpGuild) Then
         GetRequiredExpForGuildLevel = ExpLevelUpGuild(CurrentLevel)
     Else
         GetRequiredExpForGuildLevel = 0
