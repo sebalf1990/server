@@ -1494,11 +1494,14 @@ End Sub
     
 
 '
-' @param    UserIndex The index of the user sending the message.
+' @param    ConnectionID The connection id of the sender.
 
-Private Sub HandleLoginNewChar(ByVal UserIndex As Integer)
+Private Sub HandleLoginNewChar(ByVal ConnectionID As Long)
 
         On Error GoTo ErrHandler
+
+        Dim UserIndex As Integer
+        UserIndex = Mapping(ConnectionID).UserRef.ArrayIndex
 
         Dim name As String
         Dim race     As e_Raza
