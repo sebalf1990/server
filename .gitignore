@@ -54,3 +54,6 @@ Empty_db - copia.db
 **/.env.*
 !.env.example
 !**/.env.example
+
+# Estampilla que dejan build_tmp.bat / build_client.bat en cada compilacion
+build-stamp.txt
