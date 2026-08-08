@@ -212,7 +212,7 @@ Public Sub EnlistarCaos(ByVal UserIndex As Integer)
                 End If
             Else
                 If GuildAlignmentIndex(.GuildIndex) <> e_ALINEACION_GUILD.ALINEACION_CRIMINAL Then
-                    Call m_EcharMiembroDeClan(UserIndex, .name)
+                    Call m_EcharMiembroDeClan(UserIndex, .Id)
                 End If
             End If
         End If

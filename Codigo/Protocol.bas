@@ -4994,7 +4994,7 @@ Private Sub HandleLeaveFaction(ByVal UserIndex As Integer)
                         If Not PersonajeEsLeader(.Id) Then
                             'Me fijo de que alineación es el clan, si es ARMADA, lo hecho
                             If GuildAlignmentIndex(.GuildIndex) = e_ALINEACION_GUILD.ALINEACION_ARMADA Then
-                                Call m_EcharMiembroDeClan(UserIndex, GetUserRealName(UserIndex))
+                                Call m_EcharMiembroDeClan(UserIndex, .Id)
                                 'Msg1177= Has dejado el clan.
                                 Call WriteLocaleMsg(UserIndex, MSG_DEJADO_CLAN, e_FontTypeNames.FONTTYPE_INFO)
                             End If
@@ -5021,7 +5021,7 @@ Private Sub HandleLeaveFaction(ByVal UserIndex As Integer)
                         If Not PersonajeEsLeader(.Id) Then
                             'Me fijo de que alineación es el clan, si es CAOS, lo hecho
                             If GuildAlignmentIndex(.GuildIndex) = e_ALINEACION_GUILD.ALINEACION_CAOTICA Then
-                                Call m_EcharMiembroDeClan(UserIndex, GetUserRealName(UserIndex))
+                                Call m_EcharMiembroDeClan(UserIndex, .Id)
                                 'Msg1178= Has dejado el clan.
                                 Call WriteLocaleMsg(UserIndex, MSG_DEJADO_CLAN_1178, e_FontTypeNames.FONTTYPE_INFO)
                             End If
@@ -5958,7 +5958,7 @@ Public Sub HandleRemoveCharFromGuild(ByVal UserIndex As Integer)
         username = reader.ReadString8()
         If (.flags.Privilegios And (e_PlayerType.Admin Or e_PlayerType.Dios Or e_PlayerType.RoleMaster)) Then
             Call LogGM(GetUserRealName(UserIndex), "/RAJARCLAN " & username)
-            GuildIndex = modGuilds.m_EcharMiembroDeClan(UserIndex, username)
+            GuildIndex = modGuilds.m_EcharMiembroDeClan(UserIndex, GetCharacterIdWithName(username))
             If GuildIndex = 0 Then
                 'Msg1224= No pertenece a ningún clan o es fundador.
                 Call WriteLocaleMsg(UserIndex, MSG_NO_PERTENECE_NINGUN_CLAN_FUNDADOR, e_FontTypeNames.FONTTYPE_INFO)

@@ -127,6 +127,9 @@ m_EsGuildFounder_Err:
     Call TraceError(Err.Number, Err.Description, "modGuilds.m_EsGuildFounder", Erl)
 End Function
 
+'OJO: el segundo parametro es el ID del personaje, NO su nombre. Pasarle un nombre lanza
+'el error 13 (ningun nombre valido es numerico) y la sub llamadora muere en silencio.
+'Si solo tenes el nombre, convertilo con modDatabase.GetCharacterIdWithName.
 Public Function m_EcharMiembroDeClan(ByVal Expulsador As Integer, ByVal ExpellUserId As Long) As Integer
     On Error GoTo m_EcharMiembroDeClan_Err
     'UI echa a Expulsado del clan de Expulsado
