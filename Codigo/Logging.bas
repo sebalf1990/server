@@ -194,7 +194,10 @@ Private Sub WriteToLogFile(ByVal arbol As String, ByVal linea As String)
     End If
     fn = FreeFile
     Open carpeta & "\" & arbol & "_" & Format$(Now, "yyyy-mm-dd") & ".log" For Append As #fn
-    Print #fn, linea
+    ' Un evento = UNA linea. Varios mensajes (los de TraceError, sobre todo) traen saltos
+    ' de linea adentro, y si se escriben tal cual el archivo deja de poder leerse ni
+    ' filtrarse por linea.
+    Print #fn, Replace$(Replace$(linea, vbCrLf, " | "), vbLf, " | ")
     Close #fn
     Exit Sub
 ErrHandler:
