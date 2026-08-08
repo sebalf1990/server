@@ -1015,6 +1015,16 @@ GuildAlignmentIndex_Err:
     Call TraceError(Err.Number, Err.Description, "modGuilds.GuildAlignmentIndex", Erl)
 End Function
 
+' True si el clan es de alineacion oscura: Caotica o Criminal.
+' Existia escrito a mano en HandleForgive y, en los otros dos lugares que lo necesitaban,
+' comparado MAL contra el literal 1 -- que es ALINEACION_ARMADA, no criminal. O sea que
+' bloqueaba al clan de la Armada y dejaba pasar a los dos que queria frenar. Plan 08.001.
+Public Function ClanEsOscuro(ByVal GuildIndex As Integer) As Boolean
+    Dim Alin As e_ALINEACION_GUILD
+    Alin = GuildAlignmentIndex(GuildIndex)
+    ClanEsOscuro = (Alin = e_ALINEACION_GUILD.ALINEACION_CAOTICA) Or (Alin = e_ALINEACION_GUILD.ALINEACION_CRIMINAL)
+End Function
+
 Public Function NivelDeClan(ByVal GuildIndex As Integer) As Byte
     On Error GoTo NivelDeClan_Err
     If GuildIndex <= 0 Or GuildIndex > CANTIDADDECLANES Then Exit Function

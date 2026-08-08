@@ -1789,7 +1789,11 @@ Public Sub HandleForgive(ByVal UserIndex As Integer)
             Exit Sub
         End If
         If .GuildIndex <> 0 Then
-            If modGuilds.Alineacion(.GuildIndex) = 1 Then
+            ' Mismo bug que en HandleDonateGold: el literal 1 es ALINEACION_ARMADA. Aca decide
+            ' que mensaje ve el jugador, asi que con el arreglo el de clan oscuro se entera de
+            ' que tiene que salirse del clan en vez de recibir un presupuesto que /donar le va a
+            ' rechazar despues. Plan 08.001.
+            If modGuilds.ClanEsOscuro(.GuildIndex) Then
                 Call WriteLocaleChatOverHead(UserIndex, 1344, vbNullString, priest.Char.charindex, vbWhite) ' Msg1344=Te encuentras en un clan criminal... debes retirarte para que pueda perdonarte.
                 Exit Sub
             End If
@@ -1804,22 +1808,15 @@ Public Sub HandleForgive(ByVal UserIndex As Integer)
             Call WriteLocaleChatOverHead(UserIndex, 1346, Donacion, priest.Char.charindex, vbWhite)  ' Msg1346=Para volver a ser un ciudadano deberás Donar ¬1 monedas de oro.
             Exit Sub
         End If
-        Dim permitePerdon As Boolean
-        permitePerdon = False
-        If .GuildIndex > 0 And (GuildAlignmentIndex(.GuildIndex) = e_ALINEACION_GUILD.ALINEACION_CAOTICA Or GuildAlignmentIndex(.GuildIndex) = _
-                e_ALINEACION_GUILD.ALINEACION_CRIMINAL) Then
-            permitePerdon = False
-        Else
-            permitePerdon = True
-        End If
-        If Not permitePerdon Then
-            Call WriteLocaleChatOverHead(UserIndex, "1347", "", priest.Char.charindex, vbYellow) ' Msg1347=No podrás ser perdonado perteneciendo a un clan de alineación Criminal o de Alineación Oscura.
-            Exit Sub
-        End If
-        Call WriteLocaleChatOverHead(UserIndex, "1348", "", priest.Char.charindex, vbYellow) ' Msg1348=Con estas palabras, te libero de todo tipo de pecados. ¡Que Dios te acompañe hijo mío!
-        Call SendData(SendTarget.ToPCAliveArea, UserIndex, PrepareMessageParticleFX(UserList(UserIndex).Char.charindex, "80", 100, False))
-        Call SendData(SendTarget.ToPCAliveArea, UserIndex, PrepareMessagePlayWave("100", UserList(UserIndex).pos.x, UserList(UserIndex).pos.y))
-        Call VolverCiudadano(UserIndex)
+        ' NO FALTA NADA ACA. /perdon es un COTIZADOR por decision de diseno (2026-08-08): las
+        ' dos ramas de arriba salen siempre, y la unica via para dejar de ser criminal es donar
+        ' oro con /donar. Hasta hoy vivian aca 16 lineas inalcanzables -- un bloque permitePerdon,
+        ' los Msg1347 y Msg1348, particula, sonido y un Call VolverCiudadano -- que ningun jugador
+        ' ejecuto nunca y que confundian al que leia el archivo. Se borraron; su unica parte util,
+        ' la comparacion de alineacion de clan bien escrita, sobrevive como modGuilds.ClanEsOscuro.
+        ' Si algun dia se decide que el sacerdote perdone gratis, es revivir esta cola, NO un
+        ' bugfix: cambia el balance economico y despierta VolverCiudadano, que pone FactionScore
+        ' en 0 y saca al jugador del grupo. Plan 08.001.
     End With
     Exit Sub
 HandleForgive_Err:

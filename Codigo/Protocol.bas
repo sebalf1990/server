@@ -5754,7 +5754,11 @@ Public Sub HandleDonateGold(ByVal UserIndex As Integer)
             Exit Sub
         End If
         If .GuildIndex <> 0 Then
-            If modGuilds.Alineacion(.GuildIndex) = 1 Then
+            ' Comparaba contra el literal 1, que es ALINEACION_ARMADA: bloqueaba al clan
+            ' equivocado y dejaba pasar a los caoticos y criminales. Como el guard de arriba
+            ' solo deja llegar a un Criminal, y un Criminal SI puede entrar a un clan criminal,
+            ' el que donaba quedaba de ciudadano adentro de un clan criminal. Plan 08.001.
+            If modGuilds.ClanEsOscuro(.GuildIndex) Then
                 Call WriteLocaleChatOverHead(UserIndex, 1404, vbNullString, priest.Char.charindex, vbWhite)  ' Msg1404=Te encuentras en un clan criminal... no puedo aceptar tu donación.
                 Exit Sub
             End If
