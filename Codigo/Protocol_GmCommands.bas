@@ -1061,6 +1061,7 @@ Public Sub HandleEditChar(ByVal UserIndex As Integer)
         Dim commandString As String
         Dim n             As Byte
         Dim tmpLong       As Long
+        Dim ciudadNueva   As e_Ciudad
         username = Replace(reader.ReadString8(), "+", " ")
         If UCase$(username) = "YO" Then
             Call SetUserRef(tUser, UserIndex)
@@ -1300,20 +1301,37 @@ Public Sub HandleEditChar(ByVal UserIndex As Integer)
                 End If
             Case e_EditOptions.eo_Hogar
                 Arg1 = UCase$(Arg1)
+                ' Se resuelve el nombre a un id primero y se asigna despues, para poder
+                ' distinguir "no reconoci la ciudad" de "la cambie". Antes el Select asignaba
+                ' adentro de cada Case y no tenia Case Else: una ciudad desconocida no hacia
+                ' nada y no avisaba nada, y un exito tampoco avisaba. Plan 08.001.
+                ciudadNueva = 0
                 Select Case Arg1
                     Case "NIX"
-                        UserList(tUser.ArrayIndex).Hogar = e_Ciudad.cNix
+                        ciudadNueva = e_Ciudad.cNix
                     Case "ULLA", "ULLATHORPE"
-                        UserList(tUser.ArrayIndex).Hogar = e_Ciudad.cUllathorpe
+                        ciudadNueva = e_Ciudad.cUllathorpe
                     Case "BANDER", "BANDERBILL"
-                        UserList(tUser.ArrayIndex).Hogar = e_Ciudad.cBanderbill
+                        ciudadNueva = e_Ciudad.cBanderbill
                     Case "LINDOS"
-                        UserList(tUser.ArrayIndex).Hogar = e_Ciudad.cLindos
+                        ciudadNueva = e_Ciudad.cLindos
                     Case "ARGHAL"
-                        UserList(tUser.ArrayIndex).Hogar = e_Ciudad.cArghal
+                        ciudadNueva = e_Ciudad.cArghal
                     Case "ARKHEIN"
-                        UserList(tUser.ArrayIndex).Hogar = e_Ciudad.cArkhein
+                        ciudadNueva = e_Ciudad.cArkhein
+                    Case "FORGAT"
+                        ciudadNueva = e_Ciudad.cForgat
+                    Case "ELDO", "ELDORIA"
+                        ciudadNueva = e_Ciudad.cEldoria
+                    Case "PENT", "PENTHAR"
+                        ciudadNueva = e_Ciudad.cPenthar
                 End Select
+                If ciudadNueva = 0 Then
+                    Call WriteConsoleMsg(UserIndex, "Ciudad desconocida. Válidas: ULLATHORPE, NIX, BANDERBILL, LINDOS, ARGHAL, ARKHEIN, FORGAT, ELDORIA, PENTHAR.", e_FontTypeNames.FONTTYPE_INFO)
+                Else
+                    UserList(tUser.ArrayIndex).Hogar = ciudadNueva
+                    Call WriteConsoleMsg(UserIndex, "Hogar de " & UserList(tUser.ArrayIndex).name & " cambiado a " & Arg1 & ".", e_FontTypeNames.FONTTYPE_INFO)
+                End If
             Case e_EditOptions.eo_Alias
                 If Not IsUserAdmin(UserIndex) Then Exit Sub
                 Dim aliasValue As String
@@ -1349,9 +1367,15 @@ Public Sub HandleEditChar(ByVal UserIndex As Integer)
             Case e_EditOptions.eo_FaccionStatus
                 If (.flags.Privilegios And (e_PlayerType.User Or e_PlayerType.Consejero Or e_PlayerType.SemiDios)) Then Exit Sub
                 tmpLong = val(Arg1)
+                ' Antes un valor fuera de 0..5 no hacia nada y no avisaba, y un exito tampoco
+                ' confirmaba. Ojo con el modo de fallo real: val() de una palabra da 0, que ES
+                ' un valor valido (Criminal), asi que un typo cambiaba el bando en silencio.
                 If tmpLong >= 0 And tmpLong <= 5 Then
                     UserList(tUser.ArrayIndex).Faccion.Status = CByte(tmpLong)
                     Call RefreshCharStatus(tUser.ArrayIndex)
+                    Call WriteConsoleMsg(UserIndex, "Facción de " & UserList(tUser.ArrayIndex).name & " cambiada a " & Choose(tmpLong + 1, "Criminal", "Ciudadano", "Caos", "Armada", "Concilio", "Consejo") & " (" & tmpLong & ").", e_FontTypeNames.FONTTYPE_INFO)
+                Else
+                    Call WriteConsoleMsg(UserIndex, "Facción inválida. Valores: 0 Criminal, 1 Ciudadano, 2 Caos, 3 Armada, 4 Concilio, 5 Consejo.", e_FontTypeNames.FONTTYPE_INFO)
                 End If
             Case e_EditOptions.eo_ArmadaReal
                 If (.flags.Privilegios And (e_PlayerType.User Or e_PlayerType.Consejero Or e_PlayerType.SemiDios)) Then Exit Sub
