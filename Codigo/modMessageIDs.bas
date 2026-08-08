@@ -69,6 +69,10 @@ Public Const MSG_TOO_MANY_ACTIVE_MISSIONS                      As Integer = 2086
 Public Const MSG_NO_ENERGY                                     As Integer = 2129
 Public Const MSG_TOO_COLD                                      As Integer = 2130
 Public Const MSG_BROADCAST_SERVER_SENDER                       As Integer = 1660
+'Msg1698 es exactamente "¬1": el argumento pasa tal cual, sin texto alrededor.
+'Sirve para mandar por el canal de locale algo que ya viene escrito, como el texto libre
+'que tipea un GM en /SMSG. Verificado presente y con el mismo valor en los 5 idiomas.
+Public Const MSG_TEXTO_LIBRE                                   As Integer = 1698
 
 
 

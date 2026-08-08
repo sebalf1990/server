@@ -3871,10 +3871,13 @@ End Function
 ' @param    Message Text to be displayed in the message box.
 ' @return   The formated message ready to be writen as is on outgoing buffers.
 ' @remarks  The data is not actually sent until the buffer is properly flushed.
-Public Function PrepareMessageShowMessageBox(ByVal chat As String)
+'Tiene que escribir EXACTAMENTE lo mismo que WriteShowMessageBox: el cliente lee siempre
+'Int16(MessageId) + String8(extra). Le faltaba el Int16 y el paquete se desincronizaba.
+Public Function PrepareMessageShowMessageBox(ByVal MessageId As Integer, Optional ByVal strExtra As String = vbNullString)
     On Error GoTo PrepareMessageShowMessageBox_Err
     Call Writer.WriteInt16(ServerPacketID.eShowMessageBox)
-    Call Writer.WriteString8(chat)
+    Call Writer.WriteInt16(MessageId)
+    Call Writer.WriteString8(strExtra)
     Exit Function
 PrepareMessageShowMessageBox_Err:
     Call Writer.Clear

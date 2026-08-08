@@ -930,7 +930,7 @@ End Sub
 
 Private Sub Command1_Click()
     On Error GoTo Command1_Click_Err
-    Call SendData(SendTarget.ToAll, 0, PrepareMessageShowMessageBox(BroadMsg.text))
+    Call SendData(SendTarget.ToAll, 0, PrepareMessageShowMessageBox(MSG_TEXTO_LIBRE, BroadMsg.text))
     Exit Sub
 Command1_Click_Err:
     Call TraceError(Err.Number, Err.Description, "frmMain.Command1_Click", Erl)

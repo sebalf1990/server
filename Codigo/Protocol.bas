@@ -5986,7 +5986,7 @@ Public Sub HandleSystemMessage(ByVal UserIndex As Integer)
         Message = reader.ReadString8()
         If (.flags.Privilegios And (e_PlayerType.Admin Or e_PlayerType.Dios Or e_PlayerType.RoleMaster)) Then
             Call LogGM(GetUserRealName(UserIndex), "Mensaje de sistema:" & Message)
-            Call SendData(SendTarget.ToAll, 0, PrepareMessageShowMessageBox(Message))
+            Call SendData(SendTarget.ToAll, 0, PrepareMessageShowMessageBox(MSG_TEXTO_LIBRE, Message))
         End If
     End With
     Exit Sub
