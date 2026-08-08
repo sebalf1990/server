@@ -281,8 +281,8 @@ Public Sub SendGuildNews(ByVal UserIndex As Integer, ByRef guildList() As String
     Dim i          As Integer
     Dim go         As Integer
     Dim ClanNivel  As Byte
-    Dim ExpAcu     As Integer
-    Dim ExpNe      As Integer
+    Dim ExpAcu     As Long
+    Dim ExpNe      As Long
     GuildIndex = UserList(UserIndex).GuildIndex
     If GuildIndex = 0 Then Exit Sub
     Dim MemberList() As Long
@@ -1043,10 +1043,14 @@ Alineacion_Err:
     Call TraceError(Err.Number, Err.Description, "modGuilds.Alineacion", Erl)
 End Function
 
-Sub CheckClanExp(ByVal UserIndex As Integer, ByVal ExpDar As Integer)
+' ExpDar va en Long y no en Integer: el call site (MODULO_NPCs.bas:224) pasa
+' GiveEXPClan * ExpMult, y GiveEXPClan ya es Long. Hoy no revienta -- el maximo del
+' juego es 400 y ExpMult vale 1 -- pero es el mismo overflow que este commit cierra,
+' entrando por otra puerta: bastaria un multiplicador de evento alto. Plan 08.002.
+Sub CheckClanExp(ByVal UserIndex As Integer, ByVal ExpDar As Long)
     On Error GoTo CheckClanExp_Err
-    Dim ExpActual    As Integer
-    Dim ExpNecesaria As Integer
+    Dim ExpActual    As Long
+    Dim ExpNecesaria As Long
     Dim GI           As Integer
     Dim nivel        As Byte
     With UserList(UserIndex)
