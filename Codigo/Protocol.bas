@@ -2254,25 +2254,25 @@ End Sub
 Public Function verifyTimeStamp(ByVal ActualCount As Long, _
                                 ByRef LastCount As Long, _
                                 ByRef LastTick As Long, _
-                                ByRef Iterations, _
+                                ByRef Iterations As Long, _
                                 ByVal UserIndex As Integer, _
                                 ByVal PacketName As String, _
                                 Optional ByVal DeltaThreshold As Long = 100, _
-                                Optional ByVal MaxIterations As Long = 5, _
-                                Optional ByVal CloseClient As Boolean = False) As Boolean
+                                Optional ByVal MaxIterations As Long = 5) As Boolean
     Dim Ticks As Long, Delta As Double
     Ticks = GetTickCountRaw()
     Delta = TicksElapsed(LastTick, Ticks)
     LastTick = Ticks
     'Controlamos secuencia para ver que no haya paquetes duplicados.
     If ActualCount <= LastCount Then
+        ' Aca no se banea a nadie: lo unico que pasa es que se le cierra la conexion.
+        ' El aviso a los GMs tiene que decir eso, o dan por sancionada una cuenta que
+        ' en realidad sigue entrando sin problema.
         Call SendData(SendTarget.ToAdminsYDioses, UserIndex, PrepareMessageConsoleMsg("Paquete grabado: " & PacketName & " | Cuenta: " & UserList(UserIndex).Cuenta & " | Ip: " & _
-                UserList(UserIndex).ConnectionDetails.IP & " (Baneado automaticamente)", e_FontTypeNames.FONTTYPE_INFOBOLD))
-        Call LogEdicionPaquete("El usuario " & GetUserRealName(UserIndex) & " editó el paquete " & PacketName & ".")
-        Call SendData(SendTarget.ToAdminsYDioses, UserIndex, PrepareMessageConsoleMsg("Paquete grabado: " & PacketName & " | Cuenta: " & UserList(UserIndex).Cuenta & " | Ip: " & _
-                UserList(UserIndex).ConnectionDetails.IP & " (Baneado automaticamente)", e_FontTypeNames.FONTTYPE_INFOBOLD))
+                UserList(UserIndex).ConnectionDetails.IP & " (Se le cerro la conexion, SIN ban)", e_FontTypeNames.FONTTYPE_INFOBOLD))
         Call LogEdicionPaquete("El usuario " & GetUserRealName(UserIndex) & " editó el paquete " & PacketName & ".")
         LastCount = ActualCount
+        verifyTimeStamp = False
         Call CloseSocket(UserIndex)
         Exit Function
     End If
@@ -2280,18 +2280,19 @@ Public Function verifyTimeStamp(ByVal ActualCount As Long, _
     If Delta < DeltaThreshold Then
         Iterations = Iterations + 1
         If Iterations >= MaxIterations Then
-            'Call WriteShowMessageBox(UserIndex, "Relajate andá a tomarte un té con Gulfas.")
-            verifyTimeStamp = False
-            'Call LogMacroServidor("El usuario " & GetUserDisplayName(UserIndex) & " iteró el paquete " & PacketName & " " & MaxIterations & " veces.")
+            ' Esta rama SOLO avisa a los GMs: no descarta la accion ni cierra el cliente.
+            ' La funcion sigue de largo y termina devolviendo True.
+            ' Si algun dia se la quiere hacer bloquear, el corte va ADENTRO de este If:
+            ' el Exit Function que estaba comentado mas abajo vivia al nivel del If
+            ' externo (Delta < DeltaThreshold), asi que descomentarlo cortaba TODO
+            ' paquete rapido y no solo el que supera MaxIterations.
+            ' Antes de encender el bloqueo hay que recalibrar PacketRatePolicy.ini:
+            ' esos umbrales nunca se validaron con trafico real. Ver docs/anti-macro-estado.md.
             Call SendData(SendTarget.ToAdminsYDioses, UserIndex, PrepareMessageConsoleMsg("Control de macro---> El usuario " & GetUserGMName(UserIndex) & "| Revisar --> " & _
                     PacketName & " (Envíos: " & Iterations & ").", e_FontTypeNames.FONTTYPE_INFOBOLD))
-            'Call WriteCerrarleCliente(UserIndex)
-            'Call CloseSocket(UserIndex)
             LastCount = ActualCount
             Iterations = 0
-            Debug.Print "CIERRO CLIENTE"
         End If
-        'Exit Function
     Else
         Iterations = 0
     End If
