@@ -7613,7 +7613,15 @@ Private Sub HandleHome(ByVal UserIndex As Integer)
             Call WriteLocaleMsg(UserIndex, MSG_NO_PODES_REGRESAR_DESDE_RETO_USA_ABANDONAR_ADMITIR_DERROTA, e_FontTypeNames.FONTTYPE_INFO)
             Exit Sub
         End If
-        If .flags.Traveling = 0 Then
+        ' Antes el guard era `.flags.Traveling = 0`, que es SIEMPRE verdadero: la unica
+        ' escritura de Traveling = 1 vive en Hogar.bas:142, dentro de un `If Actualizar`, y el
+        ' unico call site de IntervaloGoHome (Hogar.bas:89) la llama sin ese parametro. Con el
+        ' guard muerto, cada /hogar volvia a cobrar Y reiniciaba TimerBarra desde cero: spameando
+        ' el comando te vaciabas el oro y nunca llegabas. El teleport recien pasa al final, asi
+        ' que la comparacion de mapa de abajo tampoco frenaba nada durante el viaje.
+        ' AccionPendiente SI se setea (goHome, Hogar.bas:70) y es el guard que ya usa la runa de
+        ' recall (InvUsuario.bas:3076). Plan 08.001.
+        If Not .Accion.AccionPendiente Then
             If .pos.Map <> Ciudades(.Hogar).Map Then
                 
                 ' Costo en oro
@@ -7640,8 +7648,9 @@ Private Sub HandleHome(ByVal UserIndex As Integer)
                 Call WriteLocaleMsg(UserIndex, MSG_ENCUENTRAS_HOGAR, e_FontTypeNames.FONTTYPE_INFO)
             End If
         Else
-            .flags.Traveling = 0
-            .Counters.goHome = 0
+            ' Rechaza y no cobra. NO cancela el viaje: limpiar la accion sin poner TimerBarra en
+            ' 0 dejaria la barra corriendo y el tick regalaria el teleport. Cancelar sigue siendo
+            ' posible caminando un paso. Decision del dueno, plan 08.001.
             'Msg1277= Ya hay un viaje en curso.
             Call WriteLocaleMsg(UserIndex, MSG_HAY_VIAJE_CURSO, e_FontTypeNames.FONTTYPE_INFO)
         End If
