@@ -467,7 +467,8 @@ Private Function ApplyAccountOp(ByVal OpLine As String) As String
     Dim parts() As String
     parts = Split(OpLine, ";")
     If UBound(parts) < 2 Then
-        Call LogError("AccountBridge op malformada (faltan campos): " & OpLine)
+        ' NO loguear OpLine: en create_account/set_password lleva el salt y el hash.
+        Call LogError("AccountBridge op malformada (faltan campos): " & (UBound(parts) + 1) & " campos")
         Exit Function
     End If
 
@@ -479,7 +480,8 @@ Private Function ApplyAccountOp(ByVal OpLine As String) As String
     Select Case opType
         Case "create_account"
             If UBound(parts) < 5 Then
-                Call LogError("AccountBridge op create_account malformada: " & OpLine)
+                ' NO loguear OpLine: lleva el salt y el hash de la password.
+                Call LogError("AccountBridge op create_account malformada. opId=" & opId & " campos=" & (UBound(parts) + 1))
                 Exit Function
             End If
             Call ApplyCreateAccountOp(opId, Trim$(parts(2)), parts(3), parts(4), parts(5))
@@ -487,7 +489,8 @@ Private Function ApplyAccountOp(ByVal OpLine As String) As String
 
         Case "set_password"
             If UBound(parts) < 4 Then
-                Call LogError("AccountBridge op set_password malformada: " & OpLine)
+                ' NO loguear OpLine: lleva el salt y el hash de la password.
+                Call LogError("AccountBridge op set_password malformada. opId=" & opId & " campos=" & (UBound(parts) + 1))
                 Exit Function
             End If
             Call ApplySetPasswordOp(opId, Trim$(parts(2)), parts(3), parts(4))
@@ -502,12 +505,12 @@ Private Function ApplyAccountOp(ByVal OpLine As String) As String
             ApplyAccountOp = opId
 
         Case Else
-            Call LogError("AccountBridge op con tipo desconocido: " & OpLine)
+            Call LogError("AccountBridge op con tipo desconocido. opId=" & opId & " tipo=" & opType)
     End Select
 
     Exit Function
 ApplyAccountOp_Err:
-    Call LogError("ApplyAccountOp error: " & Err.Description & " - Line: " & OpLine)
+    Call LogError("ApplyAccountOp error: " & Err.Description & " - opId=" & opId)
     ApplyAccountOp = ""
 End Function
 

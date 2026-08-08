@@ -82,11 +82,18 @@ Public Function LoadSettings(ByVal Filename As String) As Long
     mSettings.Add "DP_ConnectRetries", CLng(val(reader.GetValue("DIRECTPLAY", "ConnectRetries", 20)))
     'Number of milliseconds DirectPlay should wait before it retries a connection request.
     mSettings.Add "DP_ConnectTimeout", CLng(val(reader.GetValue("DIRECTPLAY", "ConnectTimeout", 500)))
-    mSettings.Add "ExpMult", CInt(val(reader.GetValue("CONFIGURACIONES", "ExpMult")))
-    mSettings.Add "GoldMult", CInt(val(reader.GetValue("CONFIGURACIONES", "OroMult")))
-    mSettings.Add "RecoleccionMult", CDbl(val(reader.GetValue("CONFIGURACIONES", "RecoleccionMult")))
+    ' Los multiplicadores llevan default 1 (neutro): sin default, una clave faltante daba
+    ' Val("") = 0 y toda la experiencia, el oro y la recoleccion se multiplicaban por CERO
+    ' sin que nadie se enterara. El CInt se DEJA a proposito: estos dos multiplicadores
+    ' viajan al cliente como Int16 (Protocol_Writes.bas:2752-2753), asi que un valor mayor
+    ' a 32767 no entra en el protocolo. Mejor que reviente al arrancar y no en pleno juego.
+    mSettings.Add "ExpMult", CInt(val(reader.GetValue("CONFIGURACIONES", "ExpMult", 1)))
+    mSettings.Add "GoldMult", CInt(val(reader.GetValue("CONFIGURACIONES", "OroMult", 1)))
+    mSettings.Add "RecoleccionMult", CDbl(val(reader.GetValue("CONFIGURACIONES", "RecoleccionMult", 1)))
     mSettings.Add "OroPorNivelBilletera", CLng(val(reader.GetValue("CONFIGURACIONES", "OroPorNivelBilletera")))
-    mSettings.Add "OroPorNivel", val(reader.GetValue("CONFIGURACIONES", "OroPorNivel"))
+    ' Default 0 a proposito, NO 1: aca el cero significa "desactivado" y su consumidor lo
+    ' trata asi (Modulo_UsUaRiOs.bas:1249, If OroPorNivel > 0). El .ini lo tiene en 0.
+    mSettings.Add "OroPorNivel", val(reader.GetValue("CONFIGURACIONES", "OroPorNivel", 0))
     mSettings.Add "MaxInventoryObjs", CInt(val(reader.GetValue("CONFIGURACIONES", "MaxInventoryObjs", DEFAULT_MAX_INVENTORY_OBJS)))
     mSettings.Add "DayLength", CLng(val(reader.GetValue("CONFIGURACIONES", "DuracionDia"))) * 60 * 1000
     mSettings.Add "CostoPerdonPorCiudadano", CLng(val(reader.GetValue("CONFIGURACIONES", "CostoPerdonPorCiudadano")))

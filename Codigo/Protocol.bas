@@ -1746,12 +1746,16 @@ Private Sub HandleWalk(ByVal UserIndex As Integer)
         Dim PacketCount As Long
         PacketCount = reader.ReadInt32
         If .flags.Muerto = 0 Then
+            ' El retorno SE CONSUME, igual que en los otros 9 call sites. Antes iba con Call
+            ' y se descartaba: si saltaba la rama de replay, verifyTimeStamp ya habia hecho
+            ' CloseSocket (que resetea y libera el slot del usuario) y este handler seguia
+            ' ejecutando sobre ese slot ya vacio.
             If .flags.Navegando Then
-                Call verifyTimeStamp(PacketCount, .PacketCounters(PacketNames.Sailing), .PacketTimers(PacketNames.Sailing), .MacroIterations(PacketNames.Sailing), UserIndex, _
-                        "Sailing", PacketTimerThreshold(PacketNames.Sailing), MacroIterations(PacketNames.Sailing))
+                If Not verifyTimeStamp(PacketCount, .PacketCounters(PacketNames.Sailing), .PacketTimers(PacketNames.Sailing), .MacroIterations(PacketNames.Sailing), UserIndex, _
+                        "Sailing", PacketTimerThreshold(PacketNames.Sailing), MacroIterations(PacketNames.Sailing)) Then Exit Sub
             Else
-                Call verifyTimeStamp(PacketCount, .PacketCounters(PacketNames.Walk), .PacketTimers(PacketNames.Walk), .MacroIterations(PacketNames.Walk), UserIndex, "Walk", _
-                        PacketTimerThreshold(PacketNames.Walk), MacroIterations(PacketNames.Walk))
+                If Not verifyTimeStamp(PacketCount, .PacketCounters(PacketNames.Walk), .PacketTimers(PacketNames.Walk), .MacroIterations(PacketNames.Walk), UserIndex, "Walk", _
+                        PacketTimerThreshold(PacketNames.Walk), MacroIterations(PacketNames.Walk)) Then Exit Sub
             End If
         End If
         If .flags.PescandoEspecial Then

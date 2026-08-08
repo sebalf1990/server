@@ -705,6 +705,7 @@ Sub Main()
         #End If
     Wend
     Call LogThis(0, "Closing the server " & Now, vbLogEventTypeInformation)
+    Call ShutdownLogging
     Exit Sub
 Handler:
     Call TraceError(Err.Number, Err.Description, "General.Main", Erl)
@@ -1730,6 +1731,10 @@ Public Sub CerrarServidor()
     Next
     Call UnloadAntiCheat
     If Database_Enabled Then Database_Close
+    ' Todo cierre real del server pasa por aca y termina en el End de abajo, que mata el
+    ' proceso sin volver a Main: por eso la liberacion va aca. La llamada que hay al final
+    ' de Main queda por si algun dia se sale del loop principal, pero hoy es inalcanzable.
+    Call ShutdownLogging
     End
 End Sub
 

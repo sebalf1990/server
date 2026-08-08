@@ -70,6 +70,13 @@ End Type
 
 Public CircularLogBuffer As t_CircularBuffer
 Private Declare Function RegisterEventSource Lib "advapi32.dll" Alias "RegisterEventSourceA" (ByVal lpUNCServerName As String, ByVal lpSourceName As String) As Long
+Private Declare Function DeregisterEventSource Lib "advapi32.dll" (ByVal hEventLog As Long) As Long
+
+' Handle al Event Log de Windows. Se abre UNA vez (la primera que se loguea) y se
+' reusa mientras siga sirviendo. Antes se abria en CADA llamada a LogThis y no se
+' liberaba nunca: como TraceError pasa por ahi, cada error del server filtraba un
+' handle del sistema operativo, asi que cuanto mas fallaba mas se degradaba.
+Private m_hEventLog As Long
 
 Public Sub InitializeCircularLogBuffer(Optional ByVal size As Integer = 30)
     CircularLogBuffer.size = size
@@ -96,12 +103,26 @@ Public Function GetLastMessages() As String()
 End Function
 
 Public Sub LogThis(nErrNo As Long, sLogMsg As String, eventType As LogEventTypeConstants)
-    Dim hEvent As Long
-    hEvent = RegisterEventSource("", "Argentum20")
+    If m_hEventLog = 0 Then
+        m_hEventLog = RegisterEventSource("", "Argentum20")
+    End If
     If eventType = vbLogEventTypeWarning Or eventType = vbLogEventTypeError Then
         Call AddLogToCircularBuffer(sLogMsg)
     End If
-    Call ReportEvent(hEvent, eventType, 0, 20, 0, 1, Len(sLogMsg), nErrNo & " - " & sLogMsg, 0)
+    ' Si ReportEvent falla -tipicamente porque se reinicio el servicio Event Log de Windows
+    ' y el handle cacheado quedo muerto- se resetea para reabrirlo en la proxima llamada.
+    ' Sin esto, un reinicio del servicio dejaba al server sin logs para siempre, en silencio.
+    If ReportEvent(m_hEventLog, eventType, 0, 20, 0, 1, Len(sLogMsg), nErrNo & " - " & sLogMsg, 0) = 0 Then
+        m_hEventLog = 0
+    End If
+End Sub
+
+' Libera el handle del Event Log. La llama General.Main al terminar.
+Public Sub ShutdownLogging()
+    If m_hEventLog <> 0 Then
+        Call DeregisterEventSource(m_hEventLog)
+        m_hEventLog = 0
+    End If
 End Sub
 
 Public Sub LogearEventoDeSubasta(s As String)

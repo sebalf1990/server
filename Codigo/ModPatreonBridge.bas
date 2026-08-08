@@ -305,7 +305,8 @@ Public Sub SyncPatreonBridgeCredits(ByVal UserIndex As Integer)
                     totalCredits, accountID)
     Set rsUpd = Nothing
 
-    Call LogCreditosPatreon("Bridge applied " & totalCredits & " credits to accountID " & accountID & " (" & email & "). Claims: " & claimCount)
+    ' Sin email: el accountID ya identifica la cuenta para auditoria y no es un dato personal.
+    Call LogCreditosPatreon("Bridge applied " & totalCredits & " credits to accountID " & accountID & ". Claims: " & claimCount)
 
     Exit Sub
 

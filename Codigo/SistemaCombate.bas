@@ -558,7 +558,10 @@ End Function
 Private Function NpcDamage(ByVal NpcIndex As Integer, ByVal UserIndex As Integer) As Long
     On Error GoTo NpcDamage_Err
     NpcDamage = -1
-    Dim Damage   As Integer, Lugar As Integer, absorbido As Integer
+    ' Damage va As Long porque GetNpcDamage devuelve Long y ademas se lo multiplica por
+    ' modificadores: con Integer, un NPC de golpe alto desbordaba, el error 6 se lo tragaba
+    ' el handler y la funcion salia devolviendo -1, o sea el golpe se perdia en silencio.
+    Dim Damage   As Long, Lugar As Integer, absorbido As Integer
     Dim defbarco As Integer
     Dim obj      As t_ObjData
     Damage = GetNpcDamage(NpcIndex)
