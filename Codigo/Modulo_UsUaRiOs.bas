@@ -1584,7 +1584,7 @@ Sub SendUserStatsTxt(ByVal sendIndex As Integer, ByVal UserIndex As Integer)
     If GuildI > 0 Then
         'Msg1296= Clan: ¬1
         Call WriteLocaleMsg(sendIndex, "1296", e_FontTypeNames.FONTTYPE_INFO, modGuilds.GuildName(GuildI))
-        If UCase$(modGuilds.GuildLeader(GuildI)) = UCase$(UserList(sendIndex).name) Then
+        If modGuilds.EsLiderDelClan(UserList(UserIndex).Id, GuildI) Then
             'Msg1100= Status: Líder
             Call WriteLocaleMsg(sendIndex, "1100", e_FontTypeNames.FONTTYPE_INFO)
         End If

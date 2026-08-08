@@ -837,6 +837,35 @@ End Sub
 ' @param    Chat Text to be displayed over the char's head.
 ' @param    FontIndex Index of the FONTTYPE structure to use.
 ' @remarks  The data is not actually sent until the buffer is properly flushed.
+'Los refError de modGuilds vienen como "Id" o como "Id¬arg1¬arg2": el Id es el numero
+'de mensaje del locale y lo que sigue son los argumentos que reemplazan ¬1, ¬2 en el texto.
+'Mandarlo por WriteConsoleMsg imprime el numero crudo en la consola del jugador, y pasarlo
+'como Id a PrepareMessageLocaleMsg revienta con error 13 cuando es compuesto -- y ahi el
+'On Error hace Writer.Clear, o sea que el jugador no recibe absolutamente nada.
+Public Sub WriteGuildRefError(ByVal UserIndex As Integer, ByRef refError As String, Optional ByVal FontIndex As e_FontTypeNames = FONTTYPE_GUILD)
+    On Error GoTo WriteGuildRefError_Err
+    Dim Campos()  As String
+    Dim MensajeId As Integer
+    Dim Extra     As String
+    Dim i         As Long
+    If LenB(refError) = 0 Then Exit Sub
+    Campos = Split(refError, "¬")
+    MensajeId = CInt(val(Campos(0)))
+    If MensajeId <= 0 Then
+        'No parece un id de mensaje: se manda tal cual antes que perderlo del todo.
+        Call WriteConsoleMsg(UserIndex, refError, FontIndex)
+        Exit Sub
+    End If
+    For i = 1 To UBound(Campos)
+        If i > 1 Then Extra = Extra & "¬"
+        Extra = Extra & Campos(i)
+    Next i
+    Call WriteLocaleMsg(UserIndex, MensajeId, FontIndex, Extra)
+    Exit Sub
+WriteGuildRefError_Err:
+    Call TraceError(Err.Number, Err.Description, "Argentum20Server.Protocol_Writes.WriteGuildRefError", Erl)
+End Sub
+
 Public Sub WriteConsoleMsg(ByVal UserIndex As Integer, ByVal chat As String, Optional ByVal FontIndex As e_FontTypeNames = FONTTYPE_INFO)
     On Error GoTo WriteConsoleMsg_Err
     Call modSendData.SendData(ToIndex, UserIndex, PrepareMessageConsoleMsg(chat, FontIndex))

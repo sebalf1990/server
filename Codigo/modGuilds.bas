@@ -988,6 +988,18 @@ GuildName_Err:
     Call TraceError(Err.Number, Err.Description, "modGuilds.GuildName", Erl)
 End Function
 
+'GuildLeader() devuelve el ID NUMERICO del lider, no su nombre: clsClan.GetLeader es un Long
+'con el leader_id de la base. Compararlo contra un nombre de personaje da SIEMPRE False,
+'porque TCP.ValidarNombre no admite digitos. Usar esta funcion en vez de esa comparacion.
+Public Function EsLiderDelClan(ByVal UserId As Long, ByVal GuildIndex As Integer) As Boolean
+    On Error GoTo EsLiderDelClan_Err
+    If GuildIndex <= 0 Or GuildIndex > CANTIDADDECLANES Then Exit Function
+    EsLiderDelClan = m_EsGuildLeader(UserId, GuildIndex)
+    Exit Function
+EsLiderDelClan_Err:
+    Call TraceError(Err.Number, Err.Description, "modGuilds.EsLiderDelClan", Erl)
+End Function
+
 Public Function GuildLeader(ByVal GuildIndex As Integer) As String
     On Error GoTo GuildLeader_Err
     If GuildIndex <= 0 Or GuildIndex > CANTIDADDECLANES Then Exit Function
@@ -1061,7 +1073,10 @@ Sub CheckClanExp(ByVal UserIndex As Integer, ByVal ExpDar As Long)
         If nivel >= MAX_LEVEL_GUILD Then
             Exit Sub
         End If
-        Dim MemberIndex As Byte
+        'Integer, no Byte: m_Iterador_ProximoUserIndex devuelve un UserIndex y Server.ini
+        'declara MaxUsers=1000. Con Byte, un miembro en un slot > 255 lanza el error 6 y el
+        'On Error de esta sub sale ANTES de sumar la exp y de guardarla.
+        Dim MemberIndex As Integer
         MemberIndex = modGuilds.m_Iterador_ProximoUserIndex(.GuildIndex)
         While MemberIndex > 0
             If UserList(MemberIndex).ConnectionDetails.ConnIDValida Then

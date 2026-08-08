@@ -3075,7 +3075,7 @@ Private Sub HandleCreateNewGuild(ByVal UserIndex As Integer)
             'Update tag
             Call RefreshCharStatus(UserIndex)
         Else
-            Call WriteConsoleMsg(UserIndex, PrepareMessageLocaleMsg(errorStr, vbNullString, e_FontTypeNames.FONTTYPE_GUILD))
+            Call WriteGuildRefError(UserIndex, errorStr)
         End If
     End With
     Exit Sub
@@ -3913,7 +3913,7 @@ Private Sub HandleGuildAcceptNewMember(ByVal UserIndex As Integer)
         tUser = NameIndex(username)
         If IsValidUserRef(tUser) Then
             If Not modGuilds.a_AceptarAspirante(UserIndex, username, errorStr) Then
-                Call WriteConsoleMsg(UserIndex, errorStr, e_FontTypeNames.FONTTYPE_GUILD)
+                Call WriteGuildRefError(UserIndex, errorStr)
             Else
                 Call modGuilds.m_ConectarMiembroAClan(tUser.ArrayIndex, .GuildIndex)
                 Call RefreshCharStatus(tUser.ArrayIndex)
@@ -3922,7 +3922,7 @@ Private Sub HandleGuildAcceptNewMember(ByVal UserIndex As Integer)
             End If
         Else
             If Not modGuilds.a_AceptarAspirante(UserIndex, username, errorStr) Then
-                Call WriteConsoleMsg(UserIndex, errorStr, e_FontTypeNames.FONTTYPE_GUILD)
+                Call WriteGuildRefError(UserIndex, errorStr)
             Else
                 Call SendData(SendTarget.ToGuildMembers, .GuildIndex, PrepareMessageLocaleMsg(MSG_SIDO_ACEPTADO_MIEMBRO_CLAN, username, e_FontTypeNames.FONTTYPE_GUILD)) ' Msg1809=[¬1] ha sido aceptado como miembro del clan.
             End If
@@ -3947,11 +3947,11 @@ Private Sub HandleGuildRejectNewMember(ByVal UserIndex As Integer)
         username = reader.ReadString8()
         Reason = reader.ReadString8()
         If Not modGuilds.a_RechazarAspirante(UserIndex, username, errorStr) Then
-            Call WriteConsoleMsg(UserIndex, errorStr, e_FontTypeNames.FONTTYPE_GUILD)
+            Call WriteGuildRefError(UserIndex, errorStr)
         Else
             tUser = NameIndex(username)
             If IsValidUserRef(tUser) Then
-                Call WriteConsoleMsg(tUser.ArrayIndex, errorStr & " : " & Reason, e_FontTypeNames.FONTTYPE_GUILD)
+                Call WriteGuildRefError(tUser.ArrayIndex, errorStr & "¬" & modGuilds.GuildName(.GuildIndex) & " : " & Replace(Reason, "¬", " "))
             Else
                 'hay que grabar en el char su rechazo
                 Call modGuilds.a_RechazarAspiranteChar(username, .GuildIndex, Reason)
@@ -4049,7 +4049,7 @@ Private Sub HandleGuildRequestMembership(ByVal UserIndex As Integer)
         guild = reader.ReadString8()
         application = reader.ReadString8()
         If Not modGuilds.a_NuevoAspirante(UserIndex, guild, application, errorStr) Then
-            Call WriteConsoleMsg(UserIndex, PrepareMessageLocaleMsg(errorStr, vbNullString, e_FontTypeNames.FONTTYPE_GUILD))
+            Call WriteGuildRefError(UserIndex, errorStr)
         Else
             'Msg1155= Tu solicitud ha sido enviada. Espera prontas noticias del líder de ¬1
             Call WriteLocaleMsg(UserIndex, MSG_SOLICITUD_HA_SIDO_ENVIADA_ESPERA_PRONTAS_NOTICIAS_LIDER, e_FontTypeNames.FONTTYPE_INFO, guild)
@@ -4796,7 +4796,7 @@ Private Sub HandleGuildMessage(ByVal UserIndex As Integer)
             .flags.ChatHistory(UBound(.flags.ChatHistory)) = chat
             If .GuildIndex > 0 Then
                 'HarThaoS: si es leade mando un 10 para el status del color(medio villero pero me dio paja)
-                If LCase(GuildLeader(.GuildIndex)) = .name Then
+                If modGuilds.EsLiderDelClan(.Id, .GuildIndex) Then
                     Call SendData(SendTarget.ToDiosesYclan, .GuildIndex, PrepareMessageGuildChat(GetUserDisplayName(UserIndex) & "> " & chat, 10))
                 Else
                     .Counters.timeGuildChat = 1 + Ceil((3000 + 60 * Len(chat)) / 1000)
