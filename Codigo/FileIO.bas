@@ -2672,6 +2672,7 @@ Sub LoadMainConfigFile()
     On Error GoTo LoadMainConfigFile_Err
     Set SvrConfig = New ServerConfig
     Call SvrConfig.LoadSettings(IniPath & "Configuracion.ini")
+    Call SetLogLevel(ParseLogLevel(CStr(SvrConfig.GetValue("LogLevel"))))
     Call SvrConfig.LoadAISettings(IniPath & "configia.ini")
     Call CargarEventos
     Call CargarInfoRetos

@@ -493,8 +493,8 @@ Sub Main()
     #If DIRECT_PLAY = 1 Then
         InitDPlay
     #End If
-    Call InitializeCircularLogBuffer
-    Call LogThis(0, "Starting the server " & Now, vbLogEventTypeInformation)
+    Call InitLogging
+    Call LogServerLifecycle("Starting the server " & Now)
     Call load_stats
     
     If Not IsShardingEnabled() Then
@@ -704,7 +704,7 @@ Sub Main()
             Call UnitClient.Poll
         #End If
     Wend
-    Call LogThis(0, "Closing the server " & Now, vbLogEventTypeInformation)
+    Call LogServerLifecycle("Closing the server " & Now)
     Call ShutdownLogging
     Exit Sub
 Handler:

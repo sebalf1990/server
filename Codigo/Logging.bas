@@ -78,6 +78,26 @@ Private Declare Function DeregisterEventSource Lib "advapi32.dll" (ByVal hEventL
 ' handle del sistema operativo, asi que cuanto mas fallaba mas se degradaba.
 Private m_hEventLog As Long
 
+' --- Niveles de severidad -------------------------------------------------
+' Windows solo distingue Informacion/Advertencia/Error; DEBUG es un nivel propio
+' nuestro, que existe para poder subir el detalle cuando se caza un problema.
+Public Enum e_LogLevel
+    LOG_DEBUG = 0
+    LOG_INFO = 1
+    LOG_WARN = 2
+    LOG_ERROR = 3
+End Enum
+
+' Nivel minimo que se escribe. Arranca en INFO y lo pisa Configuracion.ini
+' ([CONFIGURACIONES] LogLevel). Un GM lo cambia en caliente con ~LOGLEVEL.
+Public g_LogLevel As e_LogLevel
+
+' Arboles de archivos. Se separan porque tienen RETENCION distinta: lo operativo se
+' purga a los 30 dias y la auditoria se guarda un anio, porque es la prueba ante un
+' reclamo de pago o de sancion. La purga NUNCA debe tocar Auditoria.
+Private Const LOG_TREE_OPERATIVO As String = "Operativo"
+Private Const LOG_TREE_AUDITORIA As String = "Auditoria"
+
 Public Sub InitializeCircularLogBuffer(Optional ByVal size As Integer = 30)
     CircularLogBuffer.size = size
     CircularLogBuffer.currentIndex = 0
@@ -102,20 +122,154 @@ Public Function GetLastMessages() As String()
     GetLastMessages = errorList
 End Function
 
-Public Sub LogThis(nErrNo As Long, sLogMsg As String, eventType As LogEventTypeConstants)
+' Se llama al arrancar, antes del primer log.
+Public Sub InitLogging()
+    g_LogLevel = LOG_INFO
+    Call InitializeCircularLogBuffer
+End Sub
+
+Private Function EventTypeToLevel(ByVal eventType As LogEventTypeConstants) As e_LogLevel
+    Select Case eventType
+        Case vbLogEventTypeError
+            EventTypeToLevel = LOG_ERROR
+        Case vbLogEventTypeWarning
+            EventTypeToLevel = LOG_WARN
+        Case Else
+            EventTypeToLevel = LOG_INFO
+    End Select
+End Function
+
+Public Function LevelTag(ByVal nivel As e_LogLevel) As String
+    Select Case nivel
+        Case LOG_ERROR
+            LevelTag = "ERROR"
+        Case LOG_WARN
+            LevelTag = "WARN "
+        Case LOG_DEBUG
+            LevelTag = "DEBUG"
+        Case Else
+            LevelTag = "INFO "
+    End Select
+End Function
+
+Public Function ParseLogLevel(ByVal texto As String) As e_LogLevel
+    Select Case UCase$(Trim$(texto))
+        Case "DEBUG"
+            ParseLogLevel = LOG_DEBUG
+        Case "WARN", "WARNING"
+            ParseLogLevel = LOG_WARN
+        Case "ERROR"
+            ParseLogLevel = LOG_ERROR
+        Case Else
+            ParseLogLevel = LOG_INFO
+    End Select
+End Function
+
+Public Sub SetLogLevel(ByVal nivel As e_LogLevel)
+    g_LogLevel = nivel
+    Call WriteToLogFile(LOG_TREE_OPERATIVO, TimeStampLog() & " INFO  LogLevel = " & LevelTag(nivel))
+End Sub
+
+Private Function TimeStampLog() As String
+    TimeStampLog = Format$(Now, "yyyy-mm-dd hh:nn:ss")
+End Function
+
+' Escribe una linea en Logs\<arbol>\<arbol>_YYYY-MM-DD.log: un archivo por dia, el mismo
+' patron que ya usaban los logs de venenos y elemental.
+' OJO: el manejador de error NO puede llamar TraceError. TraceError termina en LogThis,
+' que vuelve aca, y se arma una recursion infinita. Un log que falla se traga y listo.
+Private Sub WriteToLogFile(ByVal arbol As String, ByVal linea As String)
+    Dim fn As Integer
+    On Error GoTo ErrHandler
+    ' MkDir crea un solo nivel, asi que la raiz va primero: en una instalacion nueva
+    ' la carpeta Logs no viene con el repo (esta gitignoreada).
+    Dim raiz As String, carpeta As String
+    raiz = App.Path & "\Logs"
+    If LenB(Dir$(raiz, vbDirectory)) = 0 Then
+        MkDir raiz
+    End If
+    carpeta = raiz & "\" & arbol
+    If LenB(Dir$(carpeta, vbDirectory)) = 0 Then
+        MkDir carpeta
+    End If
+    fn = FreeFile
+    Open carpeta & "\" & arbol & "_" & Format$(Now, "yyyy-mm-dd") & ".log" For Append As #fn
+    Print #fn, linea
+    Close #fn
+    Exit Sub
+ErrHandler:
+    On Error Resume Next
+    If fn <> 0 Then Close #fn
+End Sub
+
+' Auditoria: plata real, sanciones y acciones de GM. Va a su propio arbol porque se
+' guarda un anio y la purga de 30 dias no lo toca. NO pasa por el filtro de nivel:
+' si algo es auditable, se registra siempre, aunque el server este en modo silencioso.
+Public Sub LogAudit(ByVal categoria As String, ByVal texto As String)
+    Call WriteToLogFile(LOG_TREE_AUDITORIA, TimeStampLog() & " " & categoria & " " & texto)
+End Sub
+
+' Arranque y apagado: al archivo y TAMBIEN al Visor de Eventos, que es donde un
+' administrador espera ver que el servicio arranco o se cerro.
+Public Sub LogServerLifecycle(ByVal texto As String)
+    Call WriteToLogFile(LOG_TREE_OPERATIVO, TimeStampLog() & " INFO  " & texto)
+    Call ReportToEventLog(0, texto, vbLogEventTypeInformation)
+End Sub
+
+Private Sub ReportToEventLog(ByVal nErrNo As Long, ByRef sLogMsg As String, ByVal eventType As LogEventTypeConstants)
     If m_hEventLog = 0 Then
         m_hEventLog = RegisterEventSource("", "Argentum20")
     End If
-    If eventType = vbLogEventTypeWarning Or eventType = vbLogEventTypeError Then
-        Call AddLogToCircularBuffer(sLogMsg)
-    End If
-    ' Si ReportEvent falla -tipicamente porque se reinicio el servicio Event Log de Windows
-    ' y el handle cacheado quedo muerto- se resetea para reabrirlo en la proxima llamada.
-    ' Sin esto, un reinicio del servicio dejaba al server sin logs para siempre, en silencio.
-    If ReportEvent(m_hEventLog, eventType, 0, 20, 0, 1, Len(sLogMsg), nErrNo & " - " & sLogMsg, 0) = 0 Then
+    ' dwEventID lleva el codigo real -categoria del wrapper o numero de error de VB- en vez
+    ' del 20 fijo que tenia antes, para poder filtrar en el Visor de Eventos. Se descartan
+    ' los negativos, que salen de los Err.Raise vbObjectError + N y quedarian ilegibles.
+    Dim idEvento As Long
+    idEvento = nErrNo
+    If idEvento < 0 Then idEvento = 0
+    ' Si ReportEvent falla -tipicamente porque se reinicio el servicio Event Log y el handle
+    ' cacheado quedo muerto- se resetea para reabrirlo en la proxima llamada. Sin esto, un
+    ' reinicio del servicio dejaba al server sin logs para siempre, en silencio.
+    If ReportEvent(m_hEventLog, eventType, 0, idEvento, 0, 1, Len(sLogMsg), nErrNo & " - " & sLogMsg, 0) = 0 Then
         m_hEventLog = 0
     End If
 End Sub
+
+Public Sub LogThis(nErrNo As Long, sLogMsg As String, eventType As LogEventTypeConstants)
+    Dim nivel As e_LogLevel
+    nivel = EventTypeToLevel(eventType)
+    If nivel < g_LogLevel Then Exit Sub
+    If eventType = vbLogEventTypeWarning Or eventType = vbLogEventTypeError Then
+        Call AddLogToCircularBuffer(sLogMsg)
+    End If
+    Call WriteToLogFile(LOG_TREE_OPERATIVO, TimeStampLog() & " " & LevelTag(nivel) & " " & nErrNo & " - " & sLogMsg)
+    ' Al Visor de Eventos van SOLO los errores. El resto vive en archivo: ese log es un
+    ' buzon compartido de tamanio fijo que Windows recorta solo cuando se llena, y el
+    ' server llego a ocupar el 74% de todo lo que la maquina anotaba ahi.
+    If eventType = vbLogEventTypeError Then
+        Call ReportToEventLog(nErrNo, sLogMsg, eventType)
+    End If
+End Sub
+
+' Comando de GM "~LOGLEVEL <DEBUG|INFO|WARN|ERROR>". Viaja como texto de chat, igual que
+' los comandos de profesiones: asi se cambia el detalle de los logs sin reiniciar el
+' server y sin necesidad de un paquete nuevo ni de recompilar el cliente.
+Public Function HandleLogLevelChatCommand(ByVal UserIndex As Integer, ByVal chat As String) As Boolean
+    On Error GoTo ErrHandler
+    HandleLogLevelChatCommand = False
+    Dim partes() As String
+    partes = Split(Trim$(chat), " ")
+    If UCase$(Trim$(partes(0))) <> "~LOGLEVEL" Then Exit Function
+    HandleLogLevelChatCommand = True
+    If UBound(partes) < 1 Then
+        Call WriteConsoleMsg(UserIndex, "LogLevel actual: " & Trim$(LevelTag(g_LogLevel)) & ". Uso: ~LOGLEVEL DEBUG|INFO|WARN|ERROR", e_FontTypeNames.FONTTYPE_INFO)
+        Exit Function
+    End If
+    Call SetLogLevel(ParseLogLevel(partes(1)))
+    Call WriteConsoleMsg(UserIndex, "LogLevel = " & Trim$(LevelTag(g_LogLevel)), e_FontTypeNames.FONTTYPE_INFO)
+    Exit Function
+ErrHandler:
+    Call TraceError(Err.Number, Err.Description, "Logging.HandleLogLevelChatCommand", Erl)
+End Function
 
 ' Libera el handle del Event Log. La llama General.Main al terminar.
 Public Sub ShutdownLogging()
@@ -127,7 +281,7 @@ End Sub
 
 Public Sub LogearEventoDeSubasta(s As String)
     On Error GoTo ErrHandler
-    Call LogThis(eType_Log.EventoDeSubasta, "[Subastas.log] " & s, vbLogEventTypeInformation)
+    Call LogAudit("SUBASTA", s)
     Exit Sub
 ErrHandler:
 End Sub
@@ -136,21 +290,21 @@ Sub LogBan(ByVal BannedIndex As Integer, ByVal UserIndex As Integer, ByVal Motiv
     On Error GoTo ErrHandler
     Dim s As String
     s = UserList(BannedIndex).name & " BannedBy " & UserList(UserIndex).name & " Reason " & Motivo
-    Call LogThis(eType_Log.Ban, "[Bans] " & s, vbLogEventTypeInformation)
+    Call LogAudit("BAN", s)
     Exit Sub
 ErrHandler:
 End Sub
 
 Public Sub LogCreditosPatreon(Desc As String)
     On Error GoTo ErrHandler
-    Call LogThis(eType_Log.CreditosPatreon, "[MonetizationCreditosPatreon.log] " & Desc, vbLogEventTypeInformation)
+    Call LogAudit("CREDITOS", Desc)
     Exit Sub
 ErrHandler:
 End Sub
 
 Public Sub LogShopTransactions(Desc As String)
     On Error GoTo ErrHandler
-    Call LogThis(eType_Log.ShopTransactions, "[MonetizationShopTransactions.log] " & Desc, vbLogEventTypeInformation)
+    Call LogAudit("TIENDA", Desc)
     Exit Sub
 ErrHandler:
 End Sub
@@ -191,7 +345,7 @@ End Sub
 
 Public Sub logVentaCasa(ByVal texto As String)
     On Error GoTo ErrHandler
-    Call LogThis(eType_Log.VentaCasa, "[Propiedades] " & texto, vbLogEventTypeInformation)
+    Call LogAudit("PROPIEDAD", texto)
     Exit Sub
 ErrHandler:
 End Sub
@@ -247,7 +401,7 @@ End Sub
 
 Public Sub LogGM(name As String, Desc As String)
     On Error GoTo ErrHandler
-    Call LogThis(eType_Log.GM, "[" & name & "] " & Desc, vbLogEventTypeInformation)
+    Call LogAudit("GM", "[" & name & "] " & Desc)
     Exit Sub
 ErrHandler:
 End Sub
@@ -256,7 +410,7 @@ Public Sub LogPremios(GM As String, username As String, ByVal ObjIndex As Intege
     On Error GoTo ErrHandler
     Dim s As String
     s = "Item: " & ObjData(ObjIndex).name & " (" & ObjIndex & ") Cantidad: " & Cantidad & vbNewLine & "Motivo: " & Motivo & vbNewLine & vbNewLine
-    Call LogThis(eType_Log.Premios, s, vbLogEventTypeInformation)
+    Call LogAudit("PREMIO", "[" & GM & " -> " & username & "] " & s)
     Exit Sub
 ErrHandler:
 End Sub
@@ -282,7 +436,7 @@ Public Sub LogBankTransfer(ByVal originUser As String, ByVal targetUser As Strin
     Else
         transferContext = "destinatario fuera de línea"
     End If
-    Call LogThis(eType_Log.BankTransfer, "[BankTransfers.log] " & originUser & " transfirió " & amount & " monedas a " & targetUser & " (" & transferContext & ")", vbLogEventTypeInformation)
+    Call LogAudit("BANCO", originUser & " transfirió " & amount & " monedas a " & targetUser & " (" & transferContext & ")")
     Exit Sub
 ErrHandler:
 End Sub

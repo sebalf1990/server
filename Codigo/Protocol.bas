@@ -1582,6 +1582,7 @@ Private Sub HandleTalk(ByVal UserIndex As Integer)
         If Left$(chat, 1) = "~" Then
             If (.flags.Privilegios And (e_PlayerType.SemiDios Or e_PlayerType.Dios Or e_PlayerType.Admin)) Then
                 If HandleProfesionChatCommand(UserIndex, chat) Then Exit Sub
+                If HandleLogLevelChatCommand(UserIndex, chat) Then Exit Sub
             End If
         End If
         '[Consejeros & GMs]
