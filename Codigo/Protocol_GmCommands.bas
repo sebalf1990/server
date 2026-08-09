@@ -613,7 +613,7 @@ Public Sub HandleWarpChar(ByVal UserIndex As Integer)
             ElseIf InMapBounds(Map, x, y) Then
                 'no permitimos que se use el telep para llevas User a casas privadas.
                 If UCase$(username) <> "YO" Then
-                    If .flags.Privilegios And e_PlayerType.Consejero Or e_PlayerType.SemiDios Then
+                    If (.flags.Privilegios And (e_PlayerType.Consejero Or e_PlayerType.SemiDios)) <> 0 Then
                         If Not EsMapaEvento(Map) Then
                             'Msg948= Solamente puedes teletransportar gente a mapas de evento.
                             Call WriteLocaleMsg(UserIndex, MSG_SOLAMENTE_PUEDES_TELETRANSPORTAR_GENTE_MAPAS_EVENTO, e_FontTypeNames.FONTTYPE_INFO)
@@ -2054,7 +2054,7 @@ Public Sub HandleSpawnListRequest(ByVal UserIndex As Integer)
             'Msg970= Servidor » La cantidad de NPCs disponible para tu rango está limitada.
             Call WriteLocaleMsg(UserIndex, MSG_SERVIDOR_CANTIDAD_NPCS_DISPONIBLE_RANGO_LIMITADA, e_FontTypeNames.FONTTYPE_INFO)
         End If
-        Call WriteSpawnList(UserIndex, UserList(UserIndex).flags.Privilegios And e_PlayerType.Admin Or e_PlayerType.Dios)
+        Call WriteSpawnList(UserIndex, (UserList(UserIndex).flags.Privilegios And (e_PlayerType.Admin Or e_PlayerType.Dios)) <> 0)
     End With
     Exit Sub
 HandleSpawnListRequest_Err:
@@ -4111,7 +4111,7 @@ Public Sub HandleFeatureToggle(ByVal UserIndex As Integer)
     Dim nameSize As Integer
     value = max(Min(1, reader.ReadInt8), 0)
     name = reader.ReadString8
-    nameSize = Len(nameSize)
+    nameSize = Len(name)
     If nameSize = 0 Or nameSize > 100 Then
         Exit Sub
     End If
