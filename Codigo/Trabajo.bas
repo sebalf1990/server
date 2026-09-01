@@ -722,7 +722,23 @@ Function HerreroTieneMateriales(ByVal UserIndex As Integer, ByVal ItemIndex As I
             Exit Function
         End If
 
-        If ObjData(MapData(Target.Map, Target.x, Target.y).ObjInfo.ObjIndex).Subtipo <> e_AnvilType.BlodiumAnvil Then
+        ' El Subtipo solo no alcanza para identificar un yunque: es un numero que se
+        ' repite entre ObjTypes distintos (la Espada Larga OBJ2 es ObjType=2 Subtipo=2,
+        ' el mismo Subtipo que BlodiumAnvil). Sin chequear tambien el ObjType, tirar
+        ' una espada al piso y clickearla pasaba este gate y dejaba craftear runas de
+        ' Blodium sin yunque.
+        Dim TargetObjIndex As Integer
+        TargetObjIndex = MapData(Target.Map, Target.x, Target.y).ObjInfo.ObjIndex
+        ' ObjData se dimensiona 1 To NumObjDatas: con el tile vacio (ObjIndex=0) el
+        ' acceso tiraba error 9 y salia por el On Error. Rechazaba igual, pero por
+        ' excepcion y dejando un TraceError por cada click en un tile sin objeto.
+        If TargetObjIndex <= 0 Then
+            Call WriteLocaleMsg(UserIndex, MSG_BLODIUM_ANVIL_REQUIRED, e_FontTypeNames.FONTTYPE_INFO)
+            HerreroTieneMateriales = False
+            Call WriteMacroTrabajoToggle(UserIndex, False)
+            Exit Function
+        End If
+        If ObjData(TargetObjIndex).OBJType <> e_OBJType.otAnvil Or ObjData(TargetObjIndex).Subtipo <> e_AnvilType.BlodiumAnvil Then
             Call WriteLocaleMsg(UserIndex, MSG_BLODIUM_ANVIL_REQUIRED, e_FontTypeNames.FONTTYPE_INFO)
             HerreroTieneMateriales = False
             Call WriteMacroTrabajoToggle(UserIndex, False)
