@@ -51,6 +51,7 @@ Dim EffectBonus          As Single
 Dim SecondTargetModifier As Single
 Dim TickDmgColor         As Long
 Dim DotDanoModo          As Byte
+Dim DotDamageType        As Integer ' M6 (plan 02.001): 0 = sin tipo (comportamiento previo)
 Dim DotFactorPvP         As Single
 Dim DotFactorPvE         As Single
 Dim StacksActuales       As Integer
@@ -85,6 +86,7 @@ Public Sub Setup(ByVal SourceIndex As Integer, _
         TickEffect = .TickFX
         If .DamageColor <> 0 Then TickDmgColor = .DamageColor Else TickDmgColor = vbRed
         DotDanoModo = .DanoModo
+        DotDamageType = .DamageType
         If .FactorPvP > 0 Then DotFactorPvP = .FactorPvP Else DotFactorPvP = 1
         If .FactorPvE > 0 Then DotFactorPvE = .FactorPvE Else DotFactorPvE = 1
         DotPerStackMin = .DanoPorStackMin
@@ -328,9 +330,23 @@ Public Sub PerformAction()
                     TickHP = TickHP * DivineBloodHealingMultiplierBonus
                 End If
             End If
-            Call UserMod.DoDamageOrHeal(DotInfo.TargetRef.ArrayIndex, Source.ArrayIndex, Source.RefType, TickHP, e_dot, DotInfo.EotId, DamageColor:=TickDmgColor)
-        Else
-            Call UserMod.DoDamageOrHeal(DotInfo.TargetRef.ArrayIndex, 0, e_ReferenceType.eNone, TickHP, e_dot, DotInfo.EotId, DamageColor:=TickDmgColor)
+        End If
+        ' M6 (plan 02.001, DamageType en EffectsOverTime.dat): el tick de un DoT
+        ' tipado (Quemadura/Sangrado/etc) pasa por la MISMA resist/inmunidad al
+        ' dano del tipo que aplica un golpe directo -- antes ningun tick consultaba
+        ' Immune/ImmuneDamage y un blanco inmune al dano de Fuego igual se quemaba.
+        ' Si el tick queda en 0 (inmune/anulado) el DoDamageOrHeal NO se llama
+        ' (evita un "0" flotante y un Msg2211 vacio), pero el efecto sigue vivo:
+        ' ticks, icono y TickFX intactos, gateado por elemental_system.
+        If DotDamageType > 0 And TickHP < 0 Then
+            TickHP = -modElementalCombat.ApplyDotTickResist(False, DotInfo.TargetRef.ArrayIndex, DotDamageType, Abs(TickHP))
+        End If
+        If DotDamageType <= 0 Or TickHP <> 0 Then
+            If IsValidRef(Source) Then
+                Call UserMod.DoDamageOrHeal(DotInfo.TargetRef.ArrayIndex, Source.ArrayIndex, Source.RefType, TickHP, e_dot, DotInfo.EotId, DamageColor:=TickDmgColor)
+            Else
+                Call UserMod.DoDamageOrHeal(DotInfo.TargetRef.ArrayIndex, 0, e_ReferenceType.eNone, TickHP, e_dot, DotInfo.EotId, DamageColor:=TickDmgColor)
+            End If
         End If
         If TickEffect > 0 Then
             If IsVisible(UserList(DotInfo.TargetRef.ArrayIndex)) Then
@@ -352,10 +368,16 @@ Public Sub PerformAction()
             TickHP = TickHP * NPCs.GetSelfHealingBonus(NpcList(DotInfo.TargetRef.ArrayIndex))
         End If
         TickHP = TickHP * SecondTargetModifier
-        If IsValidRef(Source) Then
-            Call NPCs.DoDamageOrHeal(DotInfo.TargetRef.ArrayIndex, Source.ArrayIndex, Source.RefType, TickHP, e_dot, DotInfo.EotId, TickDmgColor)
-        Else
-            Call NPCs.DoDamageOrHeal(DotInfo.TargetRef.ArrayIndex, 0, e_ReferenceType.eNone, TickHP, e_dot, DotInfo.EotId, TickDmgColor)
+        ' M6 (plan 02.001): mismo gate que la rama eUser, ver comentario arriba.
+        If DotDamageType > 0 And TickHP < 0 Then
+            TickHP = -modElementalCombat.ApplyDotTickResist(True, DotInfo.TargetRef.ArrayIndex, DotDamageType, Abs(TickHP))
+        End If
+        If DotDamageType <= 0 Or TickHP <> 0 Then
+            If IsValidRef(Source) Then
+                Call NPCs.DoDamageOrHeal(DotInfo.TargetRef.ArrayIndex, Source.ArrayIndex, Source.RefType, TickHP, e_dot, DotInfo.EotId, TickDmgColor)
+            Else
+                Call NPCs.DoDamageOrHeal(DotInfo.TargetRef.ArrayIndex, 0, e_ReferenceType.eNone, TickHP, e_dot, DotInfo.EotId, TickDmgColor)
+            End If
         End If
         If TickEffect > 0 Then Call SendData(SendTarget.ToNPCAliveArea, DotInfo.TargetRef.ArrayIndex, PrepareMessageCreateFX(NpcList( _
            DotInfo.TargetRef.ArrayIndex).Char.charindex, TickEffect, 0, NpcList(DotInfo.TargetRef.ArrayIndex).pos.x, NpcList(DotInfo.TargetRef.ArrayIndex).pos.y))

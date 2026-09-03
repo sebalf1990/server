@@ -2020,6 +2020,8 @@ Public Type t_EffectOverTime
     StacksMax As Integer         ' >1 habilita stacks; <=1 = DoT comun
     GolpesQueSumanStacks As Integer
     IntervaloDecayStackMs As Long ' ms sin pegar para perder 1 stack (0 = sin decay)
+    DamageType As Integer         ' M6 (plan 02.001): tipo elemental del tick (e_ElementalDamageType).
+                                   ' 0 = sin tipo, el tick ignora resist/inmunidad (comportamiento previo)
 End Type
 
 Public Enum e_DamageResult

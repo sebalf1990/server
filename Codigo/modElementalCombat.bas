@@ -345,6 +345,33 @@ Public Function ApplyElementalResist(ByVal RawDamage As Long, ByRef r As t_Eleme
 End Function
 
 ' ============================================================================
+' M6 (plan 02.001): resist/inmunidad al dano para el tick de un DoT generico
+' (UpdateHpOverTime.cls) cuando EffectsOverTime.dat declara DamageType>0. Antes
+' ningun tick de Quemadura/Sangrado/etc consultaba Immune/ImmuneDamage: un
+' blanco inmune al dano de Fuego igual perdia HP por los ticks de Quemadura.
+' Las clases de veneno (modPoisonResist) NO pasan por aca, tienen su propio
+' camino y no se tocan. Gateado por el toggle maestro: OFF = rawDamage intacto.
+' ============================================================================
+Public Function ApplyDotTickResist(ByVal targetIsNpc As Boolean, ByVal targetIndex As Integer, ByVal dmgType As Integer, ByVal rawDamage As Long) As Long
+    On Error GoTo eh
+    ApplyDotTickResist = rawDamage
+    If Not ElementalSystemEnabled() Then Exit Function
+    If dmgType <= 0 Then Exit Function
+    If rawDamage <= 0 Then Exit Function
+    Dim r As t_ElementalResist
+    r = GetTargetResist(targetIsNpc, targetIndex, dmgType)
+    Dim nul As Boolean
+    Dim dmg As Long
+    dmg = ApplyElementalResist(rawDamage, r, dmgType, nul)
+    ApplyDotTickResist = dmg
+    Call ElementalLog("DoT tick resist target=" & IIf(targetIsNpc, "N", "U") & targetIndex & " type=" & dmgType & " raw=" & rawDamage & " final=" & dmg & " nullified=" & nul)
+    Exit Function
+eh:
+    Call TraceError(Err.Number, Err.Description, "modElementalCombat.ApplyDotTickResist", Erl)
+    ApplyDotTickResist = rawDamage
+End Function
+
+' ============================================================================
 ' Resolucion de componentes y procs
 ' ============================================================================
 ' Plan 20.002 Checkpoint B: dispara el burst de impacto del tipo sobre el target (si DefaultParticle>0).
@@ -1162,9 +1189,19 @@ Public Function TryUniversalCrit(ByVal UserIndex As Integer, ByVal targetIsNpc A
     If baseDamage <= 0 Then Exit Function
     Dim cr As t_ElementalResist
     cr = GetTargetResist(targetIsNpc, targetIndex, DMG_TYPE_CRIT)
-    If cr.Immune <> 0 Then Exit Function
+    ' M7 (plan 02.001): Immune Y ImmuneDamage anulan el critico universal (antes
+    ' solo Immune) -- consistente con ApplyElementalResist, que trata ambos igual.
+    If cr.Immune <> 0 Or cr.ImmuneDamage <> 0 Then Exit Function
     Dim chance As Single
-    chance = mUniversalCritChance - cr.ReduceChancePct
+    ' M7 (plan 02.001): la resist al critico es MULTIPLICATIVA, no sustractiva.
+    ' Antes "chance = base - ReduceChancePct" hacia que CUALQUIER ReduceChancePct
+    ' >= la base (5) anulara el critico universal por completo (medido: Chance=50
+    ' en el .dat de test daba critico IMPOSIBLE, no "la mitad" como se esperaba).
+    Dim pct As Single
+    pct = cr.ReduceChancePct
+    If pct > 100 Then pct = 100
+    If pct < 0 Then pct = 0
+    chance = mUniversalCritChance * (1 - pct / 100)
     If chance <= 0 Then Exit Function
     If chance > 100 Then chance = 100
     If RandomNumber(1, 100) <= chance Then
