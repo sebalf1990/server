@@ -373,10 +373,12 @@ Public Sub PerformAction()
             TickHP = -modElementalCombat.ApplyDotTickResist(True, DotInfo.TargetRef.ArrayIndex, DotDamageType, Abs(TickHP))
         End If
         If DotDamageType <= 0 Or TickHP <> 0 Then
+            ' Plan 03.001 M2: se propaga DotDamageType (ya calculado por M6) para que Msg2211
+            ' resuelva el nombre del tipo por id, no por color.
             If IsValidRef(Source) Then
-                Call NPCs.DoDamageOrHeal(DotInfo.TargetRef.ArrayIndex, Source.ArrayIndex, Source.RefType, TickHP, e_dot, DotInfo.EotId, TickDmgColor)
+                Call NPCs.DoDamageOrHeal(DotInfo.TargetRef.ArrayIndex, Source.ArrayIndex, Source.RefType, TickHP, e_dot, DotInfo.EotId, TickDmgColor, DotDamageType)
             Else
-                Call NPCs.DoDamageOrHeal(DotInfo.TargetRef.ArrayIndex, 0, e_ReferenceType.eNone, TickHP, e_dot, DotInfo.EotId, TickDmgColor)
+                Call NPCs.DoDamageOrHeal(DotInfo.TargetRef.ArrayIndex, 0, e_ReferenceType.eNone, TickHP, e_dot, DotInfo.EotId, TickDmgColor, DotDamageType)
             End If
         End If
         If TickEffect > 0 Then Call SendData(SendTarget.ToNPCAliveArea, DotInfo.TargetRef.ArrayIndex, PrepareMessageCreateFX(NpcList( _

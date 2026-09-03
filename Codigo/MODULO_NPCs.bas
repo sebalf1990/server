@@ -2067,7 +2067,8 @@ Public Function DoDamageOrHeal(ByVal NpcIndex As Integer, _
                                ByVal amount As Long, _
                                ByVal DamageSourceType As e_DamageSourceType, _
                                ByVal DamageSourceIndex As Integer, _
-                               Optional ByVal DamageColor As Long = vbRed) As e_DamageResult
+                               Optional ByVal DamageColor As Long = vbRed, _
+                               Optional ByVal DamageTypeId As Integer = 0) As e_DamageResult
     On Error GoTo DoDamageOrHeal_Err
     Dim DamageStr As String
     Dim Color     As Long
@@ -2083,7 +2084,16 @@ Public Function DoDamageOrHeal(ByVal NpcIndex As Integer, _
                 ' Plan 20.002 TP4: si el dano es elemental (e_dot con color de tipo), nombrar el tipo en consola.
                 Dim dmgTypeName As String
                 dmgTypeName = vbNullString
-                If DamageSourceType = e_dot Then dmgTypeName = modElementalCombat.DamageTypeNameFromColor(DamageColor)
+                ' Plan 03.001 M2: con id de tipo explicito, resolver el nombre por id -- fragil
+                ' resolverlo por color cuando dos tipos comparten NumberColor. Sin id (callers viejos,
+                ' DamageTypeId=0 default), se mantiene el fallback por color de siempre.
+                If DamageSourceType = e_dot Then
+                    If DamageTypeId > 0 Then
+                        dmgTypeName = modElementalCombat.DamageTypeName(DamageTypeId)
+                    Else
+                        dmgTypeName = modElementalCombat.DamageTypeNameFromColor(DamageColor)
+                    End If
+                End If
                 If LenB(dmgTypeName) > 0 Then
                     Call WriteLocaleMsg(SourceIndex, MSG_DEALT_TYPED_DAMAGE_TO_CREATURE, e_FontTypeNames.FONTTYPE_FIGHT, DamageStr & Chr(&HAC) & dmgTypeName)
                 Else

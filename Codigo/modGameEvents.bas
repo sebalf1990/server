@@ -61,12 +61,18 @@ Public Sub MaybeRunGameEvents()
                         Call EfectoFrio(iUserIndex)
                         If .flags.Envenenado <> 0 Then Call EfectoVeneno(iUserIndex)
                         If .flags.Incinerado <> 0 Then Call EfectoIncineramiento(iUserIndex)
-                        ' Sistema venenos (TOGGLE26): timer/expiracion del untado de arma
-                        If .flags.PoisonedWeaponObjIndex > 0 Then Call CheckPoisonedWeaponTick(iUserIndex)
-                        ' CP1 (20.002 Step 7): timer/expiracion del encantamiento elemental (sin pegar)
-                        If .flags.EnchantWeaponObjIndex > 0 Then Call modElementalCombat.CheckEnchantedWeaponTick(iUserIndex)
-                        If .flags.EnchantedAmmoObjIndex > 0 Then Call modElementalCombat.CheckEnchantedAmmoTick(iUserIndex)
                     End If
+                    ' Plan 03.001 M5: la expiracion por tiempo del encantamiento de arma/flechas y
+                    ' del veneno untado corre para CUALQUIER usuario conectado y vivo, no solo User
+                    ' sin privilegios -- antes un GM/Admin no expiraba nunca estos efectos porque
+                    ' quedaban gateados junto a los efectos ambientales de arriba (lava/frio/veneno
+                    ' legacy/incineramiento), que SI siguen exclusivos de User (inmunidad ambiental
+                    ' de GM, diseno, no se toca).
+                    ' Sistema venenos (TOGGLE26): timer/expiracion del untado de arma
+                    If .flags.PoisonedWeaponObjIndex > 0 Then Call CheckPoisonedWeaponTick(iUserIndex)
+                    ' CP1 (20.002 Step 7): timer/expiracion del encantamiento elemental (sin pegar)
+                    If .flags.EnchantWeaponObjIndex > 0 Then Call modElementalCombat.CheckEnchantedWeaponTick(iUserIndex)
+                    If .flags.EnchantedAmmoObjIndex > 0 Then Call modElementalCombat.CheckEnchantedAmmoTick(iUserIndex)
                     If .flags.Meditando Then Call DoMeditar(iUserIndex)
                     If .flags.Mimetizado <> 0 Then Call EfectoMimetismo(iUserIndex)
                     If .flags.AdminInvisible <> 1 Then

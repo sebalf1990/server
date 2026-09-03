@@ -477,13 +477,14 @@ Private Sub UserDamageNpc(ByVal UserIndex As Integer, ByVal NpcIndex As Integer,
         ' solo si el NPC sobrevive. El motor ya aplico la resistencia por tipo (no pasa por defensa fisica).
         Dim elemDmg As Long
         Dim elemColor As Long
+        Dim elemType As Integer ' Plan 03.001 M2: id de tipo primario, para Msg2211 sin depender del color
         Dim npcAlive As Boolean
         npcAlive = True
         Dim hpAntesN As Long
         hpAntesN = NpcList(NpcIndex).Stats.MinHp
-        elemDmg = modElementalCombat.ElementalDamageUserVsNpc(UserIndex, NpcIndex, .invent.EquippedWeaponObjIndex, .invent.EquippedMunitionObjIndex, elemColor)
+        elemDmg = modElementalCombat.ElementalDamageUserVsNpc(UserIndex, NpcIndex, .invent.EquippedWeaponObjIndex, .invent.EquippedMunitionObjIndex, elemColor, elemType)
         If elemDmg > 0 Then
-            If NPCs.DoDamageOrHeal(NpcIndex, UserIndex, eUser, -elemDmg, e_dot, .invent.EquippedWeaponObjIndex, elemColor) = eDead Then npcAlive = False
+            If NPCs.DoDamageOrHeal(NpcIndex, UserIndex, eUser, -elemDmg, e_dot, .invent.EquippedWeaponObjIndex, elemColor, elemType) = eDead Then npcAlive = False
         End If
         ' Restamos el dano fisico al NPC
         If npcAlive Then

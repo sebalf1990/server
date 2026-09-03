@@ -638,9 +638,10 @@ End Sub
 ' Punto de entrada gateado: camino user -> target (NPC o USER). Generalizado en la
 ' Ola 5 para habilitar PvP. Devuelve el dano elemental EXTRA (ya resistido por tipo).
 ' ============================================================================
-Public Function ElementalDamageUserVsTarget(ByVal UserIndex As Integer, ByVal targetIsNpc As Boolean, ByVal targetIndex As Integer, ByVal WeaponObjIndex As Integer, ByVal MunitionObjIndex As Integer, ByRef outColor As Long) As Long
+Public Function ElementalDamageUserVsTarget(ByVal UserIndex As Integer, ByVal targetIsNpc As Boolean, ByVal targetIndex As Integer, ByVal WeaponObjIndex As Integer, ByVal MunitionObjIndex As Integer, ByRef outColor As Long, Optional ByRef outType As Integer) As Long
     On Error GoTo ErrHandler
     outColor = vbWhite
+    outType = eDmgNone
     If Not ElementalSystemEnabled() Then Exit Function
     If UserIndex <= 0 Or targetIndex <= 0 Then Exit Function
     Dim total As Long
@@ -699,16 +700,24 @@ Public Function ElementalDamageUserVsTarget(ByVal UserIndex As Integer, ByVal ta
     If WeaponObjIndex > 0 Then
         If ObjData(WeaponObjIndex).Elemental.CompCount > 0 Then
             outColor = DamageTypeColor(ObjData(WeaponObjIndex).Elemental.Comp(1).DamageType)
+            outType = ObjData(WeaponObjIndex).Elemental.Comp(1).DamageType
         ElseIf UserList(UserIndex).flags.EnchantWeaponObjIndex = WeaponObjIndex And UserList(UserIndex).flags.EnchantWeaponSource.CompCount > 0 Then
             outColor = DamageTypeColor(UserList(UserIndex).flags.EnchantWeaponSource.Comp(1).DamageType)
+            outType = UserList(UserIndex).flags.EnchantWeaponSource.Comp(1).DamageType
         End If
     End If
     If outColor = vbWhite And orbIdx > 0 Then
-        If ObjData(orbIdx).Elemental.CompCount > 0 Then outColor = DamageTypeColor(ObjData(orbIdx).Elemental.Comp(1).DamageType)
+        If ObjData(orbIdx).Elemental.CompCount > 0 Then
+            outColor = DamageTypeColor(ObjData(orbIdx).Elemental.Comp(1).DamageType)
+            outType = ObjData(orbIdx).Elemental.Comp(1).DamageType
+        End If
     End If
     If outColor = vbWhite And MunitionObjIndex > 0 Then
         With UserList(UserIndex).flags
-            If .EnchantedAmmoObjIndex = MunitionObjIndex And .EnchantedAmmoSource.CompCount > 0 Then outColor = DamageTypeColor(.EnchantedAmmoSource.Comp(1).DamageType)
+            If .EnchantedAmmoObjIndex = MunitionObjIndex And .EnchantedAmmoSource.CompCount > 0 Then
+                outColor = DamageTypeColor(.EnchantedAmmoSource.Comp(1).DamageType)
+                outType = .EnchantedAmmoSource.Comp(1).DamageType
+            End If
         End With
     End If
     ElementalDamageUserVsTarget = total
@@ -718,8 +727,8 @@ ErrHandler:
 End Function
 
 ' Wrapper retrocompatible: camino user -> NPC (call-site existente sin cambios).
-Public Function ElementalDamageUserVsNpc(ByVal UserIndex As Integer, ByVal NpcIndex As Integer, ByVal WeaponObjIndex As Integer, ByVal MunitionObjIndex As Integer, ByRef outColor As Long) As Long
-    ElementalDamageUserVsNpc = ElementalDamageUserVsTarget(UserIndex, True, NpcIndex, WeaponObjIndex, MunitionObjIndex, outColor)
+Public Function ElementalDamageUserVsNpc(ByVal UserIndex As Integer, ByVal NpcIndex As Integer, ByVal WeaponObjIndex As Integer, ByVal MunitionObjIndex As Integer, ByRef outColor As Long, Optional ByRef outType As Integer) As Long
+    ElementalDamageUserVsNpc = ElementalDamageUserVsTarget(UserIndex, True, NpcIndex, WeaponObjIndex, MunitionObjIndex, outColor, outType)
 End Function
 
 Public Sub OnEnchantedWeaponSwing(ByVal UserIndex As Integer)
