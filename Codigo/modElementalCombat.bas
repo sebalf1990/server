@@ -846,12 +846,7 @@ Public Function CanEnchantWeapon(ByVal UserIndex As Integer, ByVal WeaponObjInde
         outMsg = "Esa arma no se puede encantar."
         Exit Function
     End If
-    ' 06.002 Ola 2: un arma de proyectil encantada aplicaria el bono en cada disparo sin consumir
-    ' cargas jamas (el consumo melee vive en UsuarioAtaca). La municion tiene su propio encanto.
-    If ObjData(WeaponObjIndex).Proyectil > 0 Then
-        outMsg = "No podes encantar un arma de proyectil: encanta la municion."
-        Exit Function
-    End If
+    ' Plan 03.002 R2: rama inalcanzable retirada (ningun item tiene Subtipo=11 y Proyectil=1 a la vez; el gate de Subtipo ya corta antes)
     ' CP3 (20.002 Step 7): no se puede encantar con un orbe elemental equipado (exclusividad)
     If HasElementalOrbEquipped(UserIndex) Then
         outMsg = "No podes encantar el arma con un orbe equipado."

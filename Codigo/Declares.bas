@@ -2585,28 +2585,7 @@ Public Type t_ObjData
     CuraNeuro As Byte
     CuraNeuroValor As Integer
     PoisonCooldownMs As Long
-    ' Resistencias en items equipables (aditivas)
-    ' Chance unica por familia (aplica vs arma/hechizo/NPC sin distincion)
-    ResistChanceVenenoMenorPct As Long
-    ResistChanceHemoPct As Long
-    ResistChanceNeuroPct As Long
-    ' Dano: cascada flat -> %. Min/Max random por tick. Si min=max es fijo.
-    ResistDanoVenenoMenorMinFlat As Long
-    ResistDanoVenenoMenorMaxFlat As Long
-    ResistDanoVenenoMenorMinPct As Long
-    ResistDanoVenenoMenorMaxPct As Long
-    ResistDanoHemoMinFlat As Long
-    ResistDanoHemoMaxFlat As Long
-    ResistDanoHemoMinPct As Long
-    ResistDanoHemoMaxPct As Long
-    ResistDanoNeuroMinFlat As Long
-    ResistDanoNeuroMaxFlat As Long
-    ResistDanoNeuroMinPct As Long
-    ResistDanoNeuroMaxPct As Long
-    ' Inmunidad total: bloqueo absoluto desde cualquier fuente
-    InmunidadVenenoMenor As Byte
-    InmunidadHemo As Byte
-    InmunidadNeuro As Byte
+    ' Plan 03.002 M8: modelo por familia retirado; la resist real es ElemResist tipo 4 (modPoisonResist)
     ' --- Sistema de danos elementales (TOGGLE32 elemental_system) ---
     Elemental As t_ElementalSource
     ElementalResist As t_ElementalResistSet
@@ -3637,23 +3616,7 @@ Public Type t_NpcInfoCache
     ' --- Sistema de venenos (TOGGLE26 new_poison_system) ---
     PerfilVenenoAplica As String        ' nombre de perfil en PerfilesVenenoNPC.dat, vacio=no aplica
     ChanceAplicarPct As Long
-    ResistChanceVenenoMenorPct As Long
-    ResistDanoVenenoMenorPct As Long
-    ResistDanoVenenoMenorFlat As Long
-    ResistChanceHemoPct As Long
-    ResistDanoHemoPct As Long
-    ResistDanoHemoFlat As Long
-    ResistChanceNeuroPct As Long
-    ResistDanoNeuroPct As Long
-    ResistDanoNeuroFlat As Long
-    InmunidadVenenoMenor As Byte
-    InmunidadHemo As Byte
-    InmunidadNeuro As Byte
-    ' Resistencia generica (afecta cualquier familia, se suma a la especifica)
-    InmunidadVenenoGenerica As Byte
-    ResistChanceVenenoGenericoPct As Long
-    ResistDanoVenenoGenericoFlat As Long
-    ResistDanoVenenoGenericoPct As Long
+    ' Plan 03.002 M8: modelo por familia retirado; la resist real es ElemResist tipo 4 (modPoisonResist)
     ' --- Sistema de danos elementales (TOGGLE32 elemental_system) ---
     Elemental As t_ElementalSource
     ElementalResist As t_ElementalResistSet
