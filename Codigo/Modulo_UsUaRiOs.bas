@@ -3066,7 +3066,8 @@ Public Function DoDamageOrHeal(ByVal UserIndex As Integer, _
                                ByVal DamageSourceIndex As Integer, _
                                Optional DoDamageText As Integer = 389, _
                                Optional GotDamageText As Integer = 34, _
-                               Optional ByVal DamageColor As Long = vbRed) As e_DamageResult
+                               Optional ByVal DamageColor As Long = vbRed, _
+                               Optional ByVal DamageTypeId As Integer = 0) As e_DamageResult
     On Error GoTo DoDamageOrHeal_Err
     ' 06.002 Ola 1: un DoT puede tickear en la misma pasada en que otro efecto mato al user;
     ' sin esta guarda el cadaver vuelve a morir (UserDie/PlayerKillPlayer/ContarMuerte dobles).
@@ -3091,6 +3092,12 @@ Public Function DoDamageOrHeal(ByVal UserIndex As Integer, _
             If UserList(UserIndex).ChatCombate = 1 And GotDamageText > 0 Then
                 Call WriteLocaleMsg(UserIndex, GotDamageText, e_FontTypeNames.FONTTYPE_FIGHT, GetUserDisplayName(SourceIndex) & "¬" & DamageStr)
             End If
+        End If
+        ' Plan 04.002 M4 (minima): mensaje de dano tipado a la victima en el golpe elemental
+        ' directo (PvP y NPC->user). Ticks de DoT (UpdateHpOverTime.cls) no pasan DamageTypeId:
+        ' quedan fuera de alcance de esta iteracion.
+        If DamageTypeId > 0 And UserList(UserIndex).flags.UserLogged And UserList(UserIndex).ChatCombate = 1 Then
+            Call WriteLocaleMsg(UserIndex, MSG_RECEIVED_TYPED_DAMAGE, e_FontTypeNames.FONTTYPE_FIGHT, DamageStr & Chr(&HAC) & modElementalCombat.DamageTypeName(DamageTypeId))
         End If
         amount = EffectsOverTime.TargetApplyDamageReduction(UserList(UserIndex).EffectOverTime, amount, SourceIndex, SourceType, DamageSourceType)
         Call EffectsOverTime.TargetWasDamaged(UserList(UserIndex).EffectOverTime, SourceIndex, SourceType, DamageSourceType)

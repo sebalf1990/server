@@ -609,13 +609,13 @@ Private Function NpcDamage(ByVal NpcIndex As Integer, ByVal UserIndex As Integer
     If UserList(UserIndex).flags.Privilegios And e_PlayerType.User Then
         ' --- Capa elemental npc->user (TOGGLE32 elemental_system). Core fisico INTACTO. ---
         ' Death-safe: elemental (con color de tipo) primero; fisico solo si el user sobrevive.
-        Dim elemDmgN As Long, elemColorN As Long, userVivoN As Boolean
+        Dim elemDmgN As Long, elemColorN As Long, elemTypeN As Integer, userVivoN As Boolean
         userVivoN = True
         Dim hpAntesNU As Long
         hpAntesNU = UserList(UserIndex).Stats.MinHp
-        elemDmgN = modElementalCombat.ElementalDamageNpcVsUser(NpcIndex, UserIndex, elemColorN)
+        elemDmgN = modElementalCombat.ElementalDamageNpcVsUser(NpcIndex, UserIndex, elemColorN, elemTypeN)
         If elemDmgN > 0 Then
-            If UserMod.DoDamageOrHeal(UserIndex, NpcIndex, eNpc, -elemDmgN, e_dot, 0, -1, -1, elemColorN) = eDead Then userVivoN = False
+            If UserMod.DoDamageOrHeal(UserIndex, NpcIndex, eNpc, -elemDmgN, e_dot, 0, -1, -1, elemColorN, elemTypeN) = eDead Then userVivoN = False
         End If
         If userVivoN Then
             If UserMod.DoDamageOrHeal(UserIndex, NpcIndex, eNpc, -Damage, e_phisical, 0) = eDead Then userVivoN = False
@@ -1394,13 +1394,13 @@ Private Sub UserDamageToUser(ByVal AtacanteIndex As Integer, ByVal VictimaIndex 
         ' --- Capa elemental PvP (TOGGLE32 elemental_system). Core fisico INTACTO. ---
         ' Death-safe: aplica el elemental (con su color de tipo) primero; el fisico solo si la victima
         ' sobrevive. El motor ya aplico la resistencia por tipo del defensor (no pasa por defensa fisica).
-        Dim elemDmgU As Long, elemColorU As Long, victimaVivaU As Boolean
+        Dim elemDmgU As Long, elemColorU As Long, elemTypeU As Integer, victimaVivaU As Boolean
         victimaVivaU = True
         Dim hpAntesVU As Long
         hpAntesVU = UserList(VictimaIndex).Stats.MinHp
-        elemDmgU = modElementalCombat.ElementalDamageUserVsTarget(AtacanteIndex, False, VictimaIndex, UserList(AtacanteIndex).invent.EquippedWeaponObjIndex, UserList(AtacanteIndex).invent.EquippedMunitionObjIndex, elemColorU)
+        elemDmgU = modElementalCombat.ElementalDamageUserVsTarget(AtacanteIndex, False, VictimaIndex, UserList(AtacanteIndex).invent.EquippedWeaponObjIndex, UserList(AtacanteIndex).invent.EquippedMunitionObjIndex, elemColorU, elemTypeU)
         If elemDmgU > 0 Then
-            If UserMod.DoDamageOrHeal(VictimaIndex, AtacanteIndex, e_ReferenceType.eUser, -elemDmgU, e_DamageSourceType.e_dot, UserList(AtacanteIndex).invent.EquippedWeaponObjIndex, -1, -1, elemColorU) = eDead Then victimaVivaU = False
+            If UserMod.DoDamageOrHeal(VictimaIndex, AtacanteIndex, e_ReferenceType.eUser, -elemDmgU, e_DamageSourceType.e_dot, UserList(AtacanteIndex).invent.EquippedWeaponObjIndex, -1, -1, elemColorU, elemTypeU) = eDead Then victimaVivaU = False
         End If
         If victimaVivaU Then
         If UserMod.DoDamageOrHeal(VictimaIndex, AtacanteIndex, e_ReferenceType.eUser, -Damage, e_DamageSourceType.e_phisical, .invent.EquippedWeaponObjIndex, -1, -1, Color) = _

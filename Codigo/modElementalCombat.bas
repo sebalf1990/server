@@ -1053,9 +1053,10 @@ End Function
 
 ' Punto de entrada: camino NPC -> user (PvP elemental). El NPC atacante saca sus componentes/procs
 ' de NpcInfoCache. Devuelve el dano elemental EXTRA (ya resistido por el tipo del defensor user).
-Public Function ElementalDamageNpcVsUser(ByVal NpcIndex As Integer, ByVal VictimaIndex As Integer, ByRef outColor As Long) As Long
+Public Function ElementalDamageNpcVsUser(ByVal NpcIndex As Integer, ByVal VictimaIndex As Integer, ByRef outColor As Long, Optional ByRef outType As Integer) As Long
     On Error GoTo ErrHandler
     outColor = vbWhite
+    outType = eDmgNone
     If Not ElementalSystemEnabled() Then Exit Function
     If NpcIndex <= 0 Or VictimaIndex <= 0 Then Exit Function
     Dim t As Integer
@@ -1067,8 +1068,12 @@ Public Function ElementalDamageNpcVsUser(ByVal NpcIndex As Integer, ByVal Victim
     ' Componentes + procs onHit del NPC atacante (target = user).
     total = total + ResolveComponentsVsTarget(NpcInfoCache(t).Elemental, False, VictimaIndex, ctx & " npc")
     total = total + FireProcs(NpcInfoCache(t).Elemental, eProcOnHit, False, VictimaIndex, NpcIndex, eNpc, ctx & " npc")
-    ' Color del numero: tipo primario del NPC.
-    If NpcInfoCache(t).Elemental.CompCount > 0 Then outColor = DamageTypeColor(NpcInfoCache(t).Elemental.Comp(1).DamageType)
+    ' Color y tipo del numero: componente primario del NPC (plan 04.002 M4: expone outType,
+    ' mismo patron y misma precedencia que ElementalDamageUserVsTarget).
+    If NpcInfoCache(t).Elemental.CompCount > 0 Then
+        outColor = DamageTypeColor(NpcInfoCache(t).Elemental.Comp(1).DamageType)
+        outType = NpcInfoCache(t).Elemental.Comp(1).DamageType
+    End If
     ElementalDamageNpcVsUser = total
     Exit Function
 ErrHandler:
