@@ -451,6 +451,14 @@ Sub AlquimistaQuitarMateriales(ByVal UserIndex As Integer, ByRef Item As t_Obj)
         If .FlorOceano > 0 Then Call QuitarObjetos(FlorOceano, .FlorOceano, UserIndex)
         If .FlorRoja > 0 Then Call QuitarObjetos(FlorRoja, .FlorRoja, UserIndex)
         If .SemillasProsperas > 0 Then Call QuitarObjetos(SemillasProsperas, .SemillasProsperas, UserIndex)
+        If .FireEssence > 0 Then Call QuitarObjetos(e_Minerales.FireEssence, .FireEssence, UserIndex)
+        If .WaterEssence > 0 Then Call QuitarObjetos(e_Minerales.WaterEssence, .WaterEssence, UserIndex)
+        If .EarthEssence > 0 Then Call QuitarObjetos(e_Minerales.EarthEssence, .EarthEssence, UserIndex)
+        If .WindEssence > 0 Then Call QuitarObjetos(e_Minerales.WindEssence, .WindEssence, UserIndex)
+        If .RunaFuego > 0 Then Call QuitarObjetos(RunaFuegoObj, .RunaFuego, UserIndex, e_ElementalTags.Fire)
+        If .RunaAgua > 0 Then Call QuitarObjetos(RunaAguaObj, .RunaAgua, UserIndex, e_ElementalTags.Water)
+        If .RunaTierra > 0 Then Call QuitarObjetos(RunaTierraObj, .RunaTierra, UserIndex, e_ElementalTags.Earth)
+        If .RunaViento > 0 Then Call QuitarObjetos(RunaVientoObj, .RunaViento, UserIndex, e_ElementalTags.Wind)
     End With
     Exit Sub
 AlquimistaQuitarMateriales_Err:
@@ -595,6 +603,70 @@ Function AlquimistaTieneMateriales(ByVal UserIndex As Integer, ByVal ItemIndex A
         If Not TieneObjetos(SemillasProsperas, ObjData(ItemIndex).SemillasProsperas, UserIndex) Then
             ' Msg627=No tenés suficientes flores rojas.
             Call WriteLocaleMsg(UserIndex, MSG_NO_TENES_SUFICIENTES_SEMILLAS_PROSPERAS, e_FontTypeNames.FONTTYPE_INFO)
+            AlquimistaTieneMateriales = False
+            Call WriteMacroTrabajoToggle(UserIndex, False)
+            Exit Function
+        End If
+    End If
+    If ObjData(ItemIndex).FireEssence > 0 Then
+        If Not TieneObjetos(e_Minerales.FireEssence, ObjData(ItemIndex).FireEssence, UserIndex) Then
+            Call WriteLocaleMsg(UserIndex, MSG_REQUIRED_ESSENCE_MISSING, e_FontTypeNames.FONTTYPE_INFO)
+            AlquimistaTieneMateriales = False
+            Call WriteMacroTrabajoToggle(UserIndex, False)
+            Exit Function
+        End If
+    End If
+    If ObjData(ItemIndex).WaterEssence > 0 Then
+        If Not TieneObjetos(e_Minerales.WaterEssence, ObjData(ItemIndex).WaterEssence, UserIndex) Then
+            Call WriteLocaleMsg(UserIndex, MSG_REQUIRED_ESSENCE_MISSING, e_FontTypeNames.FONTTYPE_INFO)
+            AlquimistaTieneMateriales = False
+            Call WriteMacroTrabajoToggle(UserIndex, False)
+            Exit Function
+        End If
+    End If
+    If ObjData(ItemIndex).EarthEssence > 0 Then
+        If Not TieneObjetos(e_Minerales.EarthEssence, ObjData(ItemIndex).EarthEssence, UserIndex) Then
+            Call WriteLocaleMsg(UserIndex, MSG_REQUIRED_ESSENCE_MISSING, e_FontTypeNames.FONTTYPE_INFO)
+            AlquimistaTieneMateriales = False
+            Call WriteMacroTrabajoToggle(UserIndex, False)
+            Exit Function
+        End If
+    End If
+    If ObjData(ItemIndex).WindEssence > 0 Then
+        If Not TieneObjetos(e_Minerales.WindEssence, ObjData(ItemIndex).WindEssence, UserIndex) Then
+            Call WriteLocaleMsg(UserIndex, MSG_REQUIRED_ESSENCE_MISSING, e_FontTypeNames.FONTTYPE_INFO)
+            AlquimistaTieneMateriales = False
+            Call WriteMacroTrabajoToggle(UserIndex, False)
+            Exit Function
+        End If
+    End If
+    If ObjData(ItemIndex).RunaFuego > 0 Then
+        If Not TieneObjetos(RunaFuegoObj, ObjData(ItemIndex).RunaFuego, UserIndex, e_ElementalTags.Fire) Then
+            Call WriteLocaleMsg(UserIndex, MSG_REQUIRED_ESSENCE_MISSING, e_FontTypeNames.FONTTYPE_INFO)
+            AlquimistaTieneMateriales = False
+            Call WriteMacroTrabajoToggle(UserIndex, False)
+            Exit Function
+        End If
+    End If
+    If ObjData(ItemIndex).RunaAgua > 0 Then
+        If Not TieneObjetos(RunaAguaObj, ObjData(ItemIndex).RunaAgua, UserIndex, e_ElementalTags.Water) Then
+            Call WriteLocaleMsg(UserIndex, MSG_REQUIRED_ESSENCE_MISSING, e_FontTypeNames.FONTTYPE_INFO)
+            AlquimistaTieneMateriales = False
+            Call WriteMacroTrabajoToggle(UserIndex, False)
+            Exit Function
+        End If
+    End If
+    If ObjData(ItemIndex).RunaTierra > 0 Then
+        If Not TieneObjetos(RunaTierraObj, ObjData(ItemIndex).RunaTierra, UserIndex, e_ElementalTags.Earth) Then
+            Call WriteLocaleMsg(UserIndex, MSG_REQUIRED_ESSENCE_MISSING, e_FontTypeNames.FONTTYPE_INFO)
+            AlquimistaTieneMateriales = False
+            Call WriteMacroTrabajoToggle(UserIndex, False)
+            Exit Function
+        End If
+    End If
+    If ObjData(ItemIndex).RunaViento > 0 Then
+        If Not TieneObjetos(RunaVientoObj, ObjData(ItemIndex).RunaViento, UserIndex, e_ElementalTags.Wind) Then
+            Call WriteLocaleMsg(UserIndex, MSG_REQUIRED_ESSENCE_MISSING, e_FontTypeNames.FONTTYPE_INFO)
             AlquimistaTieneMateriales = False
             Call WriteMacroTrabajoToggle(UserIndex, False)
             Exit Function
