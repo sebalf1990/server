@@ -1221,6 +1221,10 @@ Sub LoadOBJData()
             .WaterEssence = val(Leer.GetValue(ObjKey, "WaterEssence"))
             .EarthEssence = val(Leer.GetValue(ObjKey, "EarthEssence"))
             .WindEssence = val(Leer.GetValue(ObjKey, "WindEssence"))
+            .RunaFuego = val(Leer.GetValue(ObjKey, "RunaFuego"))
+            .RunaAgua = val(Leer.GetValue(ObjKey, "RunaAgua"))
+            .RunaTierra = val(Leer.GetValue(ObjKey, "RunaTierra"))
+            .RunaViento = val(Leer.GetValue(ObjKey, "RunaViento"))
             .VidaUtil = val(Leer.GetValue(ObjKey, "VidaUtil"))
             .TiempoRegenerar = val(Leer.GetValue(ObjKey, "TiempoRegenerar"))
             .Jerarquia = val(Leer.GetValue(ObjKey, "Jerarquia"))
@@ -1287,6 +1291,7 @@ Sub LoadOBJData()
             .EnchantAmmoDurationMs = val(Leer.GetValue(ObjKey, "EnchantAmmoDurationMs"))
             If val(Leer.GetValue(ObjKey, "Bindable")) > 0 Then Call SetMask(.ObjFlags, e_ObjFlags.e_Bindable)
             If val(Leer.GetValue(ObjKey, "UseOnSafeAreaOnly")) > 0 Then Call SetMask(.ObjFlags, e_ObjFlags.e_UseOnSafeAreaOnly)
+            .Hechizo = val(Leer.GetValue(ObjKey, "Hechizo"))    ' receta de crafteo (KnowsCraftingRecipe); aplica a todo ObjType
             Dim i As Integer
             Select Case .OBJType
                 Case e_OBJType.otWorkingTools
@@ -1366,7 +1371,6 @@ Sub LoadOBJData()
                     .MaxModificador = val(Leer.GetValue(ObjKey, "MaxModificador"))
                     .MinModificador = val(Leer.GetValue(ObjKey, "MinModificador"))
                     .DuracionEfecto = val(Leer.GetValue(ObjKey, "DuracionEfecto"))
-                    .Hechizo = val(Leer.GetValue(ObjKey, "Hechizo"))
                     .Mortero = val(Leer.GetValue(ObjKey, "Mortero"))
                     .FrascoAlq = val(Leer.GetValue(ObjKey, "FrascoAlq"))
                     .HongoDeLuz = val(Leer.GetValue(ObjKey, "HongoDeLuz"))
@@ -1483,7 +1487,6 @@ Sub LoadOBJData()
                 Case e_OBJType.otMinerals
                     .LingoteIndex = val(Leer.GetValue(ObjKey, "LingoteIndex"))
                 Case e_OBJType.otElementalRune
-                    .Hechizo = val(Leer.GetValue(ObjKey, "Hechizo"))
                 Case e_OBJType.otParchment, e_OBJType.otSkinsSpells
                     .RequiereObjeto = val(Leer.GetValue(ObjKey, "RequiereObjeto"))
             End Select

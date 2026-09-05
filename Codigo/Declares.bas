@@ -1295,6 +1295,10 @@ Public Const ColaDeZorro                      As Integer = 4314
 Public Const FlorOceano                       As Integer = 4315
 Public Const FlorRoja                         As Integer = 4316
 Public Const SemillasProsperas                As Integer = 4320
+Public Const RunaFuegoObj                     As Integer = 5170
+Public Const RunaAguaObj                      As Integer = 5171
+Public Const RunaTierraObj                    As Integer = 5172
+Public Const RunaVientoObj                    As Integer = 5173
 Public Const PieldeLobo                       As Integer = 414 'OK
 Public Const PieldeOsoPardo                   As Integer = 415 'OK
 Public Const PieldeOsoPolar                   As Integer = 416 'OK
@@ -2490,6 +2494,10 @@ Public Type t_ObjData
     FlorOceano As Integer
     FlorRoja As Integer
     SemillasProsperas As Integer
+    RunaFuego As Integer
+    RunaAgua As Integer
+    RunaTierra As Integer
+    RunaViento As Integer
     SkPociones As Byte
     PielLobo As Integer
     PielOsoPardo As Integer

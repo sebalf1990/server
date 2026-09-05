@@ -717,6 +717,9 @@ Public Function ElementalDamageUserVsTarget(ByVal UserIndex As Integer, ByVal ta
             If .EnchantedAmmoObjIndex = MunitionObjIndex And .EnchantedAmmoSource.CompCount > 0 Then
                 outColor = DamageTypeColor(.EnchantedAmmoSource.Comp(1).DamageType)
                 outType = .EnchantedAmmoSource.Comp(1).DamageType
+            ElseIf ObjData(MunitionObjIndex).Elemental.CompCount > 0 Then
+                outColor = DamageTypeColor(ObjData(MunitionObjIndex).Elemental.Comp(1).DamageType)
+                outType = ObjData(MunitionObjIndex).Elemental.Comp(1).DamageType
             End If
         End With
     End If

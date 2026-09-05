@@ -1808,23 +1808,29 @@ Sub UseInvItem(ByVal UserIndex As Integer, ByVal Slot As Byte, ByVal ByClick As 
         If modElementalCombat.ElementalSystemEnabled() And obj.EnchantWeaponDurationMs <> 0 Then
             Dim ewMsg As String
             If Not modElementalCombat.CanEnchantWeapon(UserIndex, .invent.EquippedWeaponObjIndex, obj.Elemental, ewMsg) Then
-                Call WriteConsoleMsg(UserIndex, ewMsg, e_FontTypeNames.FONTTYPE_INFO)
-                Exit Sub
-            End If
-            ' CP1 fix (paridad veneno): rechazar re-encantar si el arma ya tiene encantamiento activo
-            If modElementalCombat.IsWeaponEnchantedActive(UserIndex, .invent.EquippedWeaponObjIndex) Then
-                Call WriteConsoleMsg(UserIndex, "Tu arma ya esta encantada.", e_FontTypeNames.FONTTYPE_INFO)
-                Exit Sub
-            End If
-            Call modElementalCombat.SetEnchantedWeapon(UserIndex, .invent.EquippedWeaponObjIndex, obj.Elemental, obj.CargasQueOtorga, obj.EnchantWeaponDurationMs)
-            If obj.EnchantWeaponDurationMs < 0 Then
-                Call WriteConsoleMsg(UserIndex, "Encantaste tu arma de forma permanente.", e_FontTypeNames.FONTTYPE_FIGHT)
+                ' Aceite unificado (D-G, plan 04.003): si el mismo item tambien puede
+                ' encantar flechas y hay municion equipada, no rechazar aca -- cae a la
+                ' rama de flechas de abajo. Sin flechas equipadas, rechazo de siempre.
+                If obj.EnchantAmmoDurationMs = 0 Or .invent.EquippedMunitionObjIndex = 0 Then
+                    Call WriteConsoleMsg(UserIndex, ewMsg, e_FontTypeNames.FONTTYPE_INFO)
+                    Exit Sub
+                End If
             Else
-                Call WriteConsoleMsg(UserIndex, "Encantaste tu arma (" & (obj.EnchantWeaponDurationMs \ 1000) & "s).", e_FontTypeNames.FONTTYPE_FIGHT)
+                ' CP1 fix (paridad veneno): rechazar re-encantar si el arma ya tiene encantamiento activo
+                If modElementalCombat.IsWeaponEnchantedActive(UserIndex, .invent.EquippedWeaponObjIndex) Then
+                    Call WriteConsoleMsg(UserIndex, "Tu arma ya esta encantada.", e_FontTypeNames.FONTTYPE_INFO)
+                    Exit Sub
+                End If
+                Call modElementalCombat.SetEnchantedWeapon(UserIndex, .invent.EquippedWeaponObjIndex, obj.Elemental, obj.CargasQueOtorga, obj.EnchantWeaponDurationMs)
+                If obj.EnchantWeaponDurationMs < 0 Then
+                    Call WriteConsoleMsg(UserIndex, "Encantaste tu arma de forma permanente.", e_FontTypeNames.FONTTYPE_FIGHT)
+                Else
+                    Call WriteConsoleMsg(UserIndex, "Encantaste tu arma (" & (obj.EnchantWeaponDurationMs \ 1000) & "s).", e_FontTypeNames.FONTTYPE_FIGHT)
+                End If
+                Call QuitarUserInvItem(UserIndex, Slot, 1)
+                Call UpdateUserInv(False, UserIndex, Slot)
+                Exit Sub
             End If
-            Call QuitarUserInvItem(UserIndex, Slot, 1)
-            Call UpdateUserInv(False, UserIndex, Slot)
-            Exit Sub
         End If
 
         ' --- Encantar Flechas elemental (TOGGLE32, 20.002 CP1 ammo): aceite con payload encanta las flechas equipadas ---
