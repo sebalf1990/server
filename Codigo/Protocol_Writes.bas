@@ -4536,7 +4536,8 @@ Public Sub WriteObjQuestSend(ByVal UserIndex As Integer, ByVal QuestIndex As Int
     If QuestList(QuestIndex).RequiredOBJs Then
         'Si hay objs entonces enviamos la lista
         For i = 1 To QuestList(QuestIndex).RequiredOBJs
-            Call Writer.WriteInt16(QuestList(QuestIndex).RequiredOBJ(i).amount)
+            ' Plan 07.001: amount a Int32 (espejo de WriteQuestDetails/WriteNpcQuestListSend), ObjIndex sigue Int16.
+            Call Writer.WriteInt32(QuestList(QuestIndex).RequiredOBJ(i).amount)
             Call Writer.WriteInt16(QuestList(QuestIndex).RequiredOBJ(i).ObjIndex)
         Next i
     End If
