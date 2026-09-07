@@ -331,7 +331,7 @@ DoNavega_Err:
     Call TraceError(Err.Number, Err.Description, "Trabajo.DoNavega", Erl)
 End Sub
 
-Function TieneObjetos(ByVal ItemIndex As Integer, ByVal cant As Integer, ByVal UserIndex As Integer, Optional ByVal ElementalTags As Long = e_ElementalTags.Normal) As Boolean
+Function TieneObjetos(ByVal ItemIndex As Integer, ByVal cant As Long, ByVal UserIndex As Integer, Optional ByVal ElementalTags As Long = e_ElementalTags.Normal) As Boolean
     On Error GoTo TieneObjetos_Err
     Dim i     As Long
     Dim total As Long
@@ -352,7 +352,7 @@ TieneObjetos_Err:
     Call TraceError(Err.Number, Err.Description, "Trabajo.TieneObjetos", Erl)
 End Function
 
-Function QuitarObjetos(ByVal ItemIndex As Integer, ByVal cant As Integer, ByVal UserIndex As Integer, _
+Function QuitarObjetos(ByVal ItemIndex As Integer, ByVal cant As Long, ByVal UserIndex As Integer, _
                        Optional ByVal ElementalTags As Long = e_ElementalTags.Normal, _
                        Optional ByVal PoisonedAmmoMotivo As String = "inventario_modificado", _
                        Optional ByVal PoisonedAmmoMsg As String = "Ya no tenes flechas envenenadas equipadas.") As Boolean
@@ -418,6 +418,10 @@ Sub HerreroQuitarMateriales(ByVal UserIndex As Integer, ByRef Item As t_Obj)
         If .WaterEssence > 0 Then Call QuitarObjetos(e_Minerales.WaterEssence, .WaterEssence, UserIndex)
         If .EarthEssence > 0 Then Call QuitarObjetos(e_Minerales.EarthEssence, .EarthEssence, UserIndex)
         If .WindEssence > 0 Then Call QuitarObjetos(e_Minerales.WindEssence, .WindEssence, UserIndex)
+        If .RunaFuego > 0 Then Call QuitarObjetos(RunaFuegoObj, .RunaFuego, UserIndex, e_ElementalTags.Fire)
+        If .RunaAgua > 0 Then Call QuitarObjetos(RunaAguaObj, .RunaAgua, UserIndex, e_ElementalTags.Water)
+        If .RunaTierra > 0 Then Call QuitarObjetos(RunaTierraObj, .RunaTierra, UserIndex, e_ElementalTags.Earth)
+        If .RunaViento > 0 Then Call QuitarObjetos(RunaVientoObj, .RunaViento, UserIndex, e_ElementalTags.Wind)
     End With
     Exit Sub
 HerreroQuitarMateriales_Err:
@@ -431,6 +435,14 @@ Sub CarpinteroQuitarMateriales(ByVal UserIndex As Integer, ByRef Item As t_Obj)
         If .Madera > 0 Then Call QuitarObjetos(Wood, .Madera * Item.amount, UserIndex)
         If .MaderaElfica > 0 Then Call QuitarObjetos(ElvenWood, .MaderaElfica * Item.amount, UserIndex)
         If .MaderaPino > 0 Then Call QuitarObjetos(PinoWood, .MaderaPino * Item.amount, UserIndex)
+        If .FireEssence > 0 Then Call QuitarObjetos(e_Minerales.FireEssence, .FireEssence * Item.amount, UserIndex)
+        If .WaterEssence > 0 Then Call QuitarObjetos(e_Minerales.WaterEssence, .WaterEssence * Item.amount, UserIndex)
+        If .EarthEssence > 0 Then Call QuitarObjetos(e_Minerales.EarthEssence, .EarthEssence * Item.amount, UserIndex)
+        If .WindEssence > 0 Then Call QuitarObjetos(e_Minerales.WindEssence, .WindEssence * Item.amount, UserIndex)
+        If .RunaFuego > 0 Then Call QuitarObjetos(RunaFuegoObj, .RunaFuego * Item.amount, UserIndex, e_ElementalTags.Fire)
+        If .RunaAgua > 0 Then Call QuitarObjetos(RunaAguaObj, .RunaAgua * Item.amount, UserIndex, e_ElementalTags.Water)
+        If .RunaTierra > 0 Then Call QuitarObjetos(RunaTierraObj, .RunaTierra * Item.amount, UserIndex, e_ElementalTags.Earth)
+        If .RunaViento > 0 Then Call QuitarObjetos(RunaVientoObj, .RunaViento * Item.amount, UserIndex, e_ElementalTags.Wind)
     End With
     Exit Sub
 CarpinteroQuitarMateriales_Err:
@@ -505,6 +517,70 @@ Function CarpinteroTieneMateriales(ByVal UserIndex As Integer, ByVal ItemIndex A
         If Not TieneObjetos(PinoWood, ObjData(ItemIndex).MaderaPino * Cantidad, UserIndex) Then
             ' Msg611=No tenés suficiente madera de pino nudoso.
             Call WriteLocaleMsg(UserIndex, MSG_NO_TENES_SUFICIENTE_MADERA_PINO_NUDOSO, e_FontTypeNames.FONTTYPE_INFO)
+            CarpinteroTieneMateriales = False
+            Call WriteMacroTrabajoToggle(UserIndex, False)
+            Exit Function
+        End If
+    End If
+    If ObjData(ItemIndex).FireEssence > 0 Then
+        If Not TieneObjetos(e_Minerales.FireEssence, ObjData(ItemIndex).FireEssence * Cantidad, UserIndex) Then
+            Call WriteLocaleMsg(UserIndex, MSG_REQUIRED_ESSENCE_MISSING, e_FontTypeNames.FONTTYPE_INFO)
+            CarpinteroTieneMateriales = False
+            Call WriteMacroTrabajoToggle(UserIndex, False)
+            Exit Function
+        End If
+    End If
+    If ObjData(ItemIndex).WaterEssence > 0 Then
+        If Not TieneObjetos(e_Minerales.WaterEssence, ObjData(ItemIndex).WaterEssence * Cantidad, UserIndex) Then
+            Call WriteLocaleMsg(UserIndex, MSG_REQUIRED_ESSENCE_MISSING, e_FontTypeNames.FONTTYPE_INFO)
+            CarpinteroTieneMateriales = False
+            Call WriteMacroTrabajoToggle(UserIndex, False)
+            Exit Function
+        End If
+    End If
+    If ObjData(ItemIndex).EarthEssence > 0 Then
+        If Not TieneObjetos(e_Minerales.EarthEssence, ObjData(ItemIndex).EarthEssence * Cantidad, UserIndex) Then
+            Call WriteLocaleMsg(UserIndex, MSG_REQUIRED_ESSENCE_MISSING, e_FontTypeNames.FONTTYPE_INFO)
+            CarpinteroTieneMateriales = False
+            Call WriteMacroTrabajoToggle(UserIndex, False)
+            Exit Function
+        End If
+    End If
+    If ObjData(ItemIndex).WindEssence > 0 Then
+        If Not TieneObjetos(e_Minerales.WindEssence, ObjData(ItemIndex).WindEssence * Cantidad, UserIndex) Then
+            Call WriteLocaleMsg(UserIndex, MSG_REQUIRED_ESSENCE_MISSING, e_FontTypeNames.FONTTYPE_INFO)
+            CarpinteroTieneMateriales = False
+            Call WriteMacroTrabajoToggle(UserIndex, False)
+            Exit Function
+        End If
+    End If
+    If ObjData(ItemIndex).RunaFuego > 0 Then
+        If Not TieneObjetos(RunaFuegoObj, ObjData(ItemIndex).RunaFuego * Cantidad, UserIndex, e_ElementalTags.Fire) Then
+            Call WriteLocaleMsg(UserIndex, MSG_REQUIRED_ESSENCE_MISSING, e_FontTypeNames.FONTTYPE_INFO)
+            CarpinteroTieneMateriales = False
+            Call WriteMacroTrabajoToggle(UserIndex, False)
+            Exit Function
+        End If
+    End If
+    If ObjData(ItemIndex).RunaAgua > 0 Then
+        If Not TieneObjetos(RunaAguaObj, ObjData(ItemIndex).RunaAgua * Cantidad, UserIndex, e_ElementalTags.Water) Then
+            Call WriteLocaleMsg(UserIndex, MSG_REQUIRED_ESSENCE_MISSING, e_FontTypeNames.FONTTYPE_INFO)
+            CarpinteroTieneMateriales = False
+            Call WriteMacroTrabajoToggle(UserIndex, False)
+            Exit Function
+        End If
+    End If
+    If ObjData(ItemIndex).RunaTierra > 0 Then
+        If Not TieneObjetos(RunaTierraObj, ObjData(ItemIndex).RunaTierra * Cantidad, UserIndex, e_ElementalTags.Earth) Then
+            Call WriteLocaleMsg(UserIndex, MSG_REQUIRED_ESSENCE_MISSING, e_FontTypeNames.FONTTYPE_INFO)
+            CarpinteroTieneMateriales = False
+            Call WriteMacroTrabajoToggle(UserIndex, False)
+            Exit Function
+        End If
+    End If
+    If ObjData(ItemIndex).RunaViento > 0 Then
+        If Not TieneObjetos(RunaVientoObj, ObjData(ItemIndex).RunaViento * Cantidad, UserIndex, e_ElementalTags.Wind) Then
+            Call WriteLocaleMsg(UserIndex, MSG_REQUIRED_ESSENCE_MISSING, e_FontTypeNames.FONTTYPE_INFO)
             CarpinteroTieneMateriales = False
             Call WriteMacroTrabajoToggle(UserIndex, False)
             Exit Function
@@ -843,6 +919,38 @@ Function HerreroTieneMateriales(ByVal UserIndex As Integer, ByVal ItemIndex As I
     End If
     If ObjData(ItemIndex).WindEssence > 0 Then
         If Not TieneObjetos(e_Minerales.WindEssence, ObjData(ItemIndex).WindEssence, UserIndex) Then
+            Call WriteLocaleMsg(UserIndex, MSG_REQUIRED_ESSENCE_MISSING, e_FontTypeNames.FONTTYPE_INFO)
+            HerreroTieneMateriales = False
+            Call WriteMacroTrabajoToggle(UserIndex, False)
+            Exit Function
+        End If
+    End If
+    If ObjData(ItemIndex).RunaFuego > 0 Then
+        If Not TieneObjetos(RunaFuegoObj, ObjData(ItemIndex).RunaFuego, UserIndex, e_ElementalTags.Fire) Then
+            Call WriteLocaleMsg(UserIndex, MSG_REQUIRED_ESSENCE_MISSING, e_FontTypeNames.FONTTYPE_INFO)
+            HerreroTieneMateriales = False
+            Call WriteMacroTrabajoToggle(UserIndex, False)
+            Exit Function
+        End If
+    End If
+    If ObjData(ItemIndex).RunaAgua > 0 Then
+        If Not TieneObjetos(RunaAguaObj, ObjData(ItemIndex).RunaAgua, UserIndex, e_ElementalTags.Water) Then
+            Call WriteLocaleMsg(UserIndex, MSG_REQUIRED_ESSENCE_MISSING, e_FontTypeNames.FONTTYPE_INFO)
+            HerreroTieneMateriales = False
+            Call WriteMacroTrabajoToggle(UserIndex, False)
+            Exit Function
+        End If
+    End If
+    If ObjData(ItemIndex).RunaTierra > 0 Then
+        If Not TieneObjetos(RunaTierraObj, ObjData(ItemIndex).RunaTierra, UserIndex, e_ElementalTags.Earth) Then
+            Call WriteLocaleMsg(UserIndex, MSG_REQUIRED_ESSENCE_MISSING, e_FontTypeNames.FONTTYPE_INFO)
+            HerreroTieneMateriales = False
+            Call WriteMacroTrabajoToggle(UserIndex, False)
+            Exit Function
+        End If
+    End If
+    If ObjData(ItemIndex).RunaViento > 0 Then
+        If Not TieneObjetos(RunaVientoObj, ObjData(ItemIndex).RunaViento, UserIndex, e_ElementalTags.Wind) Then
             Call WriteLocaleMsg(UserIndex, MSG_REQUIRED_ESSENCE_MISSING, e_FontTypeNames.FONTTYPE_INFO)
             HerreroTieneMateriales = False
             Call WriteMacroTrabajoToggle(UserIndex, False)

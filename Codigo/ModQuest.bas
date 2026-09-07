@@ -142,6 +142,29 @@ Public Sub FinishQuest(ByVal UserIndex As Integer, ByVal QuestIndex As Integer, 
             End If
         End If
 
+        ' Fix R12 (plan 07.001): si no hay espacio en el libro de hechizos para las
+        ' recompensas nuevas, rechazar ANTES de consumir items/oro. Sin este check el
+        ' server ya habia consumido todo y el hechizo no se entregaba igual (ver
+        ' bitacora "Camino de las recetas por quest").
+        If .RewardSpellCount > 0 Then
+            Dim NeededSpellSlots As Integer
+            Dim FreeSpellSlots As Integer
+            NeededSpellSlots = 0
+            For i = 1 To .RewardSpellCount
+                If Not TieneHechizo(.RewardSpellList(i), UserIndex) Then NeededSpellSlots = NeededSpellSlots + 1
+            Next i
+            If NeededSpellSlots > 0 Then
+                FreeSpellSlots = 0
+                For j = 1 To MAXUSERHECHIZOS
+                    If UserList(UserIndex).Stats.UserHechizos(j) = 0 Then FreeSpellSlots = FreeSpellSlots + 1
+                Next j
+                If FreeSpellSlots < NeededSpellSlots Then
+                    Call WriteLocaleMsg(UserIndex, MSG_NO_TENES_ESPACIO_MAS_HECHIZOS_1317, e_FontTypeNames.FONTTYPE_INFO)
+                    Exit Sub
+                End If
+            End If
+        End If
+
         'A esta altura ya cumplio los objetivos, entonces se le entregan las recompensas.
         Call WriteChatOverHead(UserIndex, "QUESTFIN*" & QuestIndex, NpcList(NpcIndex).Char.charindex, vbYellow)
                 'Si la quest pedia objetos, se los saca al personaje.
@@ -601,6 +624,24 @@ Public Function FinishQuestCheck(ByVal UserIndex As Integer, ByVal QuestIndex As
                 If i > lastTargetReq Or i > lastTargetHave Then Exit For
                 If .RequiredTargetNPC(i).amount > UserList(UserIndex).QuestStats.Quests(QuestSlot).NPCsTarget(i) Then Exit Function
             Next i
+        End If
+
+        ' --- Reward spell slots (fix R12, ver FinishQuest): sin mensaje aca, para no ---
+        ' --- spamear el chequeo silencioso del flag "puede terminar" de la ventana. ---
+        If .RewardSpellCount > 0 Then
+            Dim NeededSpellSlots As Integer
+            Dim FreeSpellSlots As Integer
+            NeededSpellSlots = 0
+            For i = 1 To .RewardSpellCount
+                If Not TieneHechizo(.RewardSpellList(i), UserIndex) Then NeededSpellSlots = NeededSpellSlots + 1
+            Next i
+            If NeededSpellSlots > 0 Then
+                FreeSpellSlots = 0
+                For i = 1 To MAXUSERHECHIZOS
+                    If UserList(UserIndex).Stats.UserHechizos(i) = 0 Then FreeSpellSlots = FreeSpellSlots + 1
+                Next i
+                If FreeSpellSlots < NeededSpellSlots Then Exit Function
+            End If
         End If
 
     End With
