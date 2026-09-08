@@ -2876,10 +2876,11 @@ Public Sub WriteQuestDetails(ByVal UserIndex As Integer, ByVal QuestIndex As Int
     If QuestList(QuestIndex).RequiredOBJs Then
         'Si hay objs entonces enviamos la lista
         For i = 1 To QuestList(QuestIndex).RequiredOBJs
-            Call Writer.WriteInt16(QuestList(QuestIndex).RequiredOBJ(i).amount)
+            ' Plan 07.001: amount e Int32 para soportar montos de oro grandes (RequiredObj=12-<monto>).
+            Call Writer.WriteInt32(QuestList(QuestIndex).RequiredOBJ(i).amount)
             Call Writer.WriteInt16(QuestList(QuestIndex).RequiredOBJ(i).ObjIndex)
             'escribe si tiene ese objeto en el inventario y que cantidad
-            Call Writer.WriteInt16(get_object_amount_from_inventory(UserIndex, QuestList(QuestIndex).RequiredOBJ(i).ObjIndex))
+            Call Writer.WriteInt32(get_object_amount_from_inventory(UserIndex, QuestList(QuestIndex).RequiredOBJ(i).ObjIndex))
             ' Call Writer.WriteInt16(0)
         Next i
     End If
@@ -3057,7 +3058,8 @@ Public Sub WriteNpcQuestListSend(ByVal UserIndex As Integer, ByVal NpcIndex As I
         Call Writer.WriteInt8(QuestList(QuestIndex).RequiredOBJs)
         If QuestList(QuestIndex).RequiredOBJs > 0 Then
             For i = 1 To QuestList(QuestIndex).RequiredOBJs
-                Call Writer.WriteInt16(QuestList(QuestIndex).RequiredOBJ(i).amount)
+                ' Plan 07.001: amount a Int32 (espejo de WriteQuestDetails), ObjIndex sigue Int16.
+                Call Writer.WriteInt32(QuestList(QuestIndex).RequiredOBJ(i).amount)
                 Call Writer.WriteInt16(QuestList(QuestIndex).RequiredOBJ(i).ObjIndex)
             Next i
         End If
@@ -4534,7 +4536,8 @@ Public Sub WriteObjQuestSend(ByVal UserIndex As Integer, ByVal QuestIndex As Int
     If QuestList(QuestIndex).RequiredOBJs Then
         'Si hay objs entonces enviamos la lista
         For i = 1 To QuestList(QuestIndex).RequiredOBJs
-            Call Writer.WriteInt16(QuestList(QuestIndex).RequiredOBJ(i).amount)
+            ' Plan 07.001: amount a Int32 (espejo de WriteQuestDetails/WriteNpcQuestListSend), ObjIndex sigue Int16.
+            Call Writer.WriteInt32(QuestList(QuestIndex).RequiredOBJ(i).amount)
             Call Writer.WriteInt16(QuestList(QuestIndex).RequiredOBJ(i).ObjIndex)
         Next i
     End If

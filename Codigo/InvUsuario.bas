@@ -57,11 +57,16 @@ IsObjecIndextInInventory_Err:
     Call TraceError(Err.Number, Err.Description, "IsObjecIndextInInventory", Erl)
 End Function
 
-Public Function get_object_amount_from_inventory(ByVal user_index, ByVal obj_index As Integer) As Integer
+Public Function get_object_amount_from_inventory(ByVal user_index, ByVal obj_index As Integer) As Long
     On Error GoTo get_object_amount_from_inventory_Err
     Debug.Assert user_index >= LBound(UserList) And user_index <= UBound(UserList)
     ' If no match is found, return 0
     get_object_amount_from_inventory = 0
+    ' El oro no vive en el inventario: se pide como RequiredObj=12-<monto> (plan 07.001).
+    If obj_index = iORO Then
+        get_object_amount_from_inventory = UserList(user_index).Stats.GLD
+        Exit Function
+    End If
     Dim i                 As Integer
     Dim maxItemsInventory As Integer
     With UserList(user_index)

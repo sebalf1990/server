@@ -168,7 +168,12 @@ SkipEventIsActive:
     FinishGlobalQuestCheck = True
 End Function
 
-Public Sub FinishGlobalQuest(ByVal UserIndex As Integer, ByVal ContributionAmount As Integer, ByVal GlobalQuestIndex As Integer, ByVal GlobalQuestThresholdNeeded As Long)
+' Fix plan 08.001: ContributionAmount era Integer (tope 32767) y FinishQuest lo llama con
+' RequiredOBJ(i).amount, que es Long. Con un entregable mayor a 32767 (p.ej. oro) VB6
+' desbordaba al coaccionar el argumento en el Call, antes de entrar aca, y el On Error
+' de FinishQuest abandonaba la quest a medio terminar. Todo lo que consume el parametro
+' (ContributeToGlobalQuestCounter, InsertContributionIntoDatabase) ya acepta Long.
+Public Sub FinishGlobalQuest(ByVal UserIndex As Integer, ByVal ContributionAmount As Long, ByVal GlobalQuestIndex As Integer, ByVal GlobalQuestThresholdNeeded As Long)
     'gathering threshold locked quests cannot also contribute to the global event
     If GlobalQuestIndex > 0 And GlobalQuestThresholdNeeded = 0 Then
         Call ContributeToGlobalQuestCounter(ContributionAmount, GlobalQuestIndex)
