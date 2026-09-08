@@ -526,6 +526,7 @@ Public Sub EnviarQuest(ByVal UserIndex As Integer)
                         Exit Sub
                     End If
                 Next j
+                Call WriteLocaleChatOverHead(UserIndex, "1336", "", NpcList(NpcIndex).Char.charindex, vbYellow) ' Msg1336=No has conseguido todos los objetos que te he pedido.
             End If
         End If
     Next i
@@ -536,6 +537,8 @@ Public Sub EnviarQuest(ByVal UserIndex As Integer)
             If FinishQuestCheck(UserIndex, NpcList(NpcIndex).QuestNumber(q), tmpByte) Then
                 Call FinishQuest(UserIndex, NpcList(NpcIndex).QuestNumber(q), tmpByte)
                 Exit Sub
+            Else
+                Call WriteLocaleChatOverHead(UserIndex, "1336", "", NpcList(NpcIndex).Char.charindex, vbYellow) ' Msg1336=No has conseguido todos los objetos que te he pedido.
             End If
         End If
     Next q
