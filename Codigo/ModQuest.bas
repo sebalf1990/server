@@ -62,6 +62,38 @@ FreeQuestSlot_Err:
     Call TraceError(Err.Number, Err.Description, "ModQuest.FreeQuestSlot", Erl)
 End Function
  
+Private Function FaltaEspacioParaRecompensas(ByVal UserIndex As Integer, ByVal QuestIndex As Integer) As Boolean
+    On Error GoTo FaltaEspacioParaRecompensas_Err
+    'Extraido del pre-check que estaba duplicado en FinishQuestCheck y FinishQuest (fix R12,
+    'plan 07.001; unificado en plan 08.002). Cuenta los hechizos de recompensa que el usuario
+    'todavia no conoce y los slots libres en UserHechizos; devuelve True si no entran todos.
+    Dim i As Integer
+    Dim NeededSpellSlots As Integer
+    Dim FreeSpellSlots As Integer
+    With QuestList(QuestIndex)
+        If .RewardSpellCount > 0 Then
+            NeededSpellSlots = 0
+            For i = 1 To .RewardSpellCount
+                If Not TieneHechizo(.RewardSpellList(i), UserIndex) Then NeededSpellSlots = NeededSpellSlots + 1
+            Next i
+            If NeededSpellSlots > 0 Then
+                FreeSpellSlots = 0
+                For i = 1 To MAXUSERHECHIZOS
+                    If UserList(UserIndex).Stats.UserHechizos(i) = 0 Then FreeSpellSlots = FreeSpellSlots + 1
+                Next i
+                If FreeSpellSlots < NeededSpellSlots Then
+                    FaltaEspacioParaRecompensas = True
+                    Exit Function
+                End If
+            End If
+        End If
+    End With
+    FaltaEspacioParaRecompensas = False
+    Exit Function
+FaltaEspacioParaRecompensas_Err:
+    Call TraceError(Err.Number, Err.Description, "ModQuest.FaltaEspacioParaRecompensas", Erl)
+End Function
+ 
 Public Sub FinishQuest(ByVal UserIndex As Integer, ByVal QuestIndex As Integer, ByVal QuestSlot As Byte)
     On Error GoTo FinishQuest_Err
     'Maneja el evento de terminar una quest.
@@ -145,24 +177,11 @@ Public Sub FinishQuest(ByVal UserIndex As Integer, ByVal QuestIndex As Integer, 
         ' Fix R12 (plan 07.001): si no hay espacio en el libro de hechizos para las
         ' recompensas nuevas, rechazar ANTES de consumir items/oro. Sin este check el
         ' server ya habia consumido todo y el hechizo no se entregaba igual (ver
-        ' bitacora "Camino de las recetas por quest").
-        If .RewardSpellCount > 0 Then
-            Dim NeededSpellSlots As Integer
-            Dim FreeSpellSlots As Integer
-            NeededSpellSlots = 0
-            For i = 1 To .RewardSpellCount
-                If Not TieneHechizo(.RewardSpellList(i), UserIndex) Then NeededSpellSlots = NeededSpellSlots + 1
-            Next i
-            If NeededSpellSlots > 0 Then
-                FreeSpellSlots = 0
-                For j = 1 To MAXUSERHECHIZOS
-                    If UserList(UserIndex).Stats.UserHechizos(j) = 0 Then FreeSpellSlots = FreeSpellSlots + 1
-                Next j
-                If FreeSpellSlots < NeededSpellSlots Then
-                    Call WriteLocaleMsg(UserIndex, MSG_NO_TENES_ESPACIO_MAS_HECHIZOS_1317, e_FontTypeNames.FONTTYPE_INFO)
-                    Exit Sub
-                End If
-            End If
+        ' bitacora "Camino de las recetas por quest"). Pre-check extraido a
+        ' FaltaEspacioParaRecompensas (plan 08.002).
+        If FaltaEspacioParaRecompensas(UserIndex, QuestIndex) Then
+            Call WriteLocaleMsg(UserIndex, MSG_NO_TENES_ESPACIO_MAS_HECHIZOS_1317, e_FontTypeNames.FONTTYPE_INFO)
+            Exit Sub
         End If
 
         'A esta altura ya cumplio los objetivos, entonces se le entregan las recompensas.
@@ -526,7 +545,13 @@ Public Sub EnviarQuest(ByVal UserIndex As Integer)
                         Exit Sub
                     End If
                 Next j
-                Call WriteLocaleChatOverHead(UserIndex, "1336", "", NpcList(NpcIndex).Char.charindex, vbYellow) ' Msg1336=No has conseguido todos los objetos que te he pedido.
+                If QuestList(i).GlobalQuestIndex > 0 Then
+                    ' Quest de evento global: FinishGlobalQuestCheck ya avisa con su propio mensaje.
+                ElseIf FaltaEspacioParaRecompensas(UserIndex, i) Then
+                    Call WriteLocaleMsg(UserIndex, MSG_NO_TENES_ESPACIO_MAS_HECHIZOS_1317, e_FontTypeNames.FONTTYPE_INFO)
+                Else
+                    Call WriteLocaleChatOverHead(UserIndex, "1336", "", NpcList(NpcIndex).Char.charindex, vbYellow) ' Msg1336=No has conseguido todos los objetos que te he pedido.
+                End If
             End If
         End If
     Next i
@@ -538,7 +563,13 @@ Public Sub EnviarQuest(ByVal UserIndex As Integer)
                 Call FinishQuest(UserIndex, NpcList(NpcIndex).QuestNumber(q), tmpByte)
                 Exit Sub
             Else
-                Call WriteLocaleChatOverHead(UserIndex, "1336", "", NpcList(NpcIndex).Char.charindex, vbYellow) ' Msg1336=No has conseguido todos los objetos que te he pedido.
+                If QuestList(NpcList(NpcIndex).QuestNumber(q)).GlobalQuestIndex > 0 Then
+                    ' Quest de evento global: FinishGlobalQuestCheck ya avisa con su propio mensaje.
+                ElseIf FaltaEspacioParaRecompensas(UserIndex, NpcList(NpcIndex).QuestNumber(q)) Then
+                    Call WriteLocaleMsg(UserIndex, MSG_NO_TENES_ESPACIO_MAS_HECHIZOS_1317, e_FontTypeNames.FONTTYPE_INFO)
+                Else
+                    Call WriteLocaleChatOverHead(UserIndex, "1336", "", NpcList(NpcIndex).Char.charindex, vbYellow) ' Msg1336=No has conseguido todos los objetos que te he pedido.
+                End If
             End If
         End If
     Next q
@@ -631,21 +662,8 @@ Public Function FinishQuestCheck(ByVal UserIndex As Integer, ByVal QuestIndex As
 
         ' --- Reward spell slots (fix R12, ver FinishQuest): sin mensaje aca, para no ---
         ' --- spamear el chequeo silencioso del flag "puede terminar" de la ventana. ---
-        If .RewardSpellCount > 0 Then
-            Dim NeededSpellSlots As Integer
-            Dim FreeSpellSlots As Integer
-            NeededSpellSlots = 0
-            For i = 1 To .RewardSpellCount
-                If Not TieneHechizo(.RewardSpellList(i), UserIndex) Then NeededSpellSlots = NeededSpellSlots + 1
-            Next i
-            If NeededSpellSlots > 0 Then
-                FreeSpellSlots = 0
-                For i = 1 To MAXUSERHECHIZOS
-                    If UserList(UserIndex).Stats.UserHechizos(i) = 0 Then FreeSpellSlots = FreeSpellSlots + 1
-                Next i
-                If FreeSpellSlots < NeededSpellSlots Then Exit Function
-            End If
-        End If
+        ' Pre-check extraido a FaltaEspacioParaRecompensas (plan 08.002).
+        If FaltaEspacioParaRecompensas(UserIndex, QuestIndex) Then Exit Function
 
     End With
 
