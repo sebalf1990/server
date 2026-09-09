@@ -365,7 +365,7 @@ Public Function ApplyDotTickResist(ByVal targetIsNpc As Boolean, ByVal targetInd
     dmg = ApplyElementalResist(rawDamage, r, dmgType, nul)
     ApplyDotTickResist = dmg
     Call ElementalLog("DoT tick resist target=" & IIf(targetIsNpc, "N", "U") & targetIndex & " type=" & dmgType & " raw=" & rawDamage & " final=" & dmg & " nullified=" & nul)
-    Call LogElementalBalance("dot_tick_resist", "0", "0", ElementalBalanceActorId(targetIsNpc, targetIndex), IIf(targetIsNpc, "npc", "user"), 0, 0, dmgType, rawDamage, dmg, ElementalBalanceMap(targetIsNpc, targetIndex))
+    If ElementalBalanceLogEnabled() Then Call LogElementalBalance("dot_tick_resist", "0", "0", ElementalBalanceActorId(targetIsNpc, targetIndex), IIf(targetIsNpc, "npc", "user"), 0, 0, dmgType, rawDamage, dmg, ElementalBalanceMap(targetIsNpc, targetIndex))
     Exit Function
 eh:
     Call TraceError(Err.Number, Err.Description, "modElementalCombat.ApplyDotTickResist", Erl)
@@ -402,7 +402,7 @@ Private Function ResolveComponentsVsTarget(ByRef src As t_ElementalSource, ByVal
             total = total + finalDmg
             If finalDmg > 0 Then Call SendImpactParticle(targetIsNpc, targetIndex, src.Comp(i).DamageType)
             Call ElementalLog(logCtx & " comp " & DamageTypeName(src.Comp(i).DamageType) & " raw=" & raw & " final=" & finalDmg & IIf(nullified, " [nullified]", "") & IIf(r.Immune <> 0, " [immune]", ""))
-            Call LogElementalBalance("component", "0", "0", ElementalBalanceActorId(targetIsNpc, targetIndex), IIf(targetIsNpc, "npc", "user"), 0, 0, src.Comp(i).DamageType, raw, finalDmg, ElementalBalanceMap(targetIsNpc, targetIndex))
+            If ElementalBalanceLogEnabled() Then Call LogElementalBalance("component", "0", "0", ElementalBalanceActorId(targetIsNpc, targetIndex), IIf(targetIsNpc, "npc", "user"), 0, 0, src.Comp(i).DamageType, raw, finalDmg, ElementalBalanceMap(targetIsNpc, targetIndex))
         End If
     Next i
     ResolveComponentsVsTarget = total
@@ -433,7 +433,7 @@ Private Function FireProcs(ByRef src As t_ElementalSource, ByVal trig As e_ProcT
                         fd = ApplyElementalResist(raw, r, c.DamageType, nul)
                         total = total + fd
                         Call ElementalLog(logCtx & " PROC dmgBonus " & DamageTypeName(c.DamageType) & " final=" & fd)
-                        Call LogElementalBalance("proc_dmg_bonus", ElementalBalanceActorId(attackerType = eNpc, attackerIndex), ElementalBalanceActorClass(attackerType = eNpc, attackerIndex), ElementalBalanceActorId(targetIsNpc, targetIndex), IIf(targetIsNpc, "npc", "user"), 0, 0, c.DamageType, raw, fd, ElementalBalanceMap(targetIsNpc, targetIndex))
+                        If ElementalBalanceLogEnabled() Then Call LogElementalBalance("proc_dmg_bonus", ElementalBalanceActorId(attackerType = eNpc, attackerIndex), ElementalBalanceActorClass(attackerType = eNpc, attackerIndex), ElementalBalanceActorId(targetIsNpc, targetIndex), IIf(targetIsNpc, "npc", "user"), 0, 0, c.DamageType, raw, fd, ElementalBalanceMap(targetIsNpc, targetIndex))
                     Case eProcApplyState
                         ' Aplica el preset (EotId) respetando inmunidad / resist-a-efecto del tipo del proc.
                         ' 06.002 Ola 3: EotId fuera del catalogo (dat mal tipeado, ej ElemProc1Eot=999) tiraba
@@ -464,7 +464,7 @@ Private Function FireProcs(ByRef src As t_ElementalSource, ByVal trig As e_ProcT
                                 End If
                                 If attackerType = eUser And LenB(EffectOverTime(src.Proc(i).EotId).ApplyMsg) > 0 Then Call WriteConsoleMsg(attackerIndex, EffectOverTime(src.Proc(i).EotId).ApplyMsg, e_FontTypeNames.FONTTYPE_FIGHT)
                                 Call ElementalLog(logCtx & " PROC applyState EotId=" & src.Proc(i).EotId & IIf(existEff Is Nothing, " aplicado", " refrescado"))
-                                Call LogElementalBalance("proc_apply_state", ElementalBalanceActorId(attackerType = eNpc, attackerIndex), ElementalBalanceActorClass(attackerType = eNpc, attackerIndex), ElementalBalanceActorId(targetIsNpc, targetIndex), IIf(targetIsNpc, "npc", "user"), 0, 0, src.Proc(i).DamageType, 0, 0, ElementalBalanceMap(targetIsNpc, targetIndex))
+                                If ElementalBalanceLogEnabled() Then Call LogElementalBalance("proc_apply_state", ElementalBalanceActorId(attackerType = eNpc, attackerIndex), ElementalBalanceActorClass(attackerType = eNpc, attackerIndex), ElementalBalanceActorId(targetIsNpc, targetIndex), IIf(targetIsNpc, "npc", "user"), 0, 0, src.Proc(i).DamageType, 0, 0, ElementalBalanceMap(targetIsNpc, targetIndex))
                             End If
                         Else
                             Call ElementalLog(logCtx & " PROC applyState sin EotId (ignorado)")
@@ -573,7 +573,7 @@ Private Sub ApplyThornsDamage(ByVal attackerIsNpc As Boolean, ByVal attackerInde
         If dmg > 0 Then Call UserMod.DoDamageOrHeal(attackerIndex, defenderIndex, defenderType, -dmg, e_dot, 0, , , col)
     End If
     If dmg > 0 Then Call ElementalLog(logCtx & " THORNS dmg=" & dmg & IIf(physical = 1, " fisico", " " & DamageTypeName(dmgType)) & IIf(lethal = 0, " (no letal)", ""))
-    If dmg > 0 Then Call LogElementalBalance("thorns", ElementalBalanceActorId(defenderType = eNpc, defenderIndex), ElementalBalanceActorClass(defenderType = eNpc, defenderIndex), ElementalBalanceActorId(attackerIsNpc, attackerIndex), IIf(attackerIsNpc, "npc", "user"), 0, 0, IIf(physical = 1, 0, dmgType), 0, dmg, ElementalBalanceMap(attackerIsNpc, attackerIndex))
+    If dmg > 0 And ElementalBalanceLogEnabled() Then Call LogElementalBalance("thorns", ElementalBalanceActorId(defenderType = eNpc, defenderIndex), ElementalBalanceActorClass(defenderType = eNpc, defenderIndex), ElementalBalanceActorId(attackerIsNpc, attackerIndex), IIf(attackerIsNpc, "npc", "user"), 0, 0, IIf(physical = 1, 0, dmgType), 0, dmg, ElementalBalanceMap(attackerIsNpc, attackerIndex))
     Exit Sub
 ErrHandler:
     Call TraceError(Err.Number, Err.Description, "modElementalCombat.ApplyThornsDamage", Erl)
@@ -1232,7 +1232,7 @@ Public Function TryUniversalCrit(ByVal UserIndex As Integer, ByVal targetIsNpc A
         If bonus < 0 Then bonus = 0
         TryUniversalCrit = bonus
         Call ElementalLog("U" & UserIndex & " universal crit base=" & baseDamage & " bonus=" & bonus)
-        Call LogElementalBalance("universal_crit", ElementalBalanceActorId(False, UserIndex), ElementalBalanceActorClass(False, UserIndex), ElementalBalanceActorId(targetIsNpc, targetIndex), IIf(targetIsNpc, "npc", "user"), 0, 0, DMG_TYPE_CRIT, 0, bonus, ElementalBalanceMap(targetIsNpc, targetIndex))
+        If ElementalBalanceLogEnabled() Then Call LogElementalBalance("universal_crit", ElementalBalanceActorId(False, UserIndex), ElementalBalanceActorClass(False, UserIndex), ElementalBalanceActorId(targetIsNpc, targetIndex), IIf(targetIsNpc, "npc", "user"), 0, 0, DMG_TYPE_CRIT, 0, bonus, ElementalBalanceMap(targetIsNpc, targetIndex))
     End If
     Exit Function
 eh:
