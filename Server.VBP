@@ -175,6 +175,7 @@ Module=modPoisonLogging; Codigo\modPoisonLogging.bas
 Module=modElementalBalanceLog; Codigo\modElementalBalanceLog.bas
 Class=PoisonMinorEffect; Codigo\PoisonMinorEffect.cls
 Module=modPoisonResist; Codigo\modPoisonResist.bas
+Module=modSafeRestart; Codigo\modSafeRestart.bas
 Class=PoisonHemoEffect; Codigo\PoisonHemoEffect.cls
 Class=PoisonNeuroEffect; Codigo\PoisonNeuroEffect.cls
 IconForm="frmMain"
