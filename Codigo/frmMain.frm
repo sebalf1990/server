@@ -35,6 +35,14 @@ Begin VB.Form frmMain
       Top             =   120
       Width           =   1695
    End
+   Begin VB.CommandButton cmdReinicioSeguro 
+      Caption         =   "Reinicio seguro"
+      Height          =   495
+      Left            =   6840
+      TabIndex        =   41
+      Top             =   720
+      Width           =   1695
+   End
    Begin VB.CommandButton Command3 
       Caption         =   "Recargar Donadore"
       Height          =   495
@@ -1001,6 +1009,18 @@ Private Sub Command4_Click()
     Exit Sub
 Command4_Click_Err:
     Call TraceError(Err.Number, Err.Description, "frmMain.Command4_Click", Erl)
+End Sub
+
+' Reinicio seguro (plan 09.001, Ola 1): guarda a todos los conectados y
+' relanza el server solo, sin intervencion manual. Delega en modSafeRestart
+' para no duplicar el camino de cierre existente (Command4_Click).
+Private Sub cmdReinicioSeguro_Click()
+    On Error GoTo cmdReinicioSeguro_Click_Err
+    If MsgBox("¿Guardar y REINICIAR el servidor?", vbYesNo, "Confirmación") = vbNo Then Exit Sub
+    Call modSafeRestart.ReinicioSeguro("boton")
+    Exit Sub
+cmdReinicioSeguro_Click_Err:
+    Call TraceError(Err.Number, Err.Description, "frmMain.cmdReinicioSeguro_Click", Erl)
 End Sub
 
 Private Sub Command6_Click()

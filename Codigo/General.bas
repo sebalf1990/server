@@ -686,6 +686,9 @@ Sub Main()
         Call PerformTimeLimitCheck(PerformanceTimer, "General MaybeRunGameEvents")
         Call MaybeRunUserAutoSave
         Call PerformTimeLimitCheck(PerformanceTimer, "General MaybeRunUserAutoSave")
+        ' Reinicio/apagado seguro por archivo de solicitud (plan 09.001, Ola 1)
+        Call MaybeRunSafeRestart
+        Call PerformTimeLimitCheck(PerformanceTimer, "General MaybeRunSafeRestart")
         Call RunAutomatedActions
         Call PerformTimeLimitCheck(PerformanceTimer, "General StartAutomatedAction")
         Call MaybeUpdateNpcAI(GlobalFrameTime)

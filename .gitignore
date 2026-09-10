@@ -57,3 +57,8 @@ Empty_db - copia.db
 
 # Estampilla que dejan build_tmp.bat / build_client.bat en cada compilacion
 build-stamp.txt
+
+# Archivos de solicitud efimeros del reinicio/apagado seguro (plan 09.001)
+restart.request
+shutdown.request
+build.done
