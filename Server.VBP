@@ -172,6 +172,7 @@ Module=modSmelting; Codigo\ModSmelting.bas
 Module=modProfesiones; Codigo\modProfesiones.bas
 Module=modFontManager; Codigo\modFontManager.bas
 Module=modPoisonLogging; Codigo\modPoisonLogging.bas
+Module=modElementalBalanceLog; Codigo\modElementalBalanceLog.bas
 Class=PoisonMinorEffect; Codigo\PoisonMinorEffect.cls
 Module=modPoisonResist; Codigo\modPoisonResist.bas
 Class=PoisonHemoEffect; Codigo\PoisonHemoEffect.cls
