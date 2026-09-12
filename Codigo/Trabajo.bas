@@ -1046,6 +1046,9 @@ Public Sub HerreroConstruirItem(ByVal UserIndex As Integer, ByVal ItemIndex As I
             Call TirarItemAlPiso(UserList(UserIndex).pos, MiObj)
         End If
         Call SubirSkill(UserIndex, e_Skill.Herreria)
+        If modElementalBalanceLog.ElementalPlayerTelemetryEnabled() And modElementalBalanceLog.ElementalBalanceInCatalog(ItemIndex) Then
+            Call modElementalBalanceLog.LogElementalBalance("craft", modElementalBalanceLog.ElementalBalanceActorId(False, UserIndex), modElementalBalanceLog.ElementalBalanceActorClass(False, UserIndex), "0", "none", CLng(ItemIndex), modElementalBalanceLog.ElementalBalanceCatalogTier(ItemIndex), 0, 1, 0, modElementalBalanceLog.ElementalBalanceMap(False, UserIndex), modElementalBalanceLog.ElementalBalanceCharId(False, UserIndex), modElementalBalanceLog.ElementalBalanceAccountId(False, UserIndex), 0, 0, 0)
+        End If
         Call UpdateUserInv(True, UserIndex, 0)
         Call SendData(SendTarget.ToPCAliveArea, UserIndex, PrepareMessagePlayWave(MARTILLOHERRERO, UserList(UserIndex).pos.x, UserList(UserIndex).pos.y))
         UserList(UserIndex).Counters.Trabajando = UserList(UserIndex).Counters.Trabajando + 1
@@ -1157,6 +1160,9 @@ Public Sub CarpinteroConstruirItem(ByVal UserIndex As Integer, ByVal ItemIndex A
             Call TirarItemAlPiso(UserList(UserIndex).pos, MiObj)
         End If
         Call SubirSkill(UserIndex, e_Skill.Carpinteria)
+        If modElementalBalanceLog.ElementalPlayerTelemetryEnabled() And modElementalBalanceLog.ElementalBalanceInCatalog(ItemIndex) Then
+            Call modElementalBalanceLog.LogElementalBalance("craft", modElementalBalanceLog.ElementalBalanceActorId(False, UserIndex), modElementalBalanceLog.ElementalBalanceActorClass(False, UserIndex), "0", "none", CLng(ItemIndex), modElementalBalanceLog.ElementalBalanceCatalogTier(ItemIndex), 0, cantidad_a_construir, 0, modElementalBalanceLog.ElementalBalanceMap(False, UserIndex), modElementalBalanceLog.ElementalBalanceCharId(False, UserIndex), modElementalBalanceLog.ElementalBalanceAccountId(False, UserIndex), 0, 0, 0)
+        End If
         If IsFeatureEnabled("gain_exp_while_working") Then
             Call GiveExpWhileWorking(UserIndex, MiObj, e_JobsTypes.Carpenter)
             Call WriteUpdateExp(UserIndex)
@@ -1219,6 +1225,9 @@ Public Sub AlquimistaConstruirItem(ByVal UserIndex As Integer, ByVal ItemIndex A
             Call TirarItemAlPiso(UserList(UserIndex).pos, MiObj)
         End If
         Call SubirSkill(UserIndex, e_Skill.Alquimia)
+        If modElementalBalanceLog.ElementalPlayerTelemetryEnabled() And modElementalBalanceLog.ElementalBalanceInCatalog(ItemIndex) Then
+            Call modElementalBalanceLog.LogElementalBalance("craft", modElementalBalanceLog.ElementalBalanceActorId(False, UserIndex), modElementalBalanceLog.ElementalBalanceActorClass(False, UserIndex), "0", "none", CLng(ItemIndex), modElementalBalanceLog.ElementalBalanceCatalogTier(ItemIndex), 0, 1, 0, modElementalBalanceLog.ElementalBalanceMap(False, UserIndex), modElementalBalanceLog.ElementalBalanceCharId(False, UserIndex), modElementalBalanceLog.ElementalBalanceAccountId(False, UserIndex), 0, 0, 0)
+        End If
         Call UpdateUserInv(True, UserIndex, 0)
         If IsFeatureEnabled("gain_exp_while_working") Then
             Call GiveExpWhileWorking(UserIndex, MiObj, e_JobsTypes.Alchemist)
@@ -1273,6 +1282,9 @@ Public Sub SastreConstruirItem(ByVal UserIndex As Integer, ByVal ItemIndex As In
             Call TirarItemAlPiso(UserList(UserIndex).pos, MiObj)
         End If
         Call SubirSkill(UserIndex, e_Skill.Sastreria)
+        If modElementalBalanceLog.ElementalPlayerTelemetryEnabled() And modElementalBalanceLog.ElementalBalanceInCatalog(ItemIndex) Then
+            Call modElementalBalanceLog.LogElementalBalance("craft", modElementalBalanceLog.ElementalBalanceActorId(False, UserIndex), modElementalBalanceLog.ElementalBalanceActorClass(False, UserIndex), "0", "none", CLng(ItemIndex), modElementalBalanceLog.ElementalBalanceCatalogTier(ItemIndex), 0, 1, 0, modElementalBalanceLog.ElementalBalanceMap(False, UserIndex), modElementalBalanceLog.ElementalBalanceCharId(False, UserIndex), modElementalBalanceLog.ElementalBalanceAccountId(False, UserIndex), 0, 0, 0)
+        End If
         Call UpdateUserInv(True, UserIndex, 0)
         UserList(UserIndex).Counters.Trabajando = UserList(UserIndex).Counters.Trabajando + 1
     End If

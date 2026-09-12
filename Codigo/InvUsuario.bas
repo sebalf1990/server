@@ -1672,6 +1672,9 @@ Dim Ropaje                      As Integer
 End With
 'Actualiza
 Call UpdateUserInv(False, UserIndex, Slot)
+If Not bSkin And Not UserIsLoggingIn And modElementalBalanceLog.ElementalPlayerTelemetryEnabled() And modElementalBalanceLog.ElementalBalanceInCatalog(ObjIndex) Then
+    Call modElementalBalanceLog.LogElementalBalance("equip", modElementalBalanceLog.ElementalBalanceActorId(False, UserIndex), modElementalBalanceLog.ElementalBalanceActorClass(False, UserIndex), "0", "none", CLng(ObjIndex), modElementalBalanceLog.ElementalBalanceCatalogTier(ObjIndex), 0, 0, 0, modElementalBalanceLog.ElementalBalanceMap(False, UserIndex), modElementalBalanceLog.ElementalBalanceCharId(False, UserIndex), modElementalBalanceLog.ElementalBalanceAccountId(False, UserIndex), 0, 0, 0)
+End If
 Exit Sub
 ErrHandler:
 Debug.Print errordesc
@@ -1826,7 +1829,7 @@ Sub UseInvItem(ByVal UserIndex As Integer, ByVal Slot As Byte, ByVal ByClick As 
                     Call WriteConsoleMsg(UserIndex, "Tu arma ya esta encantada.", e_FontTypeNames.FONTTYPE_INFO)
                     Exit Sub
                 End If
-                Call modElementalCombat.SetEnchantedWeapon(UserIndex, .invent.EquippedWeaponObjIndex, obj.Elemental, obj.CargasQueOtorga, obj.EnchantWeaponDurationMs)
+                Call modElementalCombat.SetEnchantedWeapon(UserIndex, .invent.EquippedWeaponObjIndex, obj.Elemental, obj.CargasQueOtorga, obj.EnchantWeaponDurationMs, ObjIndex)
                 If obj.EnchantWeaponDurationMs < 0 Then
                     Call WriteConsoleMsg(UserIndex, "Encantaste tu arma de forma permanente.", e_FontTypeNames.FONTTYPE_FIGHT)
                 Else
@@ -1849,7 +1852,7 @@ Sub UseInvItem(ByVal UserIndex As Integer, ByVal Slot As Byte, ByVal ByClick As 
                 Call WriteConsoleMsg(UserIndex, "Tus flechas ya estan encantadas.", e_FontTypeNames.FONTTYPE_INFO)
                 Exit Sub
             End If
-            Call modElementalCombat.SetEnchantedAmmo(UserIndex, .invent.EquippedMunitionObjIndex, obj.Elemental, obj.CargasQueOtorga, obj.EnchantAmmoDurationMs)
+            Call modElementalCombat.SetEnchantedAmmo(UserIndex, .invent.EquippedMunitionObjIndex, obj.Elemental, obj.CargasQueOtorga, obj.EnchantAmmoDurationMs, ObjIndex)
             If obj.EnchantAmmoDurationMs < 0 Then
                 Call WriteConsoleMsg(UserIndex, "Encantaste tus flechas de forma permanente.", e_FontTypeNames.FONTTYPE_FIGHT)
             Else

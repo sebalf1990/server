@@ -365,7 +365,7 @@ Public Function ApplyDotTickResist(ByVal targetIsNpc As Boolean, ByVal targetInd
     dmg = ApplyElementalResist(rawDamage, r, dmgType, nul)
     ApplyDotTickResist = dmg
     Call ElementalLog("DoT tick resist target=" & IIf(targetIsNpc, "N", "U") & targetIndex & " type=" & dmgType & " raw=" & rawDamage & " final=" & dmg & " nullified=" & nul)
-    If ElementalBalanceLogEnabled() Then Call LogElementalBalance("dot_tick_resist", "0", "0", ElementalBalanceActorId(targetIsNpc, targetIndex), IIf(targetIsNpc, "npc", "user"), 0, 0, dmgType, rawDamage, dmg, ElementalBalanceMap(targetIsNpc, targetIndex))
+    If ElementalBalanceLogEnabled() Then Call LogElementalBalance("dot_tick_resist", "0", "0", ElementalBalanceActorId(targetIsNpc, targetIndex), IIf(targetIsNpc, "npc", "user"), 0, 0, dmgType, rawDamage, dmg, ElementalBalanceMap(targetIsNpc, targetIndex), 0, 0, ElementalBalanceCharId(targetIsNpc, targetIndex), 0, 0)
     Exit Function
 eh:
     Call TraceError(Err.Number, Err.Description, "modElementalCombat.ApplyDotTickResist", Erl)
@@ -389,7 +389,7 @@ Private Sub SendImpactParticle(ByVal targetIsNpc As Boolean, ByVal targetIndex A
     End If
 End Sub
 
-Private Function ResolveComponentsVsTarget(ByRef src As t_ElementalSource, ByVal targetIsNpc As Boolean, ByVal targetIndex As Integer, ByVal logCtx As String) As Long
+Private Function ResolveComponentsVsTarget(ByRef src As t_ElementalSource, ByVal targetIsNpc As Boolean, ByVal targetIndex As Integer, ByVal attackerIndex As Integer, ByVal attackerType As e_ReferenceType, ByVal itemObjIndex As Integer, ByVal srcItemObjIndex As Integer, ByVal logCtx As String) As Long
     Dim total As Long, i As Integer
     For i = 1 To src.CompCount
         If src.Comp(i).DamageType >= 1 And src.Comp(i).DamageType <= MAX_DAMAGE_TYPE_ID Then
@@ -402,7 +402,7 @@ Private Function ResolveComponentsVsTarget(ByRef src As t_ElementalSource, ByVal
             total = total + finalDmg
             If finalDmg > 0 Then Call SendImpactParticle(targetIsNpc, targetIndex, src.Comp(i).DamageType)
             Call ElementalLog(logCtx & " comp " & DamageTypeName(src.Comp(i).DamageType) & " raw=" & raw & " final=" & finalDmg & IIf(nullified, " [nullified]", "") & IIf(r.Immune <> 0, " [immune]", ""))
-            If ElementalBalanceLogEnabled() Then Call LogElementalBalance("component", "0", "0", ElementalBalanceActorId(targetIsNpc, targetIndex), IIf(targetIsNpc, "npc", "user"), 0, 0, src.Comp(i).DamageType, raw, finalDmg, ElementalBalanceMap(targetIsNpc, targetIndex))
+            If ElementalBalanceLogEnabled() Then Call LogElementalBalance("component", ElementalBalanceActorId(attackerType = eNpc, attackerIndex), ElementalBalanceActorClass(attackerType = eNpc, attackerIndex), ElementalBalanceActorId(targetIsNpc, targetIndex), IIf(targetIsNpc, "npc", "user"), itemObjIndex, ElementalBalanceCatalogTier(itemObjIndex), src.Comp(i).DamageType, raw, finalDmg, ElementalBalanceMap(targetIsNpc, targetIndex), ElementalBalanceCharId(attackerType = eNpc, attackerIndex), ElementalBalanceAccountId(attackerType = eNpc, attackerIndex), ElementalBalanceCharId(targetIsNpc, targetIndex), srcItemObjIndex, ElementalBalanceFightId(ElementalBalanceCharId(attackerType = eNpc, attackerIndex), ElementalBalanceCharId(targetIsNpc, targetIndex)))
         End If
     Next i
     ResolveComponentsVsTarget = total
@@ -410,7 +410,7 @@ End Function
 
 ' Dispara los procs de una fuente con el trigger dado contra un target.
 ' Devuelve el dano extra (kind=dmgBonus) ya reducido por la resistencia del target.
-Private Function FireProcs(ByRef src As t_ElementalSource, ByVal trig As e_ProcTrigger, ByVal targetIsNpc As Boolean, ByVal targetIndex As Integer, ByVal attackerIndex As Integer, ByVal attackerType As e_ReferenceType, ByVal logCtx As String, Optional ByVal onlyKind As Long = -1) As Long
+Private Function FireProcs(ByRef src As t_ElementalSource, ByVal trig As e_ProcTrigger, ByVal targetIsNpc As Boolean, ByVal targetIndex As Integer, ByVal attackerIndex As Integer, ByVal attackerType As e_ReferenceType, ByVal itemObjIndex As Integer, ByVal srcItemObjIndex As Integer, ByVal logCtx As String, Optional ByVal onlyKind As Long = -1) As Long
     Dim total As Long, i As Integer
     For i = 1 To src.ProcCount
         If src.Proc(i).Trigger = trig And (onlyKind = -1 Or src.Proc(i).Kind = onlyKind) Then
@@ -433,7 +433,7 @@ Private Function FireProcs(ByRef src As t_ElementalSource, ByVal trig As e_ProcT
                         fd = ApplyElementalResist(raw, r, c.DamageType, nul)
                         total = total + fd
                         Call ElementalLog(logCtx & " PROC dmgBonus " & DamageTypeName(c.DamageType) & " final=" & fd)
-                        If ElementalBalanceLogEnabled() Then Call LogElementalBalance("proc_dmg_bonus", ElementalBalanceActorId(attackerType = eNpc, attackerIndex), ElementalBalanceActorClass(attackerType = eNpc, attackerIndex), ElementalBalanceActorId(targetIsNpc, targetIndex), IIf(targetIsNpc, "npc", "user"), 0, 0, c.DamageType, raw, fd, ElementalBalanceMap(targetIsNpc, targetIndex))
+                        If ElementalBalanceLogEnabled() Then Call LogElementalBalance("proc_dmg_bonus", ElementalBalanceActorId(attackerType = eNpc, attackerIndex), ElementalBalanceActorClass(attackerType = eNpc, attackerIndex), ElementalBalanceActorId(targetIsNpc, targetIndex), IIf(targetIsNpc, "npc", "user"), itemObjIndex, ElementalBalanceCatalogTier(itemObjIndex), c.DamageType, raw, fd, ElementalBalanceMap(targetIsNpc, targetIndex), ElementalBalanceCharId(attackerType = eNpc, attackerIndex), ElementalBalanceAccountId(attackerType = eNpc, attackerIndex), ElementalBalanceCharId(targetIsNpc, targetIndex), srcItemObjIndex, ElementalBalanceFightId(ElementalBalanceCharId(attackerType = eNpc, attackerIndex), ElementalBalanceCharId(targetIsNpc, targetIndex)))
                     Case eProcApplyState
                         ' Aplica el preset (EotId) respetando inmunidad / resist-a-efecto del tipo del proc.
                         ' 06.002 Ola 3: EotId fuera del catalogo (dat mal tipeado, ej ElemProc1Eot=999) tiraba
@@ -464,7 +464,7 @@ Private Function FireProcs(ByRef src As t_ElementalSource, ByVal trig As e_ProcT
                                 End If
                                 If attackerType = eUser And LenB(EffectOverTime(src.Proc(i).EotId).ApplyMsg) > 0 Then Call WriteConsoleMsg(attackerIndex, EffectOverTime(src.Proc(i).EotId).ApplyMsg, e_FontTypeNames.FONTTYPE_FIGHT)
                                 Call ElementalLog(logCtx & " PROC applyState EotId=" & src.Proc(i).EotId & IIf(existEff Is Nothing, " aplicado", " refrescado"))
-                                If ElementalBalanceLogEnabled() Then Call LogElementalBalance("proc_apply_state", ElementalBalanceActorId(attackerType = eNpc, attackerIndex), ElementalBalanceActorClass(attackerType = eNpc, attackerIndex), ElementalBalanceActorId(targetIsNpc, targetIndex), IIf(targetIsNpc, "npc", "user"), 0, 0, src.Proc(i).DamageType, 0, 0, ElementalBalanceMap(targetIsNpc, targetIndex))
+                                If ElementalBalanceLogEnabled() Then Call LogElementalBalance("proc_apply_state", ElementalBalanceActorId(attackerType = eNpc, attackerIndex), ElementalBalanceActorClass(attackerType = eNpc, attackerIndex), ElementalBalanceActorId(targetIsNpc, targetIndex), IIf(targetIsNpc, "npc", "user"), itemObjIndex, ElementalBalanceCatalogTier(itemObjIndex), src.Proc(i).DamageType, 0, 0, ElementalBalanceMap(targetIsNpc, targetIndex), ElementalBalanceCharId(attackerType = eNpc, attackerIndex), ElementalBalanceAccountId(attackerType = eNpc, attackerIndex), ElementalBalanceCharId(targetIsNpc, targetIndex), srcItemObjIndex, ElementalBalanceFightId(ElementalBalanceCharId(attackerType = eNpc, attackerIndex), ElementalBalanceCharId(targetIsNpc, targetIndex)))
                             End If
                         Else
                             Call ElementalLog(logCtx & " PROC applyState sin EotId (ignorado)")
@@ -495,7 +495,7 @@ End Function
 ' fisico o elemental; directo o resistido (elemental=resist del tipo; fisico-resistido=TP3); letal o no.
 ' El applyState onDamaged (efectos) lo sigue disparando FireProcs en el on-hit. Anti-loop: aplica por
 ' DoDamageOrHeal directo (e_dot), no re-dispara espinas.
-Public Sub ResolveThorns(ByRef defenderSrc As t_ElementalSource, ByVal defenderIndex As Integer, ByVal defenderType As e_ReferenceType, ByVal attackerIsNpc As Boolean, ByVal attackerIndex As Integer, ByVal netDamage As Long, ByVal attackType As e_ElementalDamageType, ByVal logCtx As String)
+Public Sub ResolveThorns(ByRef defenderSrc As t_ElementalSource, ByVal defenderIndex As Integer, ByVal defenderType As e_ReferenceType, ByVal attackerIsNpc As Boolean, ByVal attackerIndex As Integer, ByVal netDamage As Long, ByVal attackType As e_ElementalDamageType, ByVal logCtx As String, Optional ByVal slotObjIndex As Integer = 0)
     On Error GoTo ErrHandler
     If Not ElementalSystemEnabled() Then Exit Sub
     If attackerIndex <= 0 Then Exit Sub
@@ -546,7 +546,7 @@ Public Sub ResolveThorns(ByRef defenderSrc As t_ElementalSource, ByVal defenderI
                             End If
                         End If
                     End If
-                    If dmg > 0 Then Call ApplyThornsDamage(attackerIsNpc, attackerIndex, defenderIndex, defenderType, dmg, defenderSrc.Proc(i).Lethal, effPhysical, effType, logCtx)
+                    If dmg > 0 Then Call ApplyThornsDamage(attackerIsNpc, attackerIndex, defenderIndex, defenderType, dmg, defenderSrc.Proc(i).Lethal, effPhysical, effType, slotObjIndex, logCtx)
                 End If
             End If
         End If
@@ -557,7 +557,7 @@ ErrHandler:
 End Sub
 
 ' Aplica el dano de espina al ATACANTE (user o NPC). Letalidad: si lethal=0, cap a HP-1. Directo (e_dot).
-Private Sub ApplyThornsDamage(ByVal attackerIsNpc As Boolean, ByVal attackerIndex As Integer, ByVal defenderIndex As Integer, ByVal defenderType As e_ReferenceType, ByVal dmg As Long, ByVal lethal As Byte, ByVal physical As Byte, ByVal dmgType As e_ElementalDamageType, ByVal logCtx As String)
+Private Sub ApplyThornsDamage(ByVal attackerIsNpc As Boolean, ByVal attackerIndex As Integer, ByVal defenderIndex As Integer, ByVal defenderType As e_ReferenceType, ByVal dmg As Long, ByVal lethal As Byte, ByVal physical As Byte, ByVal dmgType As e_ElementalDamageType, ByVal slotObjIndex As Integer, ByVal logCtx As String)
     On Error GoTo ErrHandler
     Dim col As Long
     If physical = 1 Then col = vbRed Else col = DamageTypeColor(dmgType)
@@ -573,7 +573,7 @@ Private Sub ApplyThornsDamage(ByVal attackerIsNpc As Boolean, ByVal attackerInde
         If dmg > 0 Then Call UserMod.DoDamageOrHeal(attackerIndex, defenderIndex, defenderType, -dmg, e_dot, 0, , , col)
     End If
     If dmg > 0 Then Call ElementalLog(logCtx & " THORNS dmg=" & dmg & IIf(physical = 1, " fisico", " " & DamageTypeName(dmgType)) & IIf(lethal = 0, " (no letal)", ""))
-    If dmg > 0 And ElementalBalanceLogEnabled() Then Call LogElementalBalance("thorns", ElementalBalanceActorId(defenderType = eNpc, defenderIndex), ElementalBalanceActorClass(defenderType = eNpc, defenderIndex), ElementalBalanceActorId(attackerIsNpc, attackerIndex), IIf(attackerIsNpc, "npc", "user"), 0, 0, IIf(physical = 1, 0, dmgType), 0, dmg, ElementalBalanceMap(attackerIsNpc, attackerIndex))
+    If dmg > 0 And ElementalBalanceLogEnabled() Then Call LogElementalBalance("thorns", ElementalBalanceActorId(defenderType = eNpc, defenderIndex), ElementalBalanceActorClass(defenderType = eNpc, defenderIndex), ElementalBalanceActorId(attackerIsNpc, attackerIndex), IIf(attackerIsNpc, "npc", "user"), slotObjIndex, ElementalBalanceCatalogTier(slotObjIndex), IIf(physical = 1, 0, dmgType), 0, dmg, ElementalBalanceMap(attackerIsNpc, attackerIndex), ElementalBalanceCharId(defenderType = eNpc, defenderIndex), ElementalBalanceAccountId(defenderType = eNpc, defenderIndex), ElementalBalanceCharId(attackerIsNpc, attackerIndex), 0, ElementalBalanceFightId(ElementalBalanceCharId(defenderType = eNpc, defenderIndex), ElementalBalanceCharId(attackerIsNpc, attackerIndex)))
     Exit Sub
 ErrHandler:
     Call TraceError(Err.Number, Err.Description, "modElementalCombat.ApplyThornsDamage", Erl)
@@ -600,17 +600,17 @@ ErrHandler:
 End Sub
 
 Private Sub FireSlotThorns(ByVal ObjIndex As Integer, ByVal defenderUserIndex As Integer, ByVal attackerIsNpc As Boolean, ByVal attackerIndex As Integer, ByVal netDamage As Long, ByVal attackType As e_ElementalDamageType, ByVal logCtx As String)
-    If ObjIndex > 0 Then Call ResolveThorns(ObjData(ObjIndex).Elemental, defenderUserIndex, eUser, attackerIsNpc, attackerIndex, netDamage, attackType, logCtx)
+    If ObjIndex > 0 Then Call ResolveThorns(ObjData(ObjIndex).Elemental, defenderUserIndex, eUser, attackerIsNpc, attackerIndex, netDamage, attackType, logCtx, slotObjIndex:=ObjIndex)
 End Sub
 
 ' 06.002 Ola 2: procs onDamaged de tipo applyState del defensor contra su atacante, POST-dano y
 ' solo si el defensor sobrevivio (los dmgBonus onDamaged son las espinas: ResolveThorns). Antes el
 ' applyState del NPC se disparaba pre-dano sin gate y el del gear de user no se disparaba nunca.
-Public Sub FireOnDamagedStates(ByRef defenderSrc As t_ElementalSource, ByVal defenderIndex As Integer, ByVal defenderType As e_ReferenceType, ByVal attackerIsNpc As Boolean, ByVal attackerIndex As Integer, ByVal logCtx As String)
+Public Sub FireOnDamagedStates(ByRef defenderSrc As t_ElementalSource, ByVal defenderIndex As Integer, ByVal defenderType As e_ReferenceType, ByVal attackerIsNpc As Boolean, ByVal attackerIndex As Integer, ByVal logCtx As String, Optional ByVal slotObjIndex As Integer = 0)
     On Error GoTo ErrHandler
     If Not ElementalSystemEnabled() Then Exit Sub
     If attackerIndex <= 0 Then Exit Sub
-    Call FireProcs(defenderSrc, eProcOnDamaged, attackerIsNpc, attackerIndex, defenderIndex, defenderType, logCtx & " onDmgState", eProcApplyState)
+    Call FireProcs(defenderSrc, eProcOnDamaged, attackerIsNpc, attackerIndex, defenderIndex, defenderType, slotObjIndex, 0, logCtx & " onDmgState", eProcApplyState)
     Exit Sub
 ErrHandler:
     Call TraceError(Err.Number, Err.Description, "modElementalCombat.FireOnDamagedStates", Erl)
@@ -636,7 +636,7 @@ ErrHandler:
 End Sub
 
 Private Sub FireSlotOnDamagedStates(ByVal ObjIndex As Integer, ByVal defenderUserIndex As Integer, ByVal attackerIsNpc As Boolean, ByVal attackerIndex As Integer, ByVal logCtx As String)
-    If ObjIndex > 0 Then Call FireOnDamagedStates(ObjData(ObjIndex).Elemental, defenderUserIndex, eUser, attackerIsNpc, attackerIndex, logCtx)
+    If ObjIndex > 0 Then Call FireOnDamagedStates(ObjData(ObjIndex).Elemental, defenderUserIndex, eUser, attackerIsNpc, attackerIndex, logCtx, slotObjIndex:=ObjIndex)
 End Sub
 
 ' ============================================================================
@@ -654,20 +654,20 @@ Public Function ElementalDamageUserVsTarget(ByVal UserIndex As Integer, ByVal ta
     ctx = "U" & UserIndex & IIf(targetIsNpc, "->N", "->U") & targetIndex
     ' Componentes + procs onHit del arma
     If WeaponObjIndex > 0 Then
-        total = total + ResolveComponentsVsTarget(ObjData(WeaponObjIndex).Elemental, targetIsNpc, targetIndex, ctx & " weap")
-        total = total + FireProcs(ObjData(WeaponObjIndex).Elemental, eProcOnHit, targetIsNpc, targetIndex, UserIndex, eUser, ctx & " weap")
+        total = total + ResolveComponentsVsTarget(ObjData(WeaponObjIndex).Elemental, targetIsNpc, targetIndex, UserIndex, eUser, WeaponObjIndex, 0, ctx & " weap")
+        total = total + FireProcs(ObjData(WeaponObjIndex).Elemental, eProcOnHit, targetIsNpc, targetIndex, UserIndex, eUser, WeaponObjIndex, 0, ctx & " weap")
     End If
     ' Municion (rango): suma sus componentes/procs solo si el arma es de proyectil
     If MunitionObjIndex > 0 And WeaponObjIndex > 0 Then
         If ObjData(WeaponObjIndex).Proyectil > 0 Then
-            total = total + ResolveComponentsVsTarget(ObjData(MunitionObjIndex).Elemental, targetIsNpc, targetIndex, ctx & " ammo")
-            total = total + FireProcs(ObjData(MunitionObjIndex).Elemental, eProcOnHit, targetIsNpc, targetIndex, UserIndex, eUser, ctx & " ammo")
+            total = total + ResolveComponentsVsTarget(ObjData(MunitionObjIndex).Elemental, targetIsNpc, targetIndex, UserIndex, eUser, MunitionObjIndex, 0, ctx & " ammo")
+            total = total + FireProcs(ObjData(MunitionObjIndex).Elemental, eProcOnHit, targetIsNpc, targetIndex, UserIndex, eUser, MunitionObjIndex, 0, ctx & " ammo")
             ' Encantamiento temporal de las flechas (aceite/hechizo de flechas). Aditivo. (20.002 CP1 ammo)
             With UserList(UserIndex).flags
                 If .EnchantedAmmoObjIndex > 0 And .EnchantedAmmoObjIndex = MunitionObjIndex Then
                     If .EnchantedAmmoPermanent = 1 Or Not DeadlinePassed(GetTickCountRaw(), .EnchantedAmmoDeadline) Then
-                        total = total + ResolveComponentsVsTarget(.EnchantedAmmoSource, targetIsNpc, targetIndex, ctx & " ammoench")
-                        total = total + FireProcs(.EnchantedAmmoSource, eProcOnHit, targetIsNpc, targetIndex, UserIndex, eUser, ctx & " ammoench")
+                        total = total + ResolveComponentsVsTarget(.EnchantedAmmoSource, targetIsNpc, targetIndex, UserIndex, eUser, MunitionObjIndex, .EnchantedAmmoSrcItemObjIndex, ctx & " ammoench")
+                        total = total + FireProcs(.EnchantedAmmoSource, eProcOnHit, targetIsNpc, targetIndex, UserIndex, eUser, MunitionObjIndex, .EnchantedAmmoSrcItemObjIndex, ctx & " ammoench")
                     End If
                 End If
             End With
@@ -677,8 +677,8 @@ Public Function ElementalDamageUserVsTarget(ByVal UserIndex As Integer, ByVal ta
     With UserList(UserIndex).flags
         If .EnchantWeaponObjIndex > 0 And .EnchantWeaponObjIndex = WeaponObjIndex Then
             If .EnchantWeaponPermanent = 1 Or Not DeadlinePassed(GetTickCountRaw(), .EnchantWeaponDeadline) Then
-                total = total + ResolveComponentsVsTarget(.EnchantWeaponSource, targetIsNpc, targetIndex, ctx & " ench")
-                total = total + FireProcs(.EnchantWeaponSource, eProcOnHit, targetIsNpc, targetIndex, UserIndex, eUser, ctx & " ench")
+                total = total + ResolveComponentsVsTarget(.EnchantWeaponSource, targetIsNpc, targetIndex, UserIndex, eUser, WeaponObjIndex, .EnchantWeaponSrcItemObjIndex, ctx & " ench")
+                total = total + FireProcs(.EnchantWeaponSource, eProcOnHit, targetIsNpc, targetIndex, UserIndex, eUser, WeaponObjIndex, .EnchantWeaponSrcItemObjIndex, ctx & " ench")
             End If
         End If
     End With
@@ -694,8 +694,8 @@ Public Function ElementalDamageUserVsTarget(ByVal UserIndex As Integer, ByVal ta
             If ObjData(WeaponObjIndex).Elemental.CompCount > 0 Or ObjData(WeaponObjIndex).Elemental.ProcCount > 0 Then orbAplica = False
         End If
         If orbAplica Then
-            total = total + ResolveComponentsVsTarget(ObjData(orbIdx).Elemental, targetIsNpc, targetIndex, ctx & " orb")
-            total = total + FireProcs(ObjData(orbIdx).Elemental, eProcOnHit, targetIsNpc, targetIndex, UserIndex, eUser, ctx & " orb")
+            total = total + ResolveComponentsVsTarget(ObjData(orbIdx).Elemental, targetIsNpc, targetIndex, UserIndex, eUser, orbIdx, 0, ctx & " orb")
+            total = total + FireProcs(ObjData(orbIdx).Elemental, eProcOnHit, targetIsNpc, targetIndex, UserIndex, eUser, orbIdx, 0, ctx & " orb")
         End If
     End If
     ' 06.002 Ola 2: los procs onDamaged del defensor (dmgBonus=espinas, applyState=efectos) se
@@ -758,6 +758,8 @@ Public Sub OnEnchantedWeaponSwing(ByVal UserIndex As Integer)
         ' Consumo de cargas (0 = sin limite de cargas, solo tiempo/permanente)
         If .EnchantWeaponCargas > 0 Then
             .EnchantWeaponCargas = .EnchantWeaponCargas - 1
+            ' plan 10.001 Ola 5: charge_spent, unico evento nuevo en el hot path (un swing).
+            If ElementalPlayerTelemetryEnabled() Then Call LogElementalBalance("charge_spent", ElementalBalanceActorId(False, UserIndex), ElementalBalanceActorClass(False, UserIndex), "0", "none", .EnchantWeaponObjIndex, ElementalBalanceCatalogTier(.EnchantWeaponObjIndex), 0, .EnchantWeaponCargas, 0, ElementalBalanceMap(False, UserIndex), ElementalBalanceCharId(False, UserIndex), ElementalBalanceAccountId(False, UserIndex), 0, .EnchantWeaponSrcItemObjIndex, 0)
             If .EnchantWeaponCargas <= 0 Then
                 Call ClearEnchantedWeapon(UserIndex, "El encantamiento de tu arma se ha agotado.")
             Else
@@ -880,13 +882,14 @@ ErrHandler:
 End Function
 
 ' CP3 (20.002 Step 7): setter unificado del encantamiento de arma (aceite/hechizo). Un solo punto de verdad.
-Public Sub SetEnchantedWeapon(ByVal UserIndex As Integer, ByVal WeaponObjIndex As Integer, ByRef src As t_ElementalSource, ByVal cargas As Integer, ByVal durationMs As Long)
+Public Sub SetEnchantedWeapon(ByVal UserIndex As Integer, ByVal WeaponObjIndex As Integer, ByRef src As t_ElementalSource, ByVal cargas As Integer, ByVal durationMs As Long, Optional ByVal srcItemObjIndex As Integer = 0)
     Dim oldObj As Integer
     oldObj = UserList(UserIndex).flags.EnchantWeaponObjIndex
     With UserList(UserIndex).flags
         .EnchantWeaponObjIndex = WeaponObjIndex
         .EnchantWeaponSource = src
         .EnchantWeaponCargas = cargas
+        .EnchantWeaponSrcItemObjIndex = srcItemObjIndex ' plan 10.001 Ola 5 (Hecho 43): ObjIndex del aceite/orbe fuente
         If durationMs < 0 Then
             .EnchantWeaponPermanent = 1
             .EnchantWeaponDeadline = 0
@@ -901,6 +904,8 @@ Public Sub SetEnchantedWeapon(ByVal UserIndex As Integer, ByVal WeaponObjIndex A
     Dim iconDur As Long
     If durationMs < 0 Then iconDur = -1 Else iconDur = durationMs
     Call WriteSendSkillCdUpdate(UserIndex, CLIENT_EFFECT_ENCHANTED_WEAPON, CLng(WeaponObjIndex), iconDur, iconDur, eDebuff, cargas)
+    ' plan 10.001 Ola 5: enchant_weapon, evento raro (alimenta B5).
+    If ElementalPlayerTelemetryEnabled() Then Call LogElementalBalance("enchant_weapon", ElementalBalanceActorId(False, UserIndex), ElementalBalanceActorClass(False, UserIndex), "0", "none", WeaponObjIndex, ElementalBalanceCatalogTier(WeaponObjIndex), 0, cargas, durationMs, ElementalBalanceMap(False, UserIndex), ElementalBalanceCharId(False, UserIndex), ElementalBalanceAccountId(False, UserIndex), 0, srcItemObjIndex, 0)
 End Sub
 
 ' ============================================================================
@@ -942,7 +947,7 @@ ErrHandler:
 End Function
 
 ' Setter del encantamiento de flechas (aceite/hechizo). durationMs<0 = permanente.
-Public Sub SetEnchantedAmmo(ByVal UserIndex As Integer, ByVal AmmoObjIndex As Integer, ByRef src As t_ElementalSource, ByVal cargas As Integer, ByVal durationMs As Long)
+Public Sub SetEnchantedAmmo(ByVal UserIndex As Integer, ByVal AmmoObjIndex As Integer, ByRef src As t_ElementalSource, ByVal cargas As Integer, ByVal durationMs As Long, Optional ByVal srcItemObjIndex As Integer = 0)
     ' 06.002 Ola 4: si habia un encantamiento previo sobre OTRA municion, apagar su icono
     ' (quedaba un "Flechas Encantadas" inmortal al cambiar de stack).
     Dim oldObj As Integer
@@ -952,6 +957,7 @@ Public Sub SetEnchantedAmmo(ByVal UserIndex As Integer, ByVal AmmoObjIndex As In
         .EnchantedAmmoObjIndex = AmmoObjIndex
         .EnchantedAmmoSource = src
         .EnchantedAmmoCargas = cargas
+        .EnchantedAmmoSrcItemObjIndex = srcItemObjIndex ' plan 10.001 Ola 5 (Hecho 43): ObjIndex del aceite/orbe fuente
         If durationMs < 0 Then
             .EnchantedAmmoPermanent = 1
             .EnchantedAmmoDeadline = 0
@@ -964,6 +970,8 @@ Public Sub SetEnchantedAmmo(ByVal UserIndex As Integer, ByVal AmmoObjIndex As In
     Dim iconDur As Long
     If durationMs < 0 Then iconDur = -1 Else iconDur = durationMs
     Call WriteSendSkillCdUpdate(UserIndex, CLIENT_EFFECT_ENCHANTED_AMMO, CLng(AmmoObjIndex), iconDur, iconDur, eDebuff, cargas)
+    ' plan 10.001 Ola 5: enchant_ammo, evento raro (alimenta B5).
+    If ElementalPlayerTelemetryEnabled() Then Call LogElementalBalance("enchant_ammo", ElementalBalanceActorId(False, UserIndex), ElementalBalanceActorClass(False, UserIndex), "0", "none", AmmoObjIndex, ElementalBalanceCatalogTier(AmmoObjIndex), 0, cargas, durationMs, ElementalBalanceMap(False, UserIndex), ElementalBalanceCharId(False, UserIndex), ElementalBalanceAccountId(False, UserIndex), 0, srcItemObjIndex, 0)
 End Sub
 
 ' Consumo al disparar: 1 carga por flecha disparada (espejo de OnEnchantedWeaponSwing).
@@ -982,6 +990,8 @@ Public Sub OnEnchantedAmmoSwing(ByVal UserIndex As Integer, ByVal AmmoObjIndex A
         End If
         If .EnchantedAmmoCargas > 0 Then
             .EnchantedAmmoCargas = .EnchantedAmmoCargas - 1
+            ' plan 10.001 Ola 5: charge_spent, unico evento nuevo en el hot path (un disparo).
+            If ElementalPlayerTelemetryEnabled() Then Call LogElementalBalance("charge_spent", ElementalBalanceActorId(False, UserIndex), ElementalBalanceActorClass(False, UserIndex), "0", "none", .EnchantedAmmoObjIndex, ElementalBalanceCatalogTier(.EnchantedAmmoObjIndex), 0, .EnchantedAmmoCargas, 0, ElementalBalanceMap(False, UserIndex), ElementalBalanceCharId(False, UserIndex), ElementalBalanceAccountId(False, UserIndex), 0, .EnchantedAmmoSrcItemObjIndex, 0)
             If .EnchantedAmmoCargas <= 0 Then
                 Call ClearEnchantedAmmo(UserIndex, "El encantamiento de tus flechas se ha agotado.")
             Else
@@ -1074,8 +1084,8 @@ Public Function ElementalDamageNpcVsUser(ByVal NpcIndex As Integer, ByVal Victim
     Dim ctx As String
     ctx = "N" & NpcIndex & "->U" & VictimaIndex
     ' Componentes + procs onHit del NPC atacante (target = user).
-    total = total + ResolveComponentsVsTarget(NpcInfoCache(t).Elemental, False, VictimaIndex, ctx & " npc")
-    total = total + FireProcs(NpcInfoCache(t).Elemental, eProcOnHit, False, VictimaIndex, NpcIndex, eNpc, ctx & " npc")
+    total = total + ResolveComponentsVsTarget(NpcInfoCache(t).Elemental, False, VictimaIndex, NpcIndex, eNpc, 0, 0, ctx & " npc")
+    total = total + FireProcs(NpcInfoCache(t).Elemental, eProcOnHit, False, VictimaIndex, NpcIndex, eNpc, 0, 0, ctx & " npc")
     ' Color y tipo del numero: componente primario del NPC (plan 04.002 M4: expone outType,
     ' mismo patron y misma precedencia que ElementalDamageUserVsTarget).
     If NpcInfoCache(t).Elemental.CompCount > 0 Then
@@ -1232,7 +1242,7 @@ Public Function TryUniversalCrit(ByVal UserIndex As Integer, ByVal targetIsNpc A
         If bonus < 0 Then bonus = 0
         TryUniversalCrit = bonus
         Call ElementalLog("U" & UserIndex & " universal crit base=" & baseDamage & " bonus=" & bonus)
-        If ElementalBalanceLogEnabled() Then Call LogElementalBalance("universal_crit", ElementalBalanceActorId(False, UserIndex), ElementalBalanceActorClass(False, UserIndex), ElementalBalanceActorId(targetIsNpc, targetIndex), IIf(targetIsNpc, "npc", "user"), 0, 0, DMG_TYPE_CRIT, 0, bonus, ElementalBalanceMap(targetIsNpc, targetIndex))
+        If ElementalBalanceLogEnabled() Then Call LogElementalBalance("universal_crit", ElementalBalanceActorId(False, UserIndex), ElementalBalanceActorClass(False, UserIndex), ElementalBalanceActorId(targetIsNpc, targetIndex), IIf(targetIsNpc, "npc", "user"), 0, 0, DMG_TYPE_CRIT, 0, bonus, ElementalBalanceMap(targetIsNpc, targetIndex), ElementalBalanceCharId(False, UserIndex), ElementalBalanceAccountId(False, UserIndex), ElementalBalanceCharId(targetIsNpc, targetIndex), 0, ElementalBalanceFightId(ElementalBalanceCharId(False, UserIndex), ElementalBalanceCharId(targetIsNpc, targetIndex)))
     End If
     Exit Function
 eh:

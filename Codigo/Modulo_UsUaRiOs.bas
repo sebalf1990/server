@@ -3109,6 +3109,16 @@ Public Function DoDamageOrHeal(ByVal UserIndex As Integer, _
             Call SendData(SendTarget.ToIndex, UserIndex, PrepareMessageTextOverChar(DamageStr, .Char.charindex, Color))
         End If
         If ModifyHealth(UserIndex, amount) Then
+            If modElementalBalanceLog.ElementalPlayerTelemetryEnabled() Then
+                Dim ebAttackerIsNpc As Boolean, ebAttackerWeapon As Integer, ebVictimWeapon As Integer, ebCharA As Long, ebCharB As Long
+                ebAttackerIsNpc = Not (SourceType = eUser)
+                ebVictimWeapon = .invent.EquippedWeaponObjIndex
+                ebAttackerWeapon = 0
+                If Not ebAttackerIsNpc Then ebAttackerWeapon = UserList(SourceIndex).invent.EquippedWeaponObjIndex
+                ebCharA = modElementalBalanceLog.ElementalBalanceCharId(ebAttackerIsNpc, SourceIndex)
+                ebCharB = modElementalBalanceLog.ElementalBalanceCharId(False, UserIndex)
+                Call modElementalBalanceLog.LogElementalBalance("death", modElementalBalanceLog.ElementalBalanceActorId(ebAttackerIsNpc, SourceIndex), modElementalBalanceLog.ElementalBalanceActorClass(ebAttackerIsNpc, SourceIndex), modElementalBalanceLog.ElementalBalanceActorId(False, UserIndex), "user", CLng(ebAttackerWeapon), modElementalBalanceLog.ElementalBalanceCatalogTier(ebAttackerWeapon), CLng(DamageTypeId), Abs(amount), Abs(amount), .pos.Map, ebCharA, modElementalBalanceLog.ElementalBalanceAccountId(ebAttackerIsNpc, SourceIndex), ebCharB, CLng(ebVictimWeapon), modElementalBalanceLog.ElementalBalanceFightId(ebCharA, ebCharB, True))
+            End If
             Call TargetWasDamaged(UserList(UserIndex).EffectOverTime, SourceIndex, SourceType, DamageSourceType)
             Call CustomScenarios.UserDie(UserIndex)
             If SourceType = eUser Then

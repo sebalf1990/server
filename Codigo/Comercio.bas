@@ -85,6 +85,7 @@ Public Sub Comercio(ByVal Modo As eModoComercio, ByVal UserIndex As Integer, ByV
         Call WriteUpdateGold(UserIndex)
         Call QuitarNpcInvItem(NpcIndex, Slot, Cantidad)
         Call UpdateNpcInvToAll(False, NpcIndex, Slot)
+        If modElementalBalanceLog.ElementalPlayerTelemetryEnabled() Then Call modElementalBalanceLog.LogElementalBalance("buy", modElementalBalanceLog.ElementalBalanceActorId(False, UserIndex), modElementalBalanceLog.ElementalBalanceActorClass(False, UserIndex), "0", "none", CLng(Objeto.ObjIndex), modElementalBalanceLog.ElementalBalanceCatalogTier(Objeto.ObjIndex), 0, CLng(Cantidad), precio, modElementalBalanceLog.ElementalBalanceMap(False, UserIndex), modElementalBalanceLog.ElementalBalanceCharId(False, UserIndex), modElementalBalanceLog.ElementalBalanceAccountId(False, UserIndex), 0, 0, 0)
         'Agregado para que no se vuelvan a vender las llaves si se recargan los .dat.
         If ObjData(Objeto.ObjIndex).OBJType = otKeys Then
             Call WriteVar(DatPath & "NPCs.dat", "NPC" & NpcList(NpcIndex).Numero, "obj" & Slot, Objeto.ObjIndex & "-0")

@@ -2875,12 +2875,14 @@ Public Type t_UserFlags
     EnchantWeaponPermanent As Byte
     EnchantWeaponCargas As Integer      ' CP1 (20.002 Step 7): 0 = sin limite de cargas (solo tiempo/permanente)
     EnchantWeaponSource As t_ElementalSource
+    EnchantWeaponSrcItemObjIndex As Integer ' plan 10.001 Ola 5: ObjIndex del aceite/orbe fuente (Hecho 43), para el log de telemetria
     ' --- Encantar Flechas elemental (TOGGLE32, 20.002 CP1 ammo): cache del stack de flechas encantado ---
     EnchantedAmmoObjIndex As Integer
     EnchantedAmmoDeadline As Long
     EnchantedAmmoPermanent As Byte
     EnchantedAmmoCargas As Integer
     EnchantedAmmoSource As t_ElementalSource
+    EnchantedAmmoSrcItemObjIndex As Integer ' plan 10.001 Ola 5: idem arriba, para flechas encantadas
     ' Untado de municion (TOGGLE26): cache independiente para el stack de flechas equipado.
     PoisonedAmmoObjIndex As Integer
     PoisonedAmmoFamilia As Byte
