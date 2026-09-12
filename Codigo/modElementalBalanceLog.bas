@@ -429,6 +429,52 @@ Attribute VB_Name = "modElementalBalanceLog"
 '     ESE skill en este submit, final=valor final del skill (post-cap 100).
 ' ============================================================================
 
+' ============================================================================
+' Fix 2026-09-12 -- D1/D2: deudas de la revision fresca de VB6 sobre la Ola 5
+' tajada B (bitacora, bloque "Dos advertencias que la revision dejo COMO DEUDA
+' para la Ola 6"), cerradas antes del deploy a la VM de beta.
+' ============================================================================
+' D1 -- overflow de la tabla de 256 peleas activas perdia el fight_end de la
+' pelea reciclada. FreeElementalFightSlot() elegia el slot mas viejo por
+' LastTickMs y lo devolvia tal cual; el llamador (ElementalBalanceFightId) lo
+' reseteaba y arrancaba la pelea nueva ahi SIN pasar antes por
+' LogElementalFightEnd -- sus contadores en memoria se perdian y el archivo
+' quedaba con un fight_start huerfano indistinguible de una desconexion real.
+' Fix: FreeElementalFightSlot() cierra el slot reciclado ANTES de devolverlo,
+' con el mismo LogElementalFightEnd que ya usa el camino de timeout, pero con
+' un outcome propio (ELEMENTAL_FIGHT_OUTCOME_EVICTED = "evicted") para que el
+' lector (tools/analizar_telemetria.py) distinga "se quedo sin lugar" de
+' "gano/perdio" o "se enfrio". mNextFightId sigue incrementando de forma
+' GLOBAL (no es un numero de slot): el fight_id de la pelea evictada NO se
+' repite con el de la pelea nueva que toma el slot -- solo el indice FISICO
+' del array se recicla (eso ya era asi antes del fix; se documenta aca porque
+' es lo que garantiza que cerrar el slot reciclado no invalida ningun fight_id
+' ya entregado). Los contadores de la pelea nueva arrancan en cero igual que
+' siempre: ResetElementalFightSlot() se sigue llamando DESPUES de este cierre,
+' desde ElementalBalanceFightId.
+' D2 -- LogElementalFightEnd() barria UserList linealmente DOS veces (una por
+' lado) en CADA cierre de pelea, no solo en el timeout: toda muerte PvP cierra
+' con closeFight:=True (Modulo_UsUaRiOs.bas, bloque de muerte), asi que el
+' barrido se pagaba en el hot path de cada kill, no solo en el caso raro del
+' timeout de 30s. Con MaxUsers=1000 (Server.ini de este deployment) son hasta
+' 2000 comparaciones por cierre de pelea; razonado (no medido con profiler en
+' vivo sobre PvP real, ver bitacora del 2026-09-12) como un costo chico en una
+' muerte aislada pero acumulable bajo PvP masivo en la VM -- exactamente el
+' escenario que motiva cerrar esta deuda ahora. Fix: el slot ya conoce
+' CharA/CharB desde que nace la pelea; ahora tambien guarda el UserIndex de
+' cada lado en ese momento (SnapshotElementalFightStart, mismo Optional que ya
+' trae el idx). Al cerrar, ResolveFightUserIndex() usa ese indice cacheado
+' SOLO si todavia apunta al MISMO char_id (UserLogged=True Y .Id=charId) -- un
+' slot que se reciclo a otro jugador entre el ultimo contacto y el cierre
+' (reconexion con otro UserIndex, por ejemplo) no puede colarse: cae al
+' barrido de FindUserIndexByCharId de siempre, exactamente el mismo camino que
+' ya existia. Ninguna estructura global nueva: el cache vive en el mismo
+' t_ElementalFight que ya existia. Los 7 call sites viejos de componentes
+' elementales que no pasan idx (Optional, degradacion ya documentada arriba)
+' dejan UserIndexA/B en 0 -- ResolveFightUserIndex cae al barrido igual que
+' antes, sin regresion.
+' ============================================================================
+
 Option Explicit
 
 Private Const ELEMENTAL_BALANCE_LOG_HEADER As String = "ts_ms;event;attacker;attacker_class;victim;victim_type;item;tier;dmg_type;raw;final;resist_pct;pvp;map;char_id;account_id;victim_char_id;src_item;fight_id;schema;run_id"
@@ -443,6 +489,12 @@ Private Const ELEMENTAL_CATALOG_MAX As Long = 9161
 ' largo para tolerar una persecucion o una pausa por pocion.
 Private Const ELEMENTAL_FIGHT_SILENCE_MS As Long = 30000
 Private Const MAX_ACTIVE_ELEMENTAL_FIGHTS As Long = 256
+
+' D1 (fix 2026-09-12): outcome que cierra una pelea reciclada por overflow de
+' la tabla (los 256 slots activos), distinto de "death"/"timeout" para que el
+' lector (tools/analizar_telemetria.py) pueda distinguir un cierre por falta
+' de espacio de un cierre real de combate.
+Private Const ELEMENTAL_FIGHT_OUTCOME_EVICTED As String = "evicted"
 
 Private Type t_ElementalFight
     CharA As Long
@@ -479,6 +531,11 @@ Private Type t_ElementalFight
     PotionsBlueB As Long
     CastsA As Long
     CastsB As Long
+    ' D2 (fix 2026-09-12): UserIndex cacheado de cada lado, para evitar el
+    ' barrido lineal de UserList al cerrar la pelea (ver ResolveFightUserIndex
+    ' mas abajo). Nunca se usa a ciegas: se valida contra CharA/CharB antes.
+    UserIndexA As Integer
+    UserIndexB As Integer
 End Type
 
 ' Resultado de un swing fisico/a distancia PvP (ElementalBalanceFightSwing).
@@ -771,6 +828,13 @@ Private Function FreeElementalFightSlot() As Long
             oldest = i
         End If
     Next i
+    ' D1 (fix 2026-09-12): cerrar el slot reciclado ANTES de devolverlo, igual
+    ' que el camino de timeout de ElementalBalanceFightId -- si no, sus
+    ' contadores se pierden en memoria y el archivo queda con un fight_start
+    ' huerfano indistinguible de una desconexion real. El llamador sigue
+    ' llamando ResetElementalFightSlot() sobre este mismo indice antes de
+    ' escribir la pelea nueva, asi que sus contadores arrancan en cero.
+    Call LogElementalFightEnd(oldest, ELEMENTAL_FIGHT_OUTCOME_EVICTED)
     FreeElementalFightSlot = oldest
 End Function
 
@@ -838,6 +902,7 @@ Private Sub SnapshotElementalFightStart(ByVal slot As Long, ByVal idxA As Intege
         If idxA > 0 Then
             If idxA <= UBound(UserList) Then
                 If UserList(idxA).flags.UserLogged Then
+                    .UserIndexA = idxA
                     .AccountA = UserList(idxA).AccountID
                     .ClassA = ListaClases(UserList(idxA).clase)
                     .RaceA = UserList(idxA).raza
@@ -851,6 +916,7 @@ Private Sub SnapshotElementalFightStart(ByVal slot As Long, ByVal idxA As Intege
         If idxB > 0 Then
             If idxB <= UBound(UserList) Then
                 If UserList(idxB).flags.UserLogged Then
+                    .UserIndexB = idxB
                     .AccountB = UserList(idxB).AccountID
                     .ClassB = ListaClases(UserList(idxB).clase)
                     .RaceB = UserList(idxB).raza
@@ -903,6 +969,32 @@ eh:
     Call TraceError(Err.Number, Err.Description, "modElementalBalanceLog.FindUserIndexByCharId", Erl)
 End Function
 
+' D2 (fix 2026-09-12): usa el UserIndex cacheado en el slot (SnapshotElemental
+' FightStart) si TODAVIA apunta al mismo char_id -- evita el barrido lineal de
+' UserList en el camino comun. Cae a FindUserIndexByCharId (el barrido de
+' siempre) si el cache esta vacio (call site viejo que no paso idx) o quedo
+' obsoleto (el slot se reciclo a otro jugador, ej. reconexion con otro
+' indice). Sin estructura global nueva: solo lee el cache que ya vive en
+' t_ElementalFight.
+Private Function ResolveFightUserIndex(ByVal cachedIdx As Integer, ByVal charId As Long) As Integer
+    On Error GoTo eh
+    If cachedIdx > 0 Then
+        If cachedIdx <= UBound(UserList) Then
+            If UserList(cachedIdx).flags.UserLogged Then
+                If UserList(cachedIdx).Id = charId Then
+                    ResolveFightUserIndex = cachedIdx
+                    Exit Function
+                End If
+            End If
+        End If
+    End If
+    ResolveFightUserIndex = FindUserIndexByCharId(charId)
+    Exit Function
+eh:
+    Call TraceError(Err.Number, Err.Description, "modElementalBalanceLog.ResolveFightUserIndex", Erl)
+    ResolveFightUserIndex = FindUserIndexByCharId(charId)
+End Function
+
 Private Function ElementalFightLogFileName() As String
     ElementalFightLogFileName = App.Path & "\Logs\ElementalFights_" & Format$(Date, "yyyy-mm-dd") & "_v2.log"
 End Function
@@ -946,8 +1038,8 @@ End Sub
 Private Sub LogElementalFightEnd(ByVal slot As Long, ByVal outcome As String)
     On Error GoTo eh
     Dim idxA As Integer, idxB As Integer, endHpA As Long, endHpB As Long, durationMs As Long
-    idxA = FindUserIndexByCharId(mFights(slot).CharA)
-    idxB = FindUserIndexByCharId(mFights(slot).CharB)
+    idxA = ResolveFightUserIndex(mFights(slot).UserIndexA, mFights(slot).CharA)
+    idxB = ResolveFightUserIndex(mFights(slot).UserIndexB, mFights(slot).CharB)
     If idxA > 0 Then endHpA = UserList(idxA).Stats.MinHp
     If idxB > 0 Then endHpB = UserList(idxB).Stats.MinHp
     ' Resta simple (no wrap-safe): una pelea individual dura, como mucho, unos
