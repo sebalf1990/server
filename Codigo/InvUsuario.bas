@@ -2507,13 +2507,22 @@ Sub UseInvItem(ByVal UserIndex As Integer, ByVal Slot As Byte, ByVal ByClick As 
                             ebCuredNeuro = True
                         End If
                         If algoCurado Then
+                            ' Grupo 7 (verificacion en vivo 2026-09-12): capturar el
+                            ' ObjIndex ANTES de QuitarUserInvItem -- ese Sub pone
+                            ' .ObjIndex = 0 en el slot cuando el stack llega a 0
+                            ' (InvUsuario.bas, QuitarUserInvItem, "amount <= 0" ->
+                            ' ".ObjIndex = 0"). Leerlo DESPUES daba item=0 en el log
+                            ' cada vez que se usaba el ULTIMO antidoto del stack --
+                            ' confirmado en vivo: fila real con item=0 en vez de 9025.
+                            Dim ebAntidoteObjIndex As Integer
+                            ebAntidoteObjIndex = .invent.Object(Slot).ObjIndex
                             .Counters.LastPoisonCurePotion = nowTick
                             Call QuitarUserInvItem(UserIndex, Slot, 1)
                             ' Grupo 7 (plan 10.001, punto 7b): antidote_use, final=bitmask (1=Menor,2=Hemo,4=Neuro).
                             If modElementalBalanceLog.ElementalPlayerTelemetryEnabled() Then
                                 Dim ebAntidoteMask As Long
                                 ebAntidoteMask = IIf(ebCuredMinor, 1, 0) + IIf(ebCuredHemo, 2, 0) + IIf(ebCuredNeuro, 4, 0)
-                                Call modElementalBalanceLog.LogElementalBalance("antidote_use", modElementalBalanceLog.ElementalBalanceActorId(False, UserIndex), modElementalBalanceLog.ElementalBalanceActorClass(False, UserIndex), "0", "none", CLng(.invent.Object(Slot).ObjIndex), modElementalBalanceLog.ElementalBalanceCatalogTier(.invent.Object(Slot).ObjIndex), 0, 1, ebAntidoteMask, modElementalBalanceLog.ElementalBalanceMap(False, UserIndex), modElementalBalanceLog.ElementalBalanceCharId(False, UserIndex), modElementalBalanceLog.ElementalBalanceAccountId(False, UserIndex), 0, 0, 0)
+                                Call modElementalBalanceLog.LogElementalBalance("antidote_use", modElementalBalanceLog.ElementalBalanceActorId(False, UserIndex), modElementalBalanceLog.ElementalBalanceActorClass(False, UserIndex), "0", "none", CLng(ebAntidoteObjIndex), modElementalBalanceLog.ElementalBalanceCatalogTier(ebAntidoteObjIndex), 0, 1, ebAntidoteMask, modElementalBalanceLog.ElementalBalanceMap(False, UserIndex), modElementalBalanceLog.ElementalBalanceCharId(False, UserIndex), modElementalBalanceLog.ElementalBalanceAccountId(False, UserIndex), 0, 0, 0)
                             End If
                             Call WriteLocaleMsg(UserIndex, MSG_CURADO_ENVENENAMIENTO, e_FontTypeNames.FONTTYPE_INFO)
                             If obj.Snd1 <> 0 Then
