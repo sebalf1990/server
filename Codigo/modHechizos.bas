@@ -1339,14 +1339,6 @@ Sub LanzarHechizo(ByVal Index As Integer, ByVal UserIndex As Integer)
             ebCastTargetIsNpc = False
             ebCastTargetIdx = UserList(UserIndex).flags.TargetUser.ArrayIndex
             ebCastHpBefore = UserList(ebCastTargetIdx).Stats.MinHp
-            ' Ola 5 tajada B: asegura la pelea (CON snapshot) ANTES de PuedeLanzar/
-            ' Handle*, que pueden matar al target con este mismo hechizo -- mismo
-            ' fix de orden que el swing fisico (SistemaCombate.bas, bitacora de la
-            ' Ola 5 tajada B): si esto corriera DESPUES del hechizo, el bloque de
-            ' muerte (sin snapshot) ganaria la carrera.
-            If Hechizos(uh).TargetEffectType = e_TargetEffectType.eNegative Then
-                Call modElementalBalanceLog.ElementalBalanceFightCast(UserIndex, ebCastTargetIdx)
-            End If
         ElseIf IsValidNpcRef(UserList(UserIndex).flags.TargetNPC) Then
             ebCastTargetIsNpc = True
             ebCastTargetIdx = UserList(UserIndex).flags.TargetNPC.ArrayIndex
@@ -1354,6 +1346,19 @@ Sub LanzarHechizo(ByVal Index As Integer, ByVal UserIndex As Integer)
         End If
     End If
     If PuedeLanzar(UserIndex, uh, Index) Then
+        ' Ola 5 tajada B (plan 10.001, punto 3b), corregido por la revision VB6:
+        ' la pelea se abre y el cast se cuenta DESPUES de PuedeLanzar -- un hechizo
+        ' rechazado por mana, cooldown, zona segura, faccion o target inmune no es un
+        ' cast y no debe abrir una pelea fantasma -- y ANTES de aplicar el efecto,
+        ' para que el bloque de muerte (sin snapshot) no gane la carrera cuando el
+        ' hechizo mata. Solo target usuario: contra NPC no hay pelea PvP que abrir.
+        If modElementalBalanceLog.ElementalPlayerTelemetryEnabled() Then
+            If Not ebCastTargetIsNpc And ebCastTargetIdx > 0 Then
+                If Hechizos(uh).TargetEffectType = e_TargetEffectType.eNegative Then
+                    Call modElementalBalanceLog.ElementalBalanceFightCast(UserIndex, ebCastTargetIdx)
+                End If
+            End If
+        End If
         ' --- Pifia por Neurotoxina (TOGGLE26 new_poison_system) ---
         ' Si el caster esta envenenado con Neuro y el hechizo es pifiable,
         ' hay PoisonNeuroChancePifiaHechizoPct% de chance de pifia.

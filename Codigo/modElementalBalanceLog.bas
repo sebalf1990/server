@@ -273,7 +273,7 @@ Attribute VB_Name = "modElementalBalanceLog"
 ' Optional, los 7 call sites viejos de componentes elementales no los pasan
 ' y esa fight_start queda con esos campos en blanco/0, degradacion aceptada
 ' porque en la practica casi toda pelea nace de un swing, no de un componente
-' elemental suelto). Los contadores (swings/hits/miss/blocks vÃ­a
+' elemental suelto). Los contadores (swings/hits/miss/blocks via
 ' ElementalBalanceFightSwing desde SistemaCombate.bas; pociones via
 ' ElementalBalanceFightPotion desde InvUsuario.bas, SOLO si ya hay pelea
 ' activa, nunca crean una; casts via ElementalBalanceFightCast desde
