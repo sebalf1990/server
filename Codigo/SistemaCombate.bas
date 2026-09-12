@@ -1047,7 +1047,7 @@ UsuarioAtaca_Err:
     Call TraceError(Err.Number, Err.Description, "SistemaCombate.UsuarioAtaca", Erl)
 End Sub
 
-Private Function UsuarioImpacto(ByVal AtacanteIndex As Integer, ByVal VictimaIndex As Integer, ByVal aType As AttackType) As Boolean
+Private Function UsuarioImpacto(ByVal AtacanteIndex As Integer, ByVal VictimaIndex As Integer, ByVal aType As AttackType, Optional ByRef wasBlocked As Boolean) As Boolean
     On Error GoTo UsuarioImpacto_Err
     Dim ProbRechazo            As Long
     Dim Rechazo                As Boolean
@@ -1154,6 +1154,11 @@ Private Function UsuarioImpacto(ByVal AtacanteIndex As Integer, ByVal VictimaInd
         Call SubirSkillDeArmaActual(AtacanteIndex)
     Else ' Falló
         If RandomNumber(1, 100) <= ProbRechazo Then
+            ' Ola 5 tajada B (plan 10.001, punto 3b): distingue bloqueo de
+            ' escudo vs. fallo limpio para el agregado de pelea (fight_start/
+            ' fight_end). El caller (UsuarioAtacaUsuario) no podia verlo antes:
+            ' UsuarioImpacto solo devolvia hit/no-hit.
+            wasBlocked = True
             'Se rechazo el ataque con el escudo
             Call SendData(SendTarget.ToPCAliveArea, VictimaIndex, PrepareMessagePlayWave(SND_ESCUDO, UserList(VictimaIndex).pos.x, UserList(VictimaIndex).pos.y))
             Call SendData(SendTarget.ToPCAliveArea, VictimaIndex, PrepareMessageEscudoMov(UserList(VictimaIndex).Char.charindex))
@@ -1189,7 +1194,21 @@ Public Sub UsuarioAtacaUsuario(ByVal AtacanteIndex As Integer, ByVal VictimaInde
     Call UsuarioAtacadoPorUsuario(AtacanteIndex, VictimaIndex)
     Call EffectsOverTime.TargetWillAttack(UserList(AtacanteIndex).EffectOverTime, VictimaIndex, eUser, e_phisical)
     Call ResetUserAutomatedActions(VictimaIndex)
-    If UsuarioImpacto(AtacanteIndex, VictimaIndex, aType) Then
+    ' Ola 5 tajada B (plan 10.001, punto 3b, prioridad 1): unico hook nuevo en
+    ' el hot path de swings PvP. ElementalBalanceFightSwing sale temprano y
+    ' barato si el toggle esta apagado; nada nuevo se escribe a disco por
+    ' swing (los contadores se acumulan en memoria, ver modElementalBalanceLog).
+    Dim ebSwingBlocked As Boolean
+    Dim ebImpacto As Boolean
+    ebImpacto = UsuarioImpacto(AtacanteIndex, VictimaIndex, aType, ebSwingBlocked)
+    ' Ola 5 tajada B: ANTES de UserDamageToUser (que puede matar a VictimaIndex en
+    ' el mismo golpe) -- si corriera despues, el call site del bloque de muerte
+    ' (Modulo_UsUaRiOs.bas, sin snapshot) crea y cierra la pelea primero y esta
+    ' llamada llega tarde: crea una SEGUNDA pelea (con la victima ya en 0 HP) en
+    ' vez de completar la primera. Bug real encontrado en vivo y corregido aca
+    ' (ver bitacora de la Ola 5 tajada B, plan 10.001).
+    Call modElementalBalanceLog.ElementalBalanceFightSwing(AtacanteIndex, VictimaIndex, IIf(ebImpacto, eSwingHit, IIf(ebSwingBlocked, eSwingBlock, eSwingMiss)))
+    If ebImpacto Then
         If UserList(VictimaIndex).flags.Navegando = 0 Or UserList(VictimaIndex).flags.Montado = 0 Then
             UserList(VictimaIndex).Counters.timeFx = 3
             Call SendData(SendTarget.ToPCAliveArea, VictimaIndex, PrepareMessageCreateFX(UserList(VictimaIndex).Char.charindex, FXSANGRE, 0, UserList(VictimaIndex).pos.x, _

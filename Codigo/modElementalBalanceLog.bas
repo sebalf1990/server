@@ -184,6 +184,108 @@ Attribute VB_Name = "modElementalBalanceLog"
 '   :universal_crit TryUniversalCrit -> item sigue en 0 (el critico
 '         universal no esta atado a un item puntual); raw en 0 (el bonus
 '         pre-resistencia se pisa en la misma variable antes de este punto).
+'
+' ============================================================================
+' Ola 5, tajada B (plan 10.001, punto 3b) -- eventos adicionales
+' ============================================================================
+' B0 -- ElementalBalanceUserReady(): la garantia de identidad de "equip" (y de
+' todo evento nuevo de esta tajada que atribuye una accion a un jugador) deja
+' de depender de que CADA call site pase bien el Optional UserIsLoggingIn.
+' Antes, InvUsuario.bas:1675 solo chequeaba "Not UserIsLoggingIn"; TCP.bas:333
+' (RellenarInventario, alta de personaje) y GameLogic.bas:1449 (resetPj, HOY
+' sin caller vivo -- unico Call esta comentado en Protocol.bas:7939) no pasan
+' ese flag y corren con UserLogged=False. El dia que un item de catalogo entre
+' a un kit inicial o a un grant de GM, esos call sites escribirian una fila
+' con char_id=0/account_id=0 sin que nadie lo note. ElementalBalanceUserReady
+' ata la garantia al MISMO criterio que ya usa ElementalBalanceCharId
+' (UserLogged=True), no al Optional. Los eventos "raros" de esta tajada
+' (session_start/end, cast, gear_snapshot, npc_kill) lo usan tambien.
+'
+' Nuevos eventos (todos detras de elemental_player_telemetry salvo donde se
+' indique, con salida temprana barata):
+'   header -> primera fila de cada archivo del dia (mismo momento que el
+'     header de texto). attacker=BuildStamp() (flags de compilacion, string
+'     ya embebido en el .exe -- NO es un hash real: VB6 no trae SHA256 nativo
+'     y calcularlo a mano es rediseno fuera de esta Ola). victim="n/a".
+'     raw=elemental_balance_log (0/1). final=elemental_player_telemetry (0/1).
+'     Para saber CON QUE obj.dat/binario se escribio cada fila, la regla
+'     sigue siendo la que dejo la tajada A: cruzar ts_ms contra
+'     build-stamp.txt (el server no puede autoreportar su propio hash).
+'   death_cause -> mismo punto que "death" (Modulo_UsUaRiOs.bas, bloque de
+'     DoDamageOrHeal). dmg_type = 0 pvp / 1 npc / 2 dot / 3 other. Verificado
+'     en el codigo (no asumido): DamageSourceType=e_dot NO alcanza para
+'     detectar "fue un tick de DoT" -- se reusa tambien para la rafaga
+'     elemental embebida en un swing en vivo (SistemaCombate.bas:487,618,1403
+'     pasan e_dot con SourceType=eUser/eNpc). La senal confiable es
+'     SourceType=eNone (SourceIndex=0): ese patron SOLO lo usan
+'     UpdateHpOverTime.cls/PoisonMinorEffect.cls/PoisonHemoEffect.cls cuando
+'     el atacante original ya no es resoluble (tick sin fuente viva). Una
+'     muerte por DoT con atacante todavia resoluble cae en pvp/npc, no en
+'     dot: simplificacion documentada, no error.
+'   drop_on_death -> InvUsuario.TirarTodosLosItems, en el DropObj real
+'     (:3296), solo catalogo. item=ObjIndex tirado, raw=cantidad,
+'     victim_char_id=el que murio.
+'   cast -> modHechizos.LanzarHechizo, tras resolver SpellCastSuccess. item =
+'     indice de Hechizos() (NO ObjIndex: este evento es la unica excepcion a
+'     esa convencion, documentada aca porque no existe columna de spell id).
+'     raw=mana gastado (diff antes/despues). final=delta de HP del target
+'     (positivo=dano, negativo=cura), medido por diferencia de HP antes/
+'     despues del Handle* -- no hay acceso directo al numero de dano en este
+'     nivel de LanzarHechizo. Solo hechizos con target valido (user o npc);
+'     los de terreno/mascota no generan esta fila (sin "victima" que loguear).
+'   gear_snapshot -> al completar el login (Modulo_UsUaRiOs.ConnectUser_Complete,
+'     antes de "ConnectUser_Complete = True"), una fila por cada slot de
+'     catalogo equipado (arma/escudo/casco/armadura/anillo-accesorio/
+'     municion/amuleto). DISTINTO de "equip": equip sigue excluyendo el login
+'     (Not UserIsLoggingIn, ver S3 de la tajada A) para no contar la
+'     reposicion de gear como una accion nueva; gear_snapshot es justamente
+'     la foto que "equip" no puede dar sin volver a contarla como accion.
+'   npc_kill -> MODULO_NPCs.MuereNpc, rama "lo mato un usuario" (UserIndex>0).
+'     item = arma equipada del atacante. NO incluye "tiempo desde el primer
+'     golpe": exigiria una tabla nueva de primer-golpe por NPC (reset en el
+'     respawn, set en el primer damage), enganche en un lugar distinto
+'     (NPCs.DoDamageOrHeal) y mas superficie de revision de la que esta
+'     tajada puede cerrar con cuidado -- NO implementado, no es un olvido.
+'   session_start / session_end -> Modulo_UsUaRiOs.ConnectUser_Complete /
+'     TCP.CloseUser. raw=0 en session_start; en session_end, raw=milisegundos
+'     jugados (GetTickCountRaw() - Counters.SessionStartTick, campo nuevo en
+'     t_UserCounters, Declares.bas). Ambos exigen ElementalBalanceUserReady
+'     (B0): un intento de cerrar sesion sobre un slot que nunca completo el
+'     login no genera fila.
+'
+' Motor de agregados por pelea (fight_start / fight_end, plan 10.001, Ola 5
+' punto 3b, prioridad 1): ARCHIVO SEPARADO, Logs\ElementalFights_<fecha>.log
+' (ver ElementalFightLogFileName). Decision de diseno: el esquema v2 (20
+' columnas fijas, ver arriba) no tiene lugar para nivel/clase/raza/faccion/HP
+' de AMBOS lados ni para los 14 contadores de swings/hits/miss/blocks/
+' pociones/casts que pide el punto 3b -- forzarlos en columnas que ya
+' significan otra cosa (ej. "item"=raza) hubiera sido cambiar el significado
+' de una columna sin cambiar su nombre, exactamente lo que este modulo evita
+' en todos lados. Un archivo con su propio esquema (mismo patron que
+' modElementalCombat.ElementalLog en paralelo a este modulo) no toca el
+' ancho de las 20+ columnas ni los 26 call sites existentes de
+' LogElementalBalance.
+'
+' Ciclo de vida de una "pelea" (par de char_id, decision 12 ya fijada en la
+' tajada A): se CREA en el primer swing/cast hostil identificado entre dos
+' chars (ElementalBalanceFightId, ahora con snapshot opcional de
+' nivel/clase/raza/faccion/HP/mapa si el caller pasa los UserIndex --
+' Optional, los 7 call sites viejos de componentes elementales no los pasan
+' y esa fight_start queda con esos campos en blanco/0, degradacion aceptada
+' porque en la practica casi toda pelea nace de un swing, no de un componente
+' elemental suelto). Los contadores (swings/hits/miss/blocks vÃ­a
+' ElementalBalanceFightSwing desde SistemaCombate.bas; pociones via
+' ElementalBalanceFightPotion desde InvUsuario.bas, SOLO si ya hay pelea
+' activa, nunca crean una; casts via ElementalBalanceFightCast desde
+' modHechizos.bas, solo hechizos hostiles) se acumulan EN MEMORIA (nada nuevo
+' por swing en disco, tal como pide el punto 6) y se escriben una unica vez
+' en fight_end. Se cierra (fight_end) en dos casos: "death" (el mismo
+' closeFight:=True que la tajada A ya invocaba desde el bloque de muerte) y
+' "timeout" (deteccion PEREZOSA: solo se nota si el MISMO par vuelve a
+' cruzarse despues de los 30s de silencio -- una pelea donde uno de los dos
+' se desconecta para siempre, o que nunca se repite, NO genera fight_end.
+' Limitacion heredada del diseno de fight_id de la tajada A, no nueva de esta
+' tajada; requeriria un barrido periodico activo, fuera de alcance aqui).
 
 Option Explicit
 
@@ -206,7 +308,48 @@ Private Type t_ElementalFight
     FightId As Long
     LastTickMs As Long
     Active As Boolean
+    ' --- Agregados por pelea (Ola 5 tajada B, punto 3b prioridad 1) ---
+    StartTickMs As Long
+    AccountA As Long
+    AccountB As Long
+    ClassA As String
+    ClassB As String
+    RaceA As Long
+    RaceB As Long
+    LevelA As Long
+    LevelB As Long
+    FactionA As Long
+    FactionB As Long
+    StartMap As Integer
+    StartHpA As Long
+    StartHpB As Long
+    SwingsA As Long
+    SwingsB As Long
+    HitsA As Long
+    HitsB As Long
+    MissA As Long
+    MissB As Long
+    BlocksA As Long
+    BlocksB As Long
+    PotionsRedA As Long
+    PotionsRedB As Long
+    PotionsBlueA As Long
+    PotionsBlueB As Long
+    CastsA As Long
+    CastsB As Long
 End Type
+
+' Resultado de un swing fisico/a distancia PvP (ElementalBalanceFightSwing).
+Public Enum e_ElementalSwingOutcome
+    eSwingMiss = 0
+    eSwingHit = 1
+    eSwingBlock = 2
+End Enum
+
+' Esquema del archivo separado de agregados por pelea (ver bloque de
+' documentacion "Motor de agregados por pelea" mas arriba).
+Private Const ELEMENTAL_FIGHT_LOG_HEADER As String = "ts_ms;event;fight_id;char_a;account_a;char_b;account_b;class_a;class_b;race_a;race_b;level_a;level_b;faction_a;faction_b;map;start_hp_a;start_hp_b;end_hp_a;end_hp_b;duration_ms;outcome;swings_a;swings_b;hits_a;hits_b;miss_a;miss_b;blocks_a;blocks_b;potions_red_a;potions_red_b;potions_blue_a;potions_blue_b;casts_a;casts_b;schema"
+Private Const ELEMENTAL_FIGHT_LOG_SCHEMA_VERSION As Long = 1
 
 Private mFights(1 To MAX_ACTIVE_ELEMENTAL_FIGHTS) As t_ElementalFight
 Private mNextFightId As Long
@@ -291,6 +434,26 @@ Public Function ElementalBalanceAccountId(ByVal isNpc As Boolean, ByVal idx As I
 eh:
     Call TraceError(Err.Number, Err.Description, "modElementalBalanceLog.ElementalBalanceAccountId", Erl)
     ElementalBalanceAccountId = 0
+End Function
+
+' B0 (plan 10.001, Ola 5 tajada B): guardia unica de identidad para eventos
+' que SIEMPRE deben atribuirse a un jugador real y nunca a un slot que
+' todavia no complete el login (o que ya lo abandono). Mismo criterio que
+' ElementalBalanceCharId/AccountId (UserLogged=True), pero expuesto como
+' condicion booleana para que un call site pueda usarlo como guard directo
+' ("And modElementalBalanceLog.ElementalBalanceUserReady(UserIndex)") en vez
+' de confiar en que un Optional como UserIsLoggingIn se pase siempre bien.
+' Ver el bloque de documentacion "Ola 5, tajada B -- B0" al inicio del
+' archivo para el caso real que motivo esto (InvUsuario.bas:1675).
+Public Function ElementalBalanceUserReady(ByVal UserIndex As Integer) As Boolean
+    On Error GoTo eh
+    If UserIndex <= 0 Then Exit Function
+    If UserIndex > UBound(UserList) Then Exit Function
+    ElementalBalanceUserReady = UserList(UserIndex).flags.UserLogged
+    Exit Function
+eh:
+    Call TraceError(Err.Number, Err.Description, "modElementalBalanceLog.ElementalBalanceUserReady", Erl)
+    ElementalBalanceUserReady = False
 End Function
 
 ' True si el ObjIndex cae en el catalogo elemental jugable (OBJ9084-9161,
@@ -378,7 +541,7 @@ End Function
 ' identificado (charA<=0 Or charB<=0): B4 es tiempo-hasta-matar PvP, un NPC
 ' no arma "pelea". closeFight=True cierra el par (llamado desde kill/death,
 ' decision 12: "cierra con la muerte de uno").
-Public Function ElementalBalanceFightId(ByVal charA As Long, ByVal charB As Long, Optional ByVal closeFight As Boolean = False) As Long
+Public Function ElementalBalanceFightId(ByVal charA As Long, ByVal charB As Long, Optional ByVal closeFight As Boolean = False, Optional ByVal idxAForSnapshot As Integer = 0, Optional ByVal idxBForSnapshot As Integer = 0) As Long
     On Error GoTo eh
     If charA <= 0 Or charB <= 0 Then Exit Function
     Dim nowTick As Long
@@ -388,25 +551,286 @@ Public Function ElementalBalanceFightId(ByVal charA As Long, ByVal charB As Long
     If slot > 0 Then
         If DeadlinePassed(nowTick, AddMod32(mFights(slot).LastTickMs, ELEMENTAL_FIGHT_SILENCE_MS)) Then
             ' Silencio > ventana: la pelea anterior ya se cerro sola: esta cuenta como una nueva.
+            ' Ola 5 tajada B: antes de resetear, cerramos la vieja con fight_end (outcome
+            ' "timeout") si llego a acumular algo (deteccion perezosa: solo se nota si el
+            ' MISMO par vuelve a cruzarse; ver "Motor de agregados por pelea" en la cabecera).
+            Call LogElementalFightEnd(slot, "timeout")
             mFights(slot).Active = False
             slot = 0
         End If
     End If
     If slot = 0 Then
         slot = FreeElementalFightSlot()
+        Call ResetElementalFightSlot(slot)
         mNextFightId = mNextFightId + 1
         mFights(slot).CharA = charA
         mFights(slot).CharB = charB
         mFights(slot).FightId = mNextFightId
         mFights(slot).Active = True
+        mFights(slot).StartTickMs = nowTick
+        Call SnapshotElementalFightStart(slot, idxAForSnapshot, idxBForSnapshot)
+        Call LogElementalFightStart(slot)
     End If
     mFights(slot).LastTickMs = nowTick
     ElementalBalanceFightId = mFights(slot).FightId
-    If closeFight Then mFights(slot).Active = False
+    If closeFight Then
+        Call LogElementalFightEnd(slot, "death")
+        mFights(slot).Active = False
+    End If
     Exit Function
 eh:
     Call TraceError(Err.Number, Err.Description, "modElementalBalanceLog.ElementalBalanceFightId", Erl)
 End Function
+
+Private Sub ResetElementalFightSlot(ByVal slot As Long)
+    Dim blank As t_ElementalFight
+    mFights(slot) = blank
+End Sub
+
+' Completa nivel/clase/raza/faccion/HP/mapa de ambos lados AL CREAR la pelea,
+' si el caller paso los UserIndex (swings y casts los pasan siempre; los 7
+' call sites viejos de componentes elementales no los pasan -- Optional,
+' quedan en blanco/0, degradacion documentada en la cabecera del archivo).
+Private Sub SnapshotElementalFightStart(ByVal slot As Long, ByVal idxA As Integer, ByVal idxB As Integer)
+    On Error GoTo eh
+    With mFights(slot)
+        If idxA > 0 Then
+            If idxA <= UBound(UserList) Then
+                If UserList(idxA).flags.UserLogged Then
+                    .AccountA = UserList(idxA).AccountID
+                    .ClassA = ListaClases(UserList(idxA).clase)
+                    .RaceA = UserList(idxA).raza
+                    .LevelA = UserList(idxA).Stats.ELV
+                    .FactionA = UserList(idxA).Faccion.Status
+                    .StartHpA = UserList(idxA).Stats.MinHp
+                    .StartMap = UserList(idxA).pos.Map
+                End If
+            End If
+        End If
+        If idxB > 0 Then
+            If idxB <= UBound(UserList) Then
+                If UserList(idxB).flags.UserLogged Then
+                    .AccountB = UserList(idxB).AccountID
+                    .ClassB = ListaClases(UserList(idxB).clase)
+                    .RaceB = UserList(idxB).raza
+                    .LevelB = UserList(idxB).Stats.ELV
+                    .FactionB = UserList(idxB).Faccion.Status
+                    .StartHpB = UserList(idxB).Stats.MinHp
+                    If .StartMap = 0 Then .StartMap = UserList(idxB).pos.Map
+                End If
+            End If
+        End If
+    End With
+    Exit Sub
+eh:
+    Call TraceError(Err.Number, Err.Description, "modElementalBalanceLog.SnapshotElementalFightStart", Erl)
+End Sub
+
+' Busca una pelea ACTIVA por uno solo de sus dos lados (para pociones: nunca
+' crean pelea, solo suman si el jugador ya esta en una).
+Private Function FindElementalFightSlotByChar(ByVal charId As Long) As Long
+    Dim i As Long
+    For i = 1 To MAX_ACTIVE_ELEMENTAL_FIGHTS
+        If mFights(i).Active Then
+            If mFights(i).CharA = charId Or mFights(i).CharB = charId Then
+                FindElementalFightSlotByChar = i
+                Exit Function
+            End If
+        End If
+    Next i
+End Function
+
+' Reconstruye el UserIndex actual a partir de un char_id estable (para leer
+' el HP "final" de una pelea al cerrarla). Barrido lineal: solo se llama al
+' CERRAR una pelea (raro), nunca en el hot path. 0 si el char ya no esta
+' logueado (por ejemplo, se desconecto antes de que la pelea cerrara por
+' timeout): el HP final queda en 0/no disponible, documentado en el archivo.
+Private Function FindUserIndexByCharId(ByVal charId As Long) As Integer
+    On Error GoTo eh
+    If charId <= 0 Then Exit Function
+    Dim i As Integer
+    For i = 1 To UBound(UserList)
+        If UserList(i).flags.UserLogged Then
+            If UserList(i).Id = charId Then
+                FindUserIndexByCharId = i
+                Exit Function
+            End If
+        End If
+    Next i
+    Exit Function
+eh:
+    Call TraceError(Err.Number, Err.Description, "modElementalBalanceLog.FindUserIndexByCharId", Erl)
+End Function
+
+Private Function ElementalFightLogFileName() As String
+    ElementalFightLogFileName = App.Path & "\Logs\ElementalFights_" & Format$(Date, "yyyy-mm-dd") & ".log"
+End Function
+
+Private Sub WriteElementalFightRow(ByVal evento As String, ByVal slot As Long, ByVal outcome As String, ByVal endHpA As Long, ByVal endHpB As Long, ByVal durationMs As Long)
+    On Error GoTo ErrHandler
+    If Not ElementalPlayerTelemetryEnabled() Then Exit Sub
+    Dim fname As String
+    fname = ElementalFightLogFileName()
+    Dim fnum As Integer
+    fnum = FreeFile
+    Dim writeHeader As Boolean
+    writeHeader = (LenB(Dir(fname)) = 0)
+    Open fname For Append As #fnum
+    If writeHeader Then Print #fnum, ELEMENTAL_FIGHT_LOG_HEADER
+    With mFights(slot)
+        Print #fnum, GetTickCountRaw() & ";" & evento & ";" & .FightId & ";" & _
+            .CharA & ";" & .AccountA & ";" & .CharB & ";" & .AccountB & ";" & _
+            .ClassA & ";" & .ClassB & ";" & .RaceA & ";" & .RaceB & ";" & _
+            .LevelA & ";" & .LevelB & ";" & .FactionA & ";" & .FactionB & ";" & _
+            .StartMap & ";" & .StartHpA & ";" & .StartHpB & ";" & endHpA & ";" & endHpB & ";" & _
+            durationMs & ";" & outcome & ";" & _
+            .SwingsA & ";" & .SwingsB & ";" & .HitsA & ";" & .HitsB & ";" & .MissA & ";" & .MissB & ";" & _
+            .BlocksA & ";" & .BlocksB & ";" & .PotionsRedA & ";" & .PotionsRedB & ";" & _
+            .PotionsBlueA & ";" & .PotionsBlueB & ";" & .CastsA & ";" & .CastsB & ";" & ELEMENTAL_FIGHT_LOG_SCHEMA_VERSION
+    End With
+    Close #fnum
+    Exit Sub
+ErrHandler:
+    Call TraceError(Err.Number, Err.Description, "modElementalBalanceLog.WriteElementalFightRow", Erl)
+    On Error Resume Next
+    Close #fnum
+End Sub
+
+Private Sub LogElementalFightStart(ByVal slot As Long)
+    Call WriteElementalFightRow("fight_start", slot, "0", 0, 0, 0)
+End Sub
+
+' outcome: "death" (cierre por muerte, closeFight:=True) o "timeout" (el
+' mismo par volvio a cruzarse despues de los 30s de silencio).
+Private Sub LogElementalFightEnd(ByVal slot As Long, ByVal outcome As String)
+    On Error GoTo eh
+    Dim idxA As Integer, idxB As Integer, endHpA As Long, endHpB As Long, durationMs As Long
+    idxA = FindUserIndexByCharId(mFights(slot).CharA)
+    idxB = FindUserIndexByCharId(mFights(slot).CharB)
+    If idxA > 0 Then endHpA = UserList(idxA).Stats.MinHp
+    If idxB > 0 Then endHpB = UserList(idxB).Stats.MinHp
+    ' Resta simple (no wrap-safe): una pelea individual dura, como mucho, unos
+    ' pocos minutos (se cierra sola a los 30s de silencio) -- el wraparound de
+    ' GetTickCount (~49.7 dias) exigiria que ocurriera A MITAD de esa ventana,
+    ' astronomicamente improbable. Mismo criterio de riesgo aceptado que ya
+    ' usa StartTickMs/LastTickMs en el resto de este archivo.
+    durationMs = GetTickCountRaw() - mFights(slot).StartTickMs
+    Call WriteElementalFightRow("fight_end", slot, outcome, endHpA, endHpB, durationMs)
+    Exit Sub
+eh:
+    Call TraceError(Err.Number, Err.Description, "modElementalBalanceLog.LogElementalFightEnd", Erl)
+End Sub
+
+' --- Hooks de agregados: llamados desde SistemaCombate.bas/InvUsuario.bas/
+' modHechizos.bas. Los tres salen temprano y barato si el toggle esta apagado. ---
+
+' Un swing fisico/a distancia entre dos users identificados (SistemaCombate.
+' UsuarioAtacaUsuario). Crea la pelea si hace falta (con snapshot completo:
+' ES el camino principal de creacion de una pelea, a diferencia de los call
+' sites viejos de componentes elementales).
+Public Sub ElementalBalanceFightSwing(ByVal attackerIdx As Integer, ByVal victimIdx As Integer, ByVal outcome As e_ElementalSwingOutcome)
+    On Error GoTo eh
+    If Not ElementalPlayerTelemetryEnabled() Then Exit Sub
+    Dim charA As Long, charB As Long
+    charA = ElementalBalanceCharId(False, attackerIdx)
+    charB = ElementalBalanceCharId(False, victimIdx)
+    If charA <= 0 Or charB <= 0 Then Exit Sub
+    Call ElementalBalanceFightId(charA, charB, False, attackerIdx, victimIdx)
+    Dim slot As Long
+    slot = FindElementalFightSlot(charA, charB)
+    If slot = 0 Then Exit Sub
+    With mFights(slot)
+        If .CharA = charA Then
+            .SwingsA = .SwingsA + 1
+            Select Case outcome
+                Case eSwingHit: .HitsA = .HitsA + 1
+                Case eSwingBlock: .BlocksA = .BlocksA + 1
+                Case Else: .MissA = .MissA + 1
+            End Select
+        Else
+            .SwingsB = .SwingsB + 1
+            Select Case outcome
+                Case eSwingHit: .HitsB = .HitsB + 1
+                Case eSwingBlock: .BlocksB = .BlocksB + 1
+                Case Else: .MissB = .MissB + 1
+            End Select
+        End If
+    End With
+    Exit Sub
+eh:
+    Call TraceError(Err.Number, Err.Description, "modElementalBalanceLog.ElementalBalanceFightSwing", Erl)
+End Sub
+
+' Pocion roja/azul consumida DURANTE una pelea activa (InvUsuario.UseInvItem).
+' Nunca crea pelea: una pocion fuera de combate no es un dato de "pelea".
+Public Sub ElementalBalanceFightPotion(ByVal UserIndex As Integer, ByVal potionKind As String)
+    On Error GoTo eh
+    If Not ElementalPlayerTelemetryEnabled() Then Exit Sub
+    Dim charId As Long
+    charId = ElementalBalanceCharId(False, UserIndex)
+    If charId <= 0 Then Exit Sub
+    Dim slot As Long
+    slot = FindElementalFightSlotByChar(charId)
+    If slot = 0 Then Exit Sub
+    With mFights(slot)
+        If .CharA = charId Then
+            If potionKind = "red" Then .PotionsRedA = .PotionsRedA + 1 Else .PotionsBlueA = .PotionsBlueA + 1
+        Else
+            If potionKind = "red" Then .PotionsRedB = .PotionsRedB + 1 Else .PotionsBlueB = .PotionsBlueB + 1
+        End If
+    End With
+    Exit Sub
+eh:
+    Call TraceError(Err.Number, Err.Description, "modElementalBalanceLog.ElementalBalanceFightPotion", Erl)
+End Sub
+
+' Hechizo HOSTIL contra un user identificado (modHechizos.LanzarHechizo). Si
+' es el primer contacto entre los dos, arranca la pelea (un ataque a
+' distancia con magia inicia un enfrentamiento igual que un swing).
+Public Sub ElementalBalanceFightCast(ByVal casterIdx As Integer, ByVal targetIdx As Integer)
+    On Error GoTo eh
+    If Not ElementalPlayerTelemetryEnabled() Then Exit Sub
+    Dim charA As Long, charB As Long
+    charA = ElementalBalanceCharId(False, casterIdx)
+    charB = ElementalBalanceCharId(False, targetIdx)
+    If charA <= 0 Or charB <= 0 Then Exit Sub
+    Call ElementalBalanceFightId(charA, charB, False, casterIdx, targetIdx)
+    Dim slot As Long
+    slot = FindElementalFightSlot(charA, charB)
+    If slot = 0 Then Exit Sub
+    With mFights(slot)
+        If .CharA = charA Then .CastsA = .CastsA + 1 Else .CastsB = .CastsB + 1
+    End With
+    Exit Sub
+eh:
+    Call TraceError(Err.Number, Err.Description, "modElementalBalanceLog.ElementalBalanceFightCast", Erl)
+End Sub
+
+' Foto del equipo elemental al completar el login (Modulo_UsUaRiOs.
+' ConnectUser_Complete). Una fila "gear_snapshot" por cada slot de catalogo
+' equipado. Requiere ElementalBalanceUserReady (B0): sin login completo, no
+' hay char_id que atribuir.
+Public Sub ElementalBalanceLogGearSnapshot(ByVal UserIndex As Integer)
+    On Error GoTo eh
+    If Not ElementalPlayerTelemetryEnabled() Then Exit Sub
+    If Not ElementalBalanceUserReady(UserIndex) Then Exit Sub
+    Dim slots(1 To 6) As Long
+    slots(1) = UserList(UserIndex).invent.EquippedWeaponObjIndex
+    slots(2) = UserList(UserIndex).invent.EquippedShieldObjIndex
+    slots(3) = UserList(UserIndex).invent.EquippedHelmetObjIndex
+    slots(4) = UserList(UserIndex).invent.EquippedArmorObjIndex
+    slots(5) = UserList(UserIndex).invent.EquippedRingAccesoryObjIndex
+    slots(6) = UserList(UserIndex).invent.EquippedAmuletAccesoryObjIndex
+    Dim i As Long
+    For i = 1 To 6
+        If ElementalBalanceInCatalog(slots(i)) Then
+            Call LogElementalBalance("gear_snapshot", ElementalBalanceActorId(False, UserIndex), ElementalBalanceActorClass(False, UserIndex), "0", "none", slots(i), ElementalBalanceCatalogTier(slots(i)), 0, 0, 0, ElementalBalanceMap(False, UserIndex), ElementalBalanceCharId(False, UserIndex), ElementalBalanceAccountId(False, UserIndex), 0, 0, 0)
+        End If
+    Next i
+    Exit Sub
+eh:
+    Call TraceError(Err.Number, Err.Description, "modElementalBalanceLog.ElementalBalanceLogGearSnapshot", Erl)
+End Sub
 
 ' Nombre del archivo del dia para el esquema v2 (Hecho 26: archivo por
 ' version de esquema, ver el bloque de comentarios "Gotcha de compatibilidad
@@ -447,7 +871,20 @@ Public Sub LogElementalBalance(ByVal evento As String, _
     Dim writeHeader As Boolean
     writeHeader = (LenB(dir(fname)) = 0)
     Open fname For Append As #fnum
-    If writeHeader Then Print #fnum, ELEMENTAL_BALANCE_LOG_HEADER
+    If writeHeader Then
+        Print #fnum, ELEMENTAL_BALANCE_LOG_HEADER
+        ' Ola 5 tajada B, evento "header" (punto 3b, prioridad 6): primera
+        ' fila de datos del archivo del dia. attacker = BuildStamp() (flags
+        ' de compilacion; el server NO puede autoreportar el hash de su
+        ' propio binario ni de obj.dat -- VB6 no trae SHA256 nativo. La
+        ' correlacion fila<->binario sigue siendo cruzar ts_ms contra
+        ' build-stamp.txt, como ya establecio la tajada A). raw/final =
+        ' estado de los dos toggles al momento de abrir el archivo.
+        Dim ebBuildFlags As String
+        ebBuildFlags = Replace(BuildStamp(), ";", ",")
+        Print #fnum, GetTickCountRaw() & ";header;" & ebBuildFlags & ";0;n/a;none;0;0;0;" & _
+                     IIf(ElementalBalanceLogEnabled(), 1, 0) & ";" & IIf(ElementalPlayerTelemetryEnabled(), 1, 0) & ";0;0;0;0;0;0;0;0;" & ELEMENTAL_BALANCE_LOG_SCHEMA_VERSION
+    End If
     Print #fnum, GetTickCountRaw() & ";" & _
                  evento & ";" & attacker & ";" & attackerClass & ";" & _
                  victim & ";" & victimType & ";" & itemObjIndex & ";" & tier & ";" & _

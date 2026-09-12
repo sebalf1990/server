@@ -852,6 +852,15 @@ Dim tStr                        As String
         Call CustomScenarios.UserConnected(UserIndex)
         Call AntiCheat.OnNewPlayerConnect(UserIndex)
         Call WriteGuildConfig(UserIndex)
+        ' Ola 5 tajada B (plan 10.001, punto 3b): session_start + foto del
+        ' equipo elemental. ElementalBalanceUserReady ya da True aca (el
+        ' login recien completo puso UserLogged=True mas arriba en esta
+        ' misma funcion, ver .flags.UserLogged = True).
+        If modElementalBalanceLog.ElementalPlayerTelemetryEnabled() And modElementalBalanceLog.ElementalBalanceUserReady(UserIndex) Then
+            .Counters.SessionStartTick = GetTickCountRaw()
+            Call modElementalBalanceLog.LogElementalBalance("session_start", modElementalBalanceLog.ElementalBalanceActorId(False, UserIndex), modElementalBalanceLog.ElementalBalanceActorClass(False, UserIndex), "0", "none", 0, 0, 0, 0, 0, .pos.Map, modElementalBalanceLog.ElementalBalanceCharId(False, UserIndex), modElementalBalanceLog.ElementalBalanceAccountId(False, UserIndex), 0, 0, 0)
+            Call modElementalBalanceLog.ElementalBalanceLogGearSnapshot(UserIndex)
+        End If
     End With
     ConnectUser_Complete = True
     Exit Function
@@ -3118,6 +3127,29 @@ Public Function DoDamageOrHeal(ByVal UserIndex As Integer, _
                 ebCharA = modElementalBalanceLog.ElementalBalanceCharId(ebAttackerIsNpc, SourceIndex)
                 ebCharB = modElementalBalanceLog.ElementalBalanceCharId(False, UserIndex)
                 Call modElementalBalanceLog.LogElementalBalance("death", modElementalBalanceLog.ElementalBalanceActorId(ebAttackerIsNpc, SourceIndex), modElementalBalanceLog.ElementalBalanceActorClass(ebAttackerIsNpc, SourceIndex), modElementalBalanceLog.ElementalBalanceActorId(False, UserIndex), "user", CLng(ebAttackerWeapon), modElementalBalanceLog.ElementalBalanceCatalogTier(ebAttackerWeapon), CLng(DamageTypeId), Abs(amount), Abs(amount), .pos.Map, ebCharA, modElementalBalanceLog.ElementalBalanceAccountId(ebAttackerIsNpc, SourceIndex), ebCharB, CLng(ebVictimWeapon), modElementalBalanceLog.ElementalBalanceFightId(ebCharA, ebCharB, True))
+                ' Ola 5 tajada B (plan 10.001, punto 3b): death_cause. dmg_type
+                ' reusado como causa: 0 pvp / 1 npc / 2 dot / 3 other.
+                ' VERIFICADO en el codigo (el plan lo daba por sentado y no
+                ' alcanzaba): DamageSourceType=e_dot NO identifica un tick de
+                ' DoT por si solo -- tambien se usa para la rafaga elemental
+                ' embebida en un swing en vivo (SistemaCombate.bas:487,618,1403
+                ' pasan e_dot con SourceType=eUser/eNpc). La senal confiable es
+                ' SourceType=eNone (SourceIndex=0): ese patron SOLO lo usan
+                ' UpdateHpOverTime.cls/PoisonMinorEffect.cls/PoisonHemoEffect.cls
+                ' cuando el atacante original ya no es resoluble. Una muerte por
+                ' DoT con atacante todavia resoluble cae en pvp/npc, no en dot:
+                ' simplificacion documentada, no error.
+                Dim ebDeathCause As Long
+                If SourceType = e_ReferenceType.eNone Then
+                    ebDeathCause = 2
+                ElseIf SourceType = eUser Then
+                    ebDeathCause = 0
+                ElseIf SourceType = eNpc Then
+                    ebDeathCause = 1
+                Else
+                    ebDeathCause = 3
+                End If
+                Call modElementalBalanceLog.LogElementalBalance("death_cause", modElementalBalanceLog.ElementalBalanceActorId(ebAttackerIsNpc, SourceIndex), modElementalBalanceLog.ElementalBalanceActorClass(ebAttackerIsNpc, SourceIndex), modElementalBalanceLog.ElementalBalanceActorId(False, UserIndex), "user", 0, 0, ebDeathCause, 0, 0, .pos.Map, ebCharA, modElementalBalanceLog.ElementalBalanceAccountId(ebAttackerIsNpc, SourceIndex), ebCharB, 0, 0)
             End If
             Call TargetWasDamaged(UserList(UserIndex).EffectOverTime, SourceIndex, SourceType, DamageSourceType)
             Call CustomScenarios.UserDie(UserIndex)

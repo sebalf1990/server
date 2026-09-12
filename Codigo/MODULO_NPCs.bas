@@ -180,6 +180,16 @@ Sub MuereNpc(ByVal NpcIndex As Integer, ByVal UserIndex As Integer)
     End If
     Call QuitarNPC(NpcIndex, eDie)
     If UserIndex > 0 Then ' Lo mato un usuario?
+        ' Ola 5 tajada B (plan 10.001, punto 3b): npc_kill. item = arma
+        ' equipada del atacante. NO incluye "tiempo desde el primer golpe"
+        ' (ver bloque de documentacion en modElementalBalanceLog.bas, cabecera
+        ' del archivo, seccion "Ola 5, tajada B"): no implementado, no es un
+        ' olvido -- exigiria una tabla nueva de primer-golpe por NPC.
+        If modElementalBalanceLog.ElementalPlayerTelemetryEnabled() And modElementalBalanceLog.ElementalBalanceUserReady(UserIndex) Then
+            Dim ebNpcKillWeapon As Long
+            ebNpcKillWeapon = UserList(UserIndex).invent.EquippedWeaponObjIndex
+            Call modElementalBalanceLog.LogElementalBalance("npc_kill", modElementalBalanceLog.ElementalBalanceActorId(False, UserIndex), modElementalBalanceLog.ElementalBalanceActorClass(False, UserIndex), modElementalBalanceLog.ElementalBalanceActorId(True, NpcIndex), "npc", ebNpcKillWeapon, modElementalBalanceLog.ElementalBalanceCatalogTier(ebNpcKillWeapon), 0, 0, 0, MiNPC.pos.Map, modElementalBalanceLog.ElementalBalanceCharId(False, UserIndex), modElementalBalanceLog.ElementalBalanceAccountId(False, UserIndex), 0, 0, 0)
+        End If
         If MiNPC.flags.Snd3 > 0 Then
             Call SendData(SendTarget.ToPCAliveArea, UserIndex, PrepareMessagePlayWave(MiNPC.flags.Snd3, MiNPC.pos.x, MiNPC.pos.y))
         Else

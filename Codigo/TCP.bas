@@ -1518,6 +1518,16 @@ Sub CloseUser(ByVal UserIndex As Integer)
         errordesc = "ERROR AL m_NameIndex.Remove() Name:" & .name & " cuenta:" & .Cuenta
         Call m_NameIndex.Remove(UCase$(.name))
         errordesc = "ERROR AL RESETSLOT Name:" & .name & " cuenta:" & .Cuenta
+        ' Ola 5 tajada B (plan 10.001, punto 3b): session_end, ANTES de bajar
+        ' UserLogged (ElementalBalanceUserReady/CharId exigen UserLogged=True).
+        ' SessionStartTick=0 => nunca completo ConnectUser_Complete con la
+        ' telemetria encendida (sesion vieja, o toggle prendido a mitad de
+        ' sesion): no hay "tiempo jugado" confiable, no se loguea.
+        If modElementalBalanceLog.ElementalPlayerTelemetryEnabled() And modElementalBalanceLog.ElementalBalanceUserReady(UserIndex) And .Counters.SessionStartTick > 0 Then
+            Dim ebSessionMs As Long
+            ebSessionMs = GetTickCountRaw() - .Counters.SessionStartTick
+            Call modElementalBalanceLog.LogElementalBalance("session_end", modElementalBalanceLog.ElementalBalanceActorId(False, UserIndex), modElementalBalanceLog.ElementalBalanceActorClass(False, UserIndex), "0", "none", 0, 0, 0, ebSessionMs, ebSessionMs, .pos.Map, modElementalBalanceLog.ElementalBalanceCharId(False, UserIndex), modElementalBalanceLog.ElementalBalanceAccountId(False, UserIndex), 0, 0, 0)
+        End If
         .flags.UserLogged = False
         .Counters.Saliendo = False
         Call ResetUserSlot(UserIndex)

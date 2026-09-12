@@ -3083,6 +3083,10 @@ Public Type t_UserCounters
     Ocultando As Long   ' Unico trabajo no revisado por el centinela
     goHome As Long
     LastSave As Long
+    ' Ola 5 tajada B (plan 10.001, punto 3b): arranque de sesion para el
+    ' evento session_end (tiempo jugado = GetTickCountRaw() - este campo).
+    ' Se setea en Modulo_UsUaRiOs.ConnectUser_Complete, se lee en TCP.CloseUser.
+    SessionStartTick As Long
     ' Sistema venenos (TOGGLE26): cooldown global de pociones curativas + cooldown Hemo parcial
     LastPoisonCurePotion As Long
     LastPoisonHemoPartialPotion As Long

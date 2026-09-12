@@ -1328,6 +1328,31 @@ Sub LanzarHechizo(ByVal Index As Integer, ByVal UserIndex As Integer)
     Dim uh               As Integer
     Dim SpellCastSuccess As Boolean
     uh = UserList(UserIndex).Stats.UserHechizos(Index)
+    ' Ola 5 tajada B (plan 10.001, punto 3b): snapshot "antes" para el evento
+    ' "cast" (mana gastado + delta de HP del target). Se captura ACA, antes de
+    ' que PuedeLanzar/Handle* puedan tocar mana o el target de referencia.
+    Dim ebCastTargetIsNpc As Boolean, ebCastTargetIdx As Integer
+    Dim ebCastHpBefore As Long, ebManaBefore As Long
+    If modElementalBalanceLog.ElementalPlayerTelemetryEnabled() Then
+        ebManaBefore = UserList(UserIndex).Stats.MinMAN
+        If IsValidUserRef(UserList(UserIndex).flags.TargetUser) Then
+            ebCastTargetIsNpc = False
+            ebCastTargetIdx = UserList(UserIndex).flags.TargetUser.ArrayIndex
+            ebCastHpBefore = UserList(ebCastTargetIdx).Stats.MinHp
+            ' Ola 5 tajada B: asegura la pelea (CON snapshot) ANTES de PuedeLanzar/
+            ' Handle*, que pueden matar al target con este mismo hechizo -- mismo
+            ' fix de orden que el swing fisico (SistemaCombate.bas, bitacora de la
+            ' Ola 5 tajada B): si esto corriera DESPUES del hechizo, el bloque de
+            ' muerte (sin snapshot) ganaria la carrera.
+            If Hechizos(uh).TargetEffectType = e_TargetEffectType.eNegative Then
+                Call modElementalBalanceLog.ElementalBalanceFightCast(UserIndex, ebCastTargetIdx)
+            End If
+        ElseIf IsValidNpcRef(UserList(UserIndex).flags.TargetNPC) Then
+            ebCastTargetIsNpc = True
+            ebCastTargetIdx = UserList(UserIndex).flags.TargetNPC.ArrayIndex
+            ebCastHpBefore = NpcList(ebCastTargetIdx).Stats.MinHp
+        End If
+    End If
     If PuedeLanzar(UserIndex, uh, Index) Then
         ' --- Pifia por Neurotoxina (TOGGLE26 new_poison_system) ---
         ' Si el caster esta envenenado con Neuro y el hechizo es pifiable,
@@ -1423,6 +1448,25 @@ Sub LanzarHechizo(ByVal Index As Integer, ByVal UserIndex As Integer)
             End If
         ElseIf Hechizos(uh).TargetEffectType = ePositive Then
             If IsValidUserRef(UserList(UserIndex).flags.TargetUser) Then Call RegisterNewHelp(UserList(UserIndex).flags.TargetUser.ArrayIndex, UserIndex)
+        End If
+        ' Ola 5 tajada B (plan 10.001, punto 3b): evento "cast" + agregado de
+        ' pelea. item = indice de Hechizos() (unica excepcion documentada a la
+        ' convencion "item=ObjIndex" de este modulo: no existe columna de
+        ' spell id en el esquema v2). final = delta de HP del target
+        ' (positivo=dano, negativo=cura), medido por diferencia antes/despues
+        ' porque a este nivel no hay acceso directo al numero de dano/cura.
+        If modElementalBalanceLog.ElementalPlayerTelemetryEnabled() And ebCastTargetIdx > 0 Then
+            Dim ebCastHpAfter As Long, ebCastDelta As Long, ebManaSpent As Long
+            ebManaSpent = ebManaBefore - UserList(UserIndex).Stats.MinMAN
+            If ebCastTargetIsNpc Then
+                ebCastHpAfter = NpcList(ebCastTargetIdx).Stats.MinHp
+            Else
+                ebCastHpAfter = UserList(ebCastTargetIdx).Stats.MinHp
+            End If
+            ebCastDelta = ebCastHpBefore - ebCastHpAfter
+            Call modElementalBalanceLog.LogElementalBalance("cast", modElementalBalanceLog.ElementalBalanceActorId(False, UserIndex), modElementalBalanceLog.ElementalBalanceActorClass(False, UserIndex), modElementalBalanceLog.ElementalBalanceActorId(ebCastTargetIsNpc, ebCastTargetIdx), IIf(ebCastTargetIsNpc, "npc", "user"), CLng(uh), 0, 0, ebManaSpent, ebCastDelta, modElementalBalanceLog.ElementalBalanceMap(False, UserIndex), modElementalBalanceLog.ElementalBalanceCharId(False, UserIndex), modElementalBalanceLog.ElementalBalanceAccountId(False, UserIndex), modElementalBalanceLog.ElementalBalanceCharId(ebCastTargetIsNpc, ebCastTargetIdx), 0, 0)
+            ' ElementalBalanceFightCast (ensure + contador) ya corrio ARRIBA, antes
+            ' del hechizo -- no se repite aca (ver comentario de mas arriba).
         End If
         Call ClearUserRef(UserList(UserIndex).flags.TargetUser)
         Call ClearNpcRef(UserList(UserIndex).flags.TargetNPC)

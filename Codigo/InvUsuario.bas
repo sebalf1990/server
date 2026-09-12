@@ -1672,7 +1672,13 @@ Dim Ropaje                      As Integer
 End With
 'Actualiza
 Call UpdateUserInv(False, UserIndex, Slot)
-If Not bSkin And Not UserIsLoggingIn And modElementalBalanceLog.ElementalPlayerTelemetryEnabled() And modElementalBalanceLog.ElementalBalanceInCatalog(ObjIndex) Then
+If Not bSkin And modElementalBalanceLog.ElementalPlayerTelemetryEnabled() And modElementalBalanceLog.ElementalBalanceInCatalog(ObjIndex) And modElementalBalanceLog.ElementalBalanceUserReady(UserIndex) Then
+    ' B0 (plan 10.001, Ola 5 tajada B): antes se confiaba en "Not UserIsLoggingIn",
+    ' un Optional que TCP.bas:333 (alta de personaje) y GameLogic.bas:1449 (resetPj,
+    ' hoy sin caller vivo) no pasan. ElementalBalanceUserReady ata la garantia al
+    ' mismo criterio que ya usa ElementalBalanceCharId (UserLogged=True): sin login
+    ' completo, ninguna fila de "equip" se escribe, sin importar que Optional se
+    ' haya pasado u omitido en el call site.
     Call modElementalBalanceLog.LogElementalBalance("equip", modElementalBalanceLog.ElementalBalanceActorId(False, UserIndex), modElementalBalanceLog.ElementalBalanceActorClass(False, UserIndex), "0", "none", CLng(ObjIndex), modElementalBalanceLog.ElementalBalanceCatalogTier(ObjIndex), 0, 0, 0, modElementalBalanceLog.ElementalBalanceMap(False, UserIndex), modElementalBalanceLog.ElementalBalanceCharId(False, UserIndex), modElementalBalanceLog.ElementalBalanceAccountId(False, UserIndex), 0, 0, 0)
 End If
 Exit Sub
@@ -2062,6 +2068,9 @@ Sub UseInvItem(ByVal UserIndex As Integer, ByVal Slot As Byte, ByVal ByClick As 
                         HealingAmount = RandomNumber(obj.MinModificador, obj.MaxModificador) * UserMod.GetSelfHealingBonus(UserList(UserIndex))
                         ' Modifica la salud del jugador
                         Call UserMod.ModifyHealth(UserIndex, HealingAmount)
+                        ' Ola 5 tajada B (plan 10.001, punto 3b): agregado de pelea, solo
+                        ' si ya hay una activa (nunca crea una por tomar una pocion sola).
+                        Call modElementalBalanceLog.ElementalBalanceFightPotion(UserIndex, "red")
                         ' Consumir pocion solo si el usuario no esta en zona de uso libre
                         If Not IsConsumableFreeZone(UserIndex) Then
                             ' Quitamos el ítem del inventario
@@ -2079,6 +2088,9 @@ Sub UseInvItem(ByVal UserIndex As Integer, ByVal Slot As Byte, ByVal ByClick As 
                         ' Usa el ítem: restaura el MANA
                         .Stats.MinMAN = IIf(.Stats.MinMAN > 20000, 20000, .Stats.MinMAN + Porcentaje(.Stats.MaxMAN, porcentajeRec))
                         If .Stats.MinMAN > .Stats.MaxMAN Then .Stats.MinMAN = .Stats.MaxMAN
+                        ' Ola 5 tajada B (plan 10.001, punto 3b): agregado de pelea, solo
+                        ' si ya hay una activa (nunca crea una por tomar una pocion sola).
+                        Call modElementalBalanceLog.ElementalBalanceFightPotion(UserIndex, "blue")
                         ' Consumir pocion solo si el usuario no esta en zona de uso libre
                         If Not IsConsumableFreeZone(UserIndex) Then
                             ' Quitamos el ítem del inventario
@@ -3294,6 +3306,13 @@ Sub TirarTodosLosItems(ByVal UserIndex As Integer)
                     End If
                     If NuevaPos.x <> 0 And NuevaPos.y <> 0 Then
                         Call DropObj(UserIndex, i, MiObj.amount, NuevaPos.Map, NuevaPos.x, NuevaPos.y)
+                        ' Ola 5 tajada B (plan 10.001, punto 3b): "drop_on_death", solo items
+                        ' de catalogo. victim_char_id = el que murio (TirarTodosLosItems corre
+                        ' dentro de UserDie, con UserLogged todavia en True: el personaje
+                        ' muerto sigue "logueado" hasta que se desconecta).
+                        If modElementalBalanceLog.ElementalPlayerTelemetryEnabled() And modElementalBalanceLog.ElementalBalanceInCatalog(ItemIndex) Then
+                            Call modElementalBalanceLog.LogElementalBalance("drop_on_death", "0", "0", modElementalBalanceLog.ElementalBalanceActorId(False, UserIndex), "user", CLng(ItemIndex), modElementalBalanceLog.ElementalBalanceCatalogTier(ItemIndex), 0, CLng(MiObj.amount), CLng(MiObj.amount), NuevaPos.Map, 0, 0, modElementalBalanceLog.ElementalBalanceCharId(False, UserIndex), 0, 0)
+                        End If
                         '  Si no hay lugar, quemamos el item del inventario (nada de mochilas gratis)
                     Else
                         Call QuitarUserInvItem(UserIndex, i, MiObj.amount)
