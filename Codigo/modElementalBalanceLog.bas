@@ -116,14 +116,15 @@ Attribute VB_Name = "modElementalBalanceLog"
 ' los 6 call sites v1 (`If ElementalBalanceLogEnabled() Then Call
 ' LogElementalBalance(...)`).
 '
-' Esquema de fila v2:
+' Esquema de fila v3 (columna run_id agregada por el fix 2026-09-12, ver
+' bloque de documentacion propio mas abajo; v1/v2 en el historial de git):
 '   ts_ms;event;attacker;attacker_class;victim;victim_type;item;tier;
 '   dmg_type;raw;final;resist_pct;pvp;map;char_id;account_id;
-'   victim_char_id;src_item;fight_id;schema
+'   victim_char_id;src_item;fight_id;schema;run_id
 '
 ' Los primeros 14 campos conservan el significado v1 (ver historial git para
 ' el docstring completo pre-v2); lo que cambia es que item/tier ahora pueden
-' venir poblados. Campos nuevos:
+' venir poblados. Campos nuevos (v2, salvo run_id que es v3):
 '   char_id        = UserList(idx).Id del ATACANTE si es user logueado; 0 si
 '                    es NPC o el slot no tiene un user logueado (Hecho 23).
 '   account_id     = UserList(idx).AccountID del ATACANTE, mismo criterio.
@@ -133,7 +134,9 @@ Attribute VB_Name = "modElementalBalanceLog"
 '                    (Hecho 43); 0 si el evento no viene de un encantamiento.
 '   fight_id       = ver ElementalBalanceFightId(). 0 si no aplica (no es
 '                    user-vs-user, o el evento no participa de una pelea).
-'   schema         = ELEMENTAL_BALANCE_LOG_SCHEMA_VERSION (2).
+'   schema         = ELEMENTAL_BALANCE_LOG_SCHEMA_VERSION (3).
+'   run_id         = ElementalBalanceRunId(). Unico por arranque del server;
+'                    ver el bloque "Fix 2026-09-12" mas abajo del todo.
 '
 ' Eventos nuevos de esta Ola (todos detras de elemental_player_telemetry):
 '   enchant_weapon / enchant_ammo -> SetEnchantedWeapon/SetEnchantedAmmo
@@ -287,10 +290,77 @@ Attribute VB_Name = "modElementalBalanceLog"
 ' Limitacion heredada del diseno de fight_id de la tajada A, no nueva de esta
 ' tajada; requeriria un barrido periodico activo, fuera de alcance aqui).
 
+' ============================================================================
+' Fix 2026-09-12 -- fight_id NO es unico entre reinicios (defecto real,
+' cross-check del lector de la Ola 6 contra los logs en vivo del plan 10.001)
+' ============================================================================
+' Defecto: FightId sale de mNextFightId (Private, module-level), que arranca
+' en 0 en CADA arranque del proceso. El archivo del dia es append-only y NO
+' se abre uno nuevo por reinicio -- solo por fecha calendario (Format$(Date,
+' "yyyy-mm-dd")) -- asi que dos arranques el MISMO dia escriben el MISMO
+' fight_id para pares de personajes totalmente distintos. Medido en
+' Logs\ElementalFights_2026-09-12.log: fight_id=1 aparece en 7 filas de DOS
+' pares (56 vs 59, y 36 vs 66); fight_id=2 igual (56 vs 59 huerfano + 36 vs
+' 66 cerrado). El lector (tools/analizar_telemetria.py, Ola 6) lo parcheaba
+' agrupando y ordenando por ts_ms dentro de (dia, fight_id) -- funciona
+' MIENTRAS el proceso vive (ts_ms = timeGetTime(), uptime del SISTEMA
+' OPERATIVO, modElapsedTime.bas: sigue subiendo entre reinicios del PROCESO),
+' pero es una inferencia, no una clave real, y se cae por completo si algun
+' dia el SISTEMA OPERATIVO reinicia (ts_ms vuelve a un valor bajo): la Ola 7
+' cosecha esto mismo con jugadores reales en la VM, donde un reinicio de
+' maquina no es hipotetico.
+'
+' Decision: agregar un identificador de RUN, fijo una sola vez por arranque,
+' como COLUMNA NUEVA al FINAL de cada fila (esquema aditivo, mismo criterio
+' que toda columna nueva de este archivo) en vez de tocar el significado de
+' fight_id. Candidatos considerados y por que se descartaron:
+'   - GetTickCountRaw() en el momento del arranque (un "boot tick"): NO
+'     sirve solo -- es el MISMO uptime del SO que ya es ambiguo entre
+'     reinicios del PROCESO (dos arranques del proceso pueden capturarlo con
+'     valores parecidos si son rapidos) y puede literalmente REPETIRSE tras
+'     un reinicio de LA MAQUINA (vuelve a un valor bajo, igual que fight_id).
+'   - GUID/random: exige una fuente de aleatoriedad que VB6 no trae nativa
+'     sin declarar una API adicional; mas superficie que la que este fix
+'     necesita.
+'   - Format$(Now, "yyyymmddhhnnss") -- ELEGIDO: reloj de PARED (no de
+'     uptime), unico entre reinicios de PROCESO y sobrevive igual a un
+'     reinicio de LA MAQUINA (el reloj de pared no se resetea). Precision de
+'     SEGUNDO alcanza de sobra: reiniciar_server.py tarda ~30s con
+'     --after-build, muy por encima de la resolucion de este identificador
+'     (dos arranques en el MISMO segundo son, en la practica, imposibles con
+'     el flujo de reinicio de este proyecto). Se calcula LAZY (la primera
+'     vez que un evento de telemetria lo necesita, no en Sub Main de
+'     General.bas): evita tocar un archivo ajeno para este fix y sigue
+'     siendo "una sola vez por arranque" porque el valor queda fijo en la
+'     variable module-level (mRunId) el resto del proceso. Ver
+'     ElementalBalanceRunId() mas abajo.
+'
+' Alcance de los dos archivos que llevan fight_id:
+'   - ElementalFights_<fecha>.log (37 columnas, schema=1): pasa a
+'     ElementalFights_<fecha>_v2.log (38 columnas, schema=2, +run_id al
+'     final) -- mismo mecanismo de "archivo por version de esquema" que la
+'     Ola 5 tajada A establecio para el log de balance (evita que un header
+'     de 37 columnas ya escrito hoy trague en silencio filas de 38 columnas,
+'     el mismo "Gotcha de compatibilidad del parser" documentado arriba).
+'     El archivo viejo sin sufijo queda intacto (esquema v1 historico).
+'   - ElementalBalance_<fecha>_v2.log (20 columnas, schema=2): TAMBIEN carga
+'     fight_id (columna existente, la escriben los 7 call sites de
+'     componentes elementales via ElementalBalanceFightId) -- la MISMA
+'     ambiguedad entre reinicios aplica si algun consumidor futuro cruza
+'     esta fila contra ElementalFights_*.log por fight_id (hoy el lector
+'     Ola 6 no lo hace -- cruza por char_id+ts_ms -- pero dejar el campo
+'     ambiguo en un archivo que se sigue escribiendo es una deuda latente,
+'     no una limitacion documentada). Pasa a ElementalBalance_<fecha>_v3.log
+'     (21 columnas, schema=3, +run_id al final), mismo mecanismo de archivo
+'     por version que ya tenia.
+' run_id es el MISMO valor (mRunId) en ambos archivos: un consumidor que
+' cruce balance vs fights por (run_id, fight_id) en vez de solo fight_id ya
+' tiene la clave real disponible desde este fix.
+
 Option Explicit
 
-Private Const ELEMENTAL_BALANCE_LOG_HEADER As String = "ts_ms;event;attacker;attacker_class;victim;victim_type;item;tier;dmg_type;raw;final;resist_pct;pvp;map;char_id;account_id;victim_char_id;src_item;fight_id;schema"
-Private Const ELEMENTAL_BALANCE_LOG_SCHEMA_VERSION As Long = 2
+Private Const ELEMENTAL_BALANCE_LOG_HEADER As String = "ts_ms;event;attacker;attacker_class;victim;victim_type;item;tier;dmg_type;raw;final;resist_pct;pvp;map;char_id;account_id;victim_char_id;src_item;fight_id;schema;run_id"
+Private Const ELEMENTAL_BALANCE_LOG_SCHEMA_VERSION As Long = 3
 
 ' Catalogo elemental jugable (plan 04.003/07.001): OBJ9084-9161, 78 items.
 Private Const ELEMENTAL_CATALOG_MIN As Long = 9084
@@ -348,11 +418,24 @@ End Enum
 
 ' Esquema del archivo separado de agregados por pelea (ver bloque de
 ' documentacion "Motor de agregados por pelea" mas arriba).
-Private Const ELEMENTAL_FIGHT_LOG_HEADER As String = "ts_ms;event;fight_id;char_a;account_a;char_b;account_b;class_a;class_b;race_a;race_b;level_a;level_b;faction_a;faction_b;map;start_hp_a;start_hp_b;end_hp_a;end_hp_b;duration_ms;outcome;swings_a;swings_b;hits_a;hits_b;miss_a;miss_b;blocks_a;blocks_b;potions_red_a;potions_red_b;potions_blue_a;potions_blue_b;casts_a;casts_b;schema"
-Private Const ELEMENTAL_FIGHT_LOG_SCHEMA_VERSION As Long = 1
+Private Const ELEMENTAL_FIGHT_LOG_HEADER As String = "ts_ms;event;fight_id;char_a;account_a;char_b;account_b;class_a;class_b;race_a;race_b;level_a;level_b;faction_a;faction_b;map;start_hp_a;start_hp_b;end_hp_a;end_hp_b;duration_ms;outcome;swings_a;swings_b;hits_a;hits_b;miss_a;miss_b;blocks_a;blocks_b;potions_red_a;potions_red_b;potions_blue_a;potions_blue_b;casts_a;casts_b;schema;run_id"
+Private Const ELEMENTAL_FIGHT_LOG_SCHEMA_VERSION As Long = 2
 
 Private mFights(1 To MAX_ACTIVE_ELEMENTAL_FIGHTS) As t_ElementalFight
 Private mNextFightId As Long
+
+' Identificador de RUN (fix 2026-09-12, ver bloque de documentacion arriba):
+' fijo la PRIMERA vez que se pide, se mantiene igual el resto del proceso.
+Private mRunId As String
+Private mRunIdReady As Boolean
+
+Private Function ElementalBalanceRunId() As String
+    If Not mRunIdReady Then
+        mRunId = Format$(Now, "yyyymmddhhnnss")
+        mRunIdReady = True
+    End If
+    ElementalBalanceRunId = mRunId
+End Function
 
 Public Function ElementalBalanceLogEnabled() As Boolean
     ElementalBalanceLogEnabled = IsFeatureEnabled("elemental_balance_log")
@@ -663,7 +746,7 @@ eh:
 End Function
 
 Private Function ElementalFightLogFileName() As String
-    ElementalFightLogFileName = App.Path & "\Logs\ElementalFights_" & Format$(Date, "yyyy-mm-dd") & ".log"
+    ElementalFightLogFileName = App.Path & "\Logs\ElementalFights_" & Format$(Date, "yyyy-mm-dd") & "_v2.log"
 End Function
 
 Private Sub WriteElementalFightRow(ByVal evento As String, ByVal slot As Long, ByVal outcome As String, ByVal endHpA As Long, ByVal endHpB As Long, ByVal durationMs As Long)
@@ -686,7 +769,7 @@ Private Sub WriteElementalFightRow(ByVal evento As String, ByVal slot As Long, B
             durationMs & ";" & outcome & ";" & _
             .SwingsA & ";" & .SwingsB & ";" & .HitsA & ";" & .HitsB & ";" & .MissA & ";" & .MissB & ";" & _
             .BlocksA & ";" & .BlocksB & ";" & .PotionsRedA & ";" & .PotionsRedB & ";" & _
-            .PotionsBlueA & ";" & .PotionsBlueB & ";" & .CastsA & ";" & .CastsB & ";" & ELEMENTAL_FIGHT_LOG_SCHEMA_VERSION
+            .PotionsBlueA & ";" & .PotionsBlueB & ";" & .CastsA & ";" & .CastsB & ";" & ELEMENTAL_FIGHT_LOG_SCHEMA_VERSION & ";" & ElementalBalanceRunId()
     End With
     Close #fnum
     Exit Sub
@@ -836,7 +919,7 @@ End Sub
 ' version de esquema, ver el bloque de comentarios "Gotcha de compatibilidad
 ' del parser" arriba).
 Private Function ElementalBalanceLogFileName() As String
-    ElementalBalanceLogFileName = App.Path & "\Logs\ElementalBalance_" & Format$(Date, "yyyy-mm-dd") & "_v2.log"
+    ElementalBalanceLogFileName = App.Path & "\Logs\ElementalBalance_" & Format$(Date, "yyyy-mm-dd") & "_v3.log"
 End Function
 
 Public Sub LogElementalBalance(ByVal evento As String, _
@@ -883,14 +966,14 @@ Public Sub LogElementalBalance(ByVal evento As String, _
         Dim ebBuildFlags As String
         ebBuildFlags = Replace(BuildStamp(), ";", ",")
         Print #fnum, GetTickCountRaw() & ";header;" & ebBuildFlags & ";0;n/a;none;0;0;0;" & _
-                     IIf(ElementalBalanceLogEnabled(), 1, 0) & ";" & IIf(ElementalPlayerTelemetryEnabled(), 1, 0) & ";0;0;0;0;0;0;0;0;" & ELEMENTAL_BALANCE_LOG_SCHEMA_VERSION
+                     IIf(ElementalBalanceLogEnabled(), 1, 0) & ";" & IIf(ElementalPlayerTelemetryEnabled(), 1, 0) & ";0;0;0;0;0;0;0;0;" & ELEMENTAL_BALANCE_LOG_SCHEMA_VERSION & ";" & ElementalBalanceRunId()
     End If
     Print #fnum, GetTickCountRaw() & ";" & _
                  evento & ";" & attacker & ";" & attackerClass & ";" & _
                  victim & ";" & victimType & ";" & itemObjIndex & ";" & tier & ";" & _
                  dmgType & ";" & raw & ";" & finalDmg & ";" & resistPct & ";" & _
                  pvp & ";" & mapNumber & ";" & charId & ";" & accountId & ";" & _
-                 victimCharId & ";" & srcItem & ";" & fightId & ";" & ELEMENTAL_BALANCE_LOG_SCHEMA_VERSION
+                 victimCharId & ";" & srcItem & ";" & fightId & ";" & ELEMENTAL_BALANCE_LOG_SCHEMA_VERSION & ";" & ElementalBalanceRunId()
     Close #fnum
     Exit Sub
 ErrHandler:
