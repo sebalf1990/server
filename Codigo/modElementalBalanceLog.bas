@@ -357,6 +357,78 @@ Attribute VB_Name = "modElementalBalanceLog"
 ' cruce balance vs fights por (run_id, fight_id) en vez de solo fight_id ya
 ' tiene la clave real disponible desde este fix.
 
+' ============================================================================
+' Grupo 7 (plan 10.001, punto 7b) -- ultimo grupo de eventos, 2026-09-12
+' ============================================================================
+' Cierra los eventos que la Ola 5 tajada B dejo afuera por falta de tiempo
+' ("si queda tiempo", bitacora de esa tajada). Los 8 eventos nuevos reusan las
+' MISMAS 21 columnas del esquema v3 (nada de columna nueva, nada de version
+' nueva de archivo): donde el evento no tiene un ObjIndex real que poner en
+' "item", se documenta la excepcion aca mismo (mismo criterio que "cast" ya
+' establecio para el indice de hechizo).
+'
+'   pickup / sell -> InvUsuario.PickObj / Comercio.Comercio (rama Venta).
+'     Solo catalogo (ElementalBalanceInCatalog), igual criterio que craft/buy.
+'     item=ObjIndex real, raw=cantidad, final=precio (0 en pickup).
+'
+'   craft_fail -> Trabajo.bas, un Else nuevo al lado de cada "craft" existente
+'     (Herrero/Carpintero/Alquimista/Sastre). item=ObjIndex real (solo catalogo).
+'     dmg_type REUSADO como motivo (mismo patron que death_cause): 0=materiales,
+'     1=skill, 2=receta (tipo invalido para el oficio O no aprendida via
+'     KnowsCraftingRecipe), 3=herramienta. Prioridad fija materiales>skill>
+'     receta>herramienta cuando fallan varias a la vez. Herreria no tiene
+'     concepto de herramienta equipable: nunca reporta motivo 3.
+'
+'   effect_end / antidote_use -> EffectsOverTime.bas + los 3 .cls de veneno
+'     nuevo (PoisonMinorEffect/PoisonHemoEffect/PoisonNeuroEffect) +
+'     InvUsuario.bas (Case CuresPoison). VERIFICADO EN EL CODIGO, no asumido
+'     del plan: la reaplicacion de un veneno del mismo tipo NUNCA reemplaza la
+'     instancia activa (CreatePoisonMinor/Hemo/Neuro llaman .Reset() sobre la
+'     MISMA instancia via FindEffectOnTarget) -- el motivo "pisado por Override"
+'     que pedia el punto 7b NO EXISTE para esta familia de efectos y se omite
+'     (3 motivos, no 4): 0=expiro (natural, en el propio Update() de cada .cls),
+'     1=curado (RemovePoisonMinor/Hemo/Neuro, los 12 call sites existentes son
+'     TODOS curas de pocion/hechizo, verificado con grep), 2=muerte (barrido
+'     nuevo LogPoisonEffectsEndOnDeath, llamado ANTES de ClearEffectList en
+'     Modulo_UsUaRiOs.UserDie -- esa llamada generica borra los EOT de TODOS los
+'     tipos sin distincion, por eso el barrido de muerte vive en un Sub aparte
+'     que sabe leer los 3 tipos de veneno antes de que se pierdan).
+'     item=EotId (indice de EffectsOverTime.dat, NO ObjIndex -- excepcion
+'     documentada, mismo criterio que "cast"). raw=duracion servida en ms
+'     (DurationTotalMs-DurationLeft, leido ANTES de remover). final=stacks
+'     maximos alcanzados (solo Hemo stackea; Menor/Neuro siempre 0). Alcance
+'     deliberadamente acotado a targets USER (telemetria de JUGADOR): un NPC
+'     envenenado no genera fila.
+'     antidote_use: Case e_PotionType.CuresPoison (TipoPocion=25, confirmado en
+'     Declares.bas), solo cuando el item se consume de verdad (algoCurado=True).
+'     item=ObjIndex real del antidoto (SI sigue la convencion normal, no es
+'     excepcion). final=bitmask de que se curo (1=Menor, 2=Hemo, 4=Neuro).
+'
+'   recipe_learned / quest_complete -> modHechizos.AgregarHechizo (lectura de
+'     un pergamino suelto) y ModQuest.FinishQuest (la quest entrega el hechizo
+'     de receta directo, sin pasar por AgregarHechizo). Verificado en
+'     Hechizos.dat: HECHIZO414-419 son "Receta: ..." (Forja Elemental Maestra,
+'     Joyeria Elemental, Aceites Elementales Superiores, Toxinas y Antidotos
+'     Superiores, Espinas, Vestimenta Elemental) -- confirma el rango que el
+'     plan daba por sentado. item=indice de Hechizos() (excepcion, igual que
+'     "cast") en recipe_learned; item=QuestIndex en quest_complete, acotado a
+'     las quests cuya recompensa incluye un hechizo de receta (no todas las
+'     quests, siguiendo el punto 7b al pie de la letra).
+'
+'   level_up / skill_assign -> Modulo_UsUaRiOs.CheckUserLevel y
+'     Protocol.HandleModifySkills. El esquema de 21 columnas no tiene lugar
+'     para un vector de ~20 skills sin resignificar columnas ya usadas: se
+'     adapto el pedido del plan ("level_up con foto de los skills asignados")
+'     separando la foto en su propio evento (skill_assign, una fila por skill
+'     que de verdad cambio en la sesion de reparto) en vez de forzarla dentro
+'     de level_up -- se cruzan por char_id+ts_ms si hace falta reconstruir la
+'     distribucion completa. level_up: raw=puntos de skill otorgados en esta
+'     pasada (Pts, puede cubrir mas de un nivel de una sola vez), final=nivel
+'     alcanzado (.Stats.ELV). skill_assign: item=id de skill (e_Skill, otra
+'     excepcion documentada a la convencion ObjIndex), raw=puntos asignados a
+'     ESE skill en este submit, final=valor final del skill (post-cap 100).
+' ============================================================================
+
 Option Explicit
 
 Private Const ELEMENTAL_BALANCE_LOG_HEADER As String = "ts_ms;event;attacker;attacker_class;victim;victim_type;item;tier;dmg_type;raw;final;resist_pct;pvp;map;char_id;account_id;victim_char_id;src_item;fight_id;schema;run_id"
@@ -581,6 +653,92 @@ Public Function ElementalBalanceCatalogTier(ByVal objIndex As Long) As Long
             ElementalBalanceCatalogTier = 0
     End Select
 End Function
+
+' Grupo 7 (plan 10.001, punto 7b): HECHIZO414-419 son las 6 recetas T2/T3 del
+' catalogo elemental (verificado en Hechizos.dat, ver bloque de documentacion
+' arriba). Usado por recipe_learned (modHechizos.AgregarHechizo) y
+' quest_complete (ModQuest.FinishQuest, para acotar a las quests de receta).
+Public Function ElementalBalanceIsRecipeSpell(ByVal hIndex As Integer) As Boolean
+    ElementalBalanceIsRecipeSpell = (hIndex >= 414 And hIndex <= 419)
+End Function
+
+' Grupo 7: craft_fail compartido por los 4 oficios (Herrero/Carpintero/
+' Alquimista/Sastre). Reason: 0=materiales, 1=skill, 2=receta, 3=herramienta.
+' Cheap early exit propio (toggle + catalogo) para no repetirlo en cada uno
+' de los 4 call sites.
+Public Sub LogCraftFail(ByVal UserIndex As Integer, ByVal ItemIndex As Long, ByVal Reason As Long)
+    If Not ElementalPlayerTelemetryEnabled() Then Exit Sub
+    If Not ElementalBalanceInCatalog(ItemIndex) Then Exit Sub
+    Call LogElementalBalance("craft_fail", ElementalBalanceActorId(False, UserIndex), ElementalBalanceActorClass(False, UserIndex), "0", "none", ItemIndex, ElementalBalanceCatalogTier(ItemIndex), Reason, 0, 0, ElementalBalanceMap(False, UserIndex), ElementalBalanceCharId(False, UserIndex), ElementalBalanceAccountId(False, UserIndex), 0, 0, 0)
+End Sub
+
+' Grupo 7: effect_end de los 3 venenos nuevos (Minor/Hemo/Neuro), target SIEMPRE
+' user (telemetria de jugador). SourceValid=False -> ataca/victima sin fuente
+' resoluble (0/"0", igual criterio que el resto del modulo). item=EotId (NO
+' ObjIndex, excepcion documentada arriba). Reason: 0=expiro,1=curado,2=muerte.
+Public Sub LogPoisonEffectEnd(ByVal TargetUserIndex As Integer, ByVal SourceIndex As Integer, ByVal SourceIsNpc As Boolean, ByVal SourceValid As Boolean, ByVal EotId As Long, ByVal ServedMs As Long, ByVal StacksAtEnd As Long, ByVal Reason As Long)
+    On Error GoTo eh
+    If Not ElementalPlayerTelemetryEnabled() Then Exit Sub
+    Dim att As String, attCls As String, srcCharId As Long, srcAccountId As Long
+    If SourceValid Then
+        att = ElementalBalanceActorId(SourceIsNpc, SourceIndex)
+        attCls = ElementalBalanceActorClass(SourceIsNpc, SourceIndex)
+        srcCharId = ElementalBalanceCharId(SourceIsNpc, SourceIndex)
+        srcAccountId = ElementalBalanceAccountId(SourceIsNpc, SourceIndex)
+    Else
+        att = "0"
+        attCls = "0"
+    End If
+    Dim served As Long
+    served = ServedMs
+    If served < 0 Then served = 0
+    Call LogElementalBalance("effect_end", att, attCls, ElementalBalanceActorId(False, TargetUserIndex), "user", EotId, 0, Reason, served, StacksAtEnd, ElementalBalanceMap(False, TargetUserIndex), srcCharId, srcAccountId, ElementalBalanceCharId(False, TargetUserIndex), 0, 0)
+    Exit Sub
+eh:
+    Call TraceError(Err.Number, Err.Description, "modElementalBalanceLog.LogPoisonEffectEnd", Erl)
+End Sub
+
+' Grupo 7: barrido de muerte. Se llama ANTES de ClearEffectList(ClearForDeath:=
+' True) en Modulo_UsUaRiOs.UserDie -- esa llamada es generica (borra TODOS los
+' tipos de efecto sin distincion) asi que este Sub es el unico lugar que sabe
+' identificar los 3 tipos de veneno nuevo y leer su duracion servida/stacks
+' ANTES de que se pierdan. Solo lee: el borrado real lo sigue haciendo
+' ClearEffectList sin cambios.
+Public Sub LogPoisonEffectsEndOnDeath(ByVal UserIndex As Integer)
+    On Error GoTo eh
+    If Not ElementalPlayerTelemetryEnabled() Then Exit Sub
+    Dim i As Long
+    Dim mn As PoisonMinorEffect
+    Dim hf As PoisonHemoEffect
+    Dim nf As PoisonNeuroEffect
+    Dim served As Long, stacksAtEnd As Long, isPoisonEffect As Boolean
+    With UserList(UserIndex).EffectOverTime
+        For i = 0 To .EffectCount - 1
+            isPoisonEffect = True
+            stacksAtEnd = 0
+            Select Case .EffectList(i).TypeId
+                Case e_EffectOverTimeType.ePoisonMinor
+                    Set mn = .EffectList(i)
+                    served = mn.TelemetryServedMs
+                Case e_EffectOverTimeType.ePoisonHemo
+                    Set hf = .EffectList(i)
+                    served = hf.TelemetryServedMs
+                    stacksAtEnd = hf.TelemetryPeakStacks
+                Case e_EffectOverTimeType.ePoisonNeuro
+                    Set nf = .EffectList(i)
+                    served = nf.TelemetryServedMs
+                Case Else
+                    isPoisonEffect = False
+            End Select
+            If isPoisonEffect Then
+                Call LogPoisonEffectEnd(UserIndex, .EffectList(i).CasterArrayIndex, .EffectList(i).CasterRefType = eNpc, .EffectList(i).CasterIsValid, .EffectList(i).EotId, served, stacksAtEnd, 2)
+            End If
+        Next i
+    End With
+    Exit Sub
+eh:
+    Call TraceError(Err.Number, Err.Description, "modElementalBalanceLog.LogPoisonEffectsEndOnDeath", Erl)
+End Sub
 
 Private Function FindElementalFightSlot(ByVal a As Long, ByVal b As Long) As Long
     Dim i As Long

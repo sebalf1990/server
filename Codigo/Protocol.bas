@@ -3275,6 +3275,11 @@ Private Sub HandleModifySkills(ByVal UserIndex As Integer)
                         .SkillDirty(i) = True
                     End If
                     UserList(UserIndex).flags.ModificoSkills = True
+                    ' Grupo 7 (plan 10.001, punto 7b): skill_assign. item=id de skill
+                    ' (e_Skill, excepcion documentada -- no es un ObjIndex).
+                    If modElementalBalanceLog.ElementalPlayerTelemetryEnabled() Then
+                        Call modElementalBalanceLog.LogElementalBalance("skill_assign", modElementalBalanceLog.ElementalBalanceActorId(False, UserIndex), modElementalBalanceLog.ElementalBalanceActorClass(False, UserIndex), "0", "none", CLng(i), 0, 0, CLng(points(i)), CLng(.UserSkills(i)), modElementalBalanceLog.ElementalBalanceMap(False, UserIndex), modElementalBalanceLog.ElementalBalanceCharId(False, UserIndex), modElementalBalanceLog.ElementalBalanceAccountId(False, UserIndex), 0, 0, 0)
+                    End If
                 End If
             Next i
         End With

@@ -45,6 +45,8 @@ Private GolpesAcumulados As Integer
 Private IntervaloDecayStackMs As Long
 Private TimeSinceLastDecay As Long
 Private RefrescaTimerAlStackear As Byte
+' Grupo 7 (plan 10.001, punto 7b): pico de stacks alcanzado (effect_end final=stacks maximos).
+Private mPeakStacks As Integer
 
 ' Setup recibe parametros desde el caller (arma con valores propios).
 Public Sub Setup(ByVal SourceIndex As Integer, _
@@ -93,6 +95,7 @@ Public Sub Setup(ByVal SourceIndex As Integer, _
     StacksActuales = pStacksInicial
     If StacksActuales <= 0 Then StacksActuales = 1
     If StacksActuales > StacksMax Then StacksActuales = StacksMax
+    mPeakStacks = StacksActuales
     If TargetType = eUser Then
         UserList(TargetIndex).flags.PoisonHemoStacks = StacksActuales
         If EffectOverTime(EffectId).ClientEffectTypeId > 0 Then
@@ -116,6 +119,7 @@ Public Sub TryAddStack()
         Exit Sub
     End If
     StacksActuales = StacksActuales + 1
+    If StacksActuales > mPeakStacks Then mPeakStacks = StacksActuales
     TimeSinceLastDecay = 0
     ' Suma stack siempre refresca timer (esto es el comportamiento principal de Hemo)
     DurationLeft = DurationTotalMs
@@ -226,6 +230,9 @@ Public Sub IBaseEffectOverTime_Update(ByVal DeltaTime As Long)
     If DurationLeft <= 0 Then
         ' Timer global expiro
         If DotInfo.TargetRef.RefType = eUser Then
+            ' Grupo 7 (plan 10.001, punto 7b): effect_end reason=expiro (motivo 0), leido
+            ' ANTES de resetear PoisonHemoStacks (necesitamos mPeakStacks, no el actual).
+            Call modElementalBalanceLog.LogPoisonEffectEnd(DotInfo.TargetRef.ArrayIndex, Source.ArrayIndex, Source.RefType = eNpc, IsValidRef(Source), DotInfo.EotId, DurationTotalMs - DurationLeft, mPeakStacks, 0)
             UserList(DotInfo.TargetRef.ArrayIndex).flags.PoisonHemoStacks = 0
         End If
         DotInfo.RemoveEffect = True
@@ -248,6 +255,16 @@ End Function
 
 Public Property Get IBaseEffectOverTime_EotId() As Integer
     IBaseEffectOverTime_EotId = DotInfo.EotId
+End Property
+
+' Grupo 7 (plan 10.001, punto 7b): duracion servida y pico de stacks para effect_end.
+Public Property Get TelemetryServedMs() As Long
+    TelemetryServedMs = DurationTotalMs - DurationLeft
+    If TelemetryServedMs < 0 Then TelemetryServedMs = 0
+End Property
+
+Public Property Get TelemetryPeakStacks() As Integer
+    TelemetryPeakStacks = mPeakStacks
 End Property
 
 Public Sub IBaseEffectOverTime_OnRemove()

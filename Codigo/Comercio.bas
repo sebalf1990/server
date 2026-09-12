@@ -149,6 +149,10 @@ Public Sub Comercio(ByVal Modo As eModoComercio, ByVal UserIndex As Integer, ByV
         UserList(UserIndex).Stats.GLD = UserList(UserIndex).Stats.GLD + precio
         If UserList(UserIndex).Stats.GLD > MAXORO Then UserList(UserIndex).Stats.GLD = MAXORO
         Call WriteUpdateGold(UserIndex)
+        ' Grupo 7 (plan 10.001, punto 7b): sell, solo catalogo (igual criterio que buy/craft).
+        If modElementalBalanceLog.ElementalPlayerTelemetryEnabled() And modElementalBalanceLog.ElementalBalanceInCatalog(Objeto.ObjIndex) Then
+            Call modElementalBalanceLog.LogElementalBalance("sell", modElementalBalanceLog.ElementalBalanceActorId(False, UserIndex), modElementalBalanceLog.ElementalBalanceActorClass(False, UserIndex), "0", "none", CLng(Objeto.ObjIndex), modElementalBalanceLog.ElementalBalanceCatalogTier(Objeto.ObjIndex), 0, CLng(Cantidad), precio, modElementalBalanceLog.ElementalBalanceMap(False, UserIndex), modElementalBalanceLog.ElementalBalanceCharId(False, UserIndex), modElementalBalanceLog.ElementalBalanceAccountId(False, UserIndex), 0, 0, 0)
+        End If
         If Not IsFeatureEnabled("destroy_npc_bought_items") Then
             NpcSlot = SlotEnNPCInv(NpcIndex, Objeto.ObjIndex, Objeto.Amount)
             If NpcSlot > 0 And NpcSlot <= MAX_INVENTORY_SLOTS Then 'Slot valido

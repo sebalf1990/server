@@ -1276,6 +1276,11 @@ Sub CheckUserLevel(ByVal UserIndex As Integer)
                 'Msg187=¡Has ganado ¬1 skillpoints! Dispones de ¬2 puntos libres, se cuidadoso al momento de usarlos.
                 Call WriteLocaleMsg(UserIndex, MSG_GANADO_SKILLPOINTS_DISPONES_PUNTOS_LIBRES_CUIDADOSO_MOMENTO_USARLOS, e_FontTypeNames.FONTTYPE_INFO, Pts & "¬" & .Stats.SkillPts)
             End If
+            ' Grupo 7 (plan 10.001, punto 7b): level_up. raw=puntos de skill otorgados
+            ' en esta pasada (puede cubrir mas de un nivel), final=nivel alcanzado.
+            If modElementalBalanceLog.ElementalPlayerTelemetryEnabled() Then
+                Call modElementalBalanceLog.LogElementalBalance("level_up", modElementalBalanceLog.ElementalBalanceActorId(False, UserIndex), modElementalBalanceLog.ElementalBalanceActorClass(False, UserIndex), "0", "none", 0, 0, 0, CLng(Pts), CLng(.Stats.ELV), modElementalBalanceLog.ElementalBalanceMap(False, UserIndex), modElementalBalanceLog.ElementalBalanceCharId(False, UserIndex), modElementalBalanceLog.ElementalBalanceAccountId(False, UserIndex), 0, 0, 0)
+            End If
             If Not EsNewbie(UserIndex) And WasNewbie Then
                 Call QuitarNewbieObj(UserIndex)
             ElseIf .Stats.ELV >= MapInfo(.pos.Map).MaxLevel And Not EsGM(UserIndex) Then
@@ -1854,6 +1859,10 @@ Sub UserDie(ByVal UserIndex As Integer)
         .flags.Envenena = 0
         .flags.Estupidiza = 0
         .flags.DivineBlood = 0
+        ' Grupo 7 (plan 10.001, punto 7b): antes de que ClearEffectList borre TODOS los
+        ' efectos sin distincion, dejamos una fila effect_end (reason=muerte) por cada
+        ' veneno nuevo (Minor/Hemo/Neuro) que siga activo.
+        Call modElementalBalanceLog.LogPoisonEffectsEndOnDeath(UserIndex)
         Call ClearEffectList(.EffectOverTime, e_EffectType.eAny, True)
         ' 06.002 Ola 1: untados, encantamientos y caches de veneno mueren con el portador,
         ' sin gate de toggle (el arma dropeada no lleva el encanto: vive en UserList().flags).

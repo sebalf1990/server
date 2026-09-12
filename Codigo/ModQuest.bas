@@ -255,10 +255,31 @@ Public Sub FinishQuest(ByVal UserIndex As Integer, ByVal QuestIndex As Integer, 
                     Else
                         UserList(UserIndex).Stats.UserHechizos(j) = .RewardSpellList(i)
                         Call UpdateUserHechizos(False, UserIndex, CByte(j))
+                        ' Grupo 7 (plan 10.001, punto 7b): recipe_learned via recompensa de
+                        ' quest directa (sin pasar por AgregarHechizo).
+                        If modElementalBalanceLog.ElementalPlayerTelemetryEnabled() And modElementalBalanceLog.ElementalBalanceIsRecipeSpell(.RewardSpellList(i)) Then
+                            Call modElementalBalanceLog.LogElementalBalance("recipe_learned", modElementalBalanceLog.ElementalBalanceActorId(False, UserIndex), modElementalBalanceLog.ElementalBalanceActorClass(False, UserIndex), "0", "none", CLng(.RewardSpellList(i)), 0, 0, 0, 0, modElementalBalanceLog.ElementalBalanceMap(False, UserIndex), modElementalBalanceLog.ElementalBalanceCharId(False, UserIndex), modElementalBalanceLog.ElementalBalanceAccountId(False, UserIndex), 0, 0, 0)
+                        End If
                     End If
                     UserList(UserIndex).flags.ModificoHechizos = True
                 End If
             Next i
+        End If
+        ' Grupo 7 (plan 10.001, punto 7b): quest_complete, acotado a las quests de
+        ' receta (las que entregan HECHIZO414-419) -- no todas las quests.
+        If modElementalBalanceLog.ElementalPlayerTelemetryEnabled() Then
+            Dim ebQuestIsRecipe As Boolean
+            Dim ebRs As Integer
+            ebQuestIsRecipe = False
+            For ebRs = 1 To .RewardSpellCount
+                If modElementalBalanceLog.ElementalBalanceIsRecipeSpell(.RewardSpellList(ebRs)) Then
+                    ebQuestIsRecipe = True
+                    Exit For
+                End If
+            Next ebRs
+            If ebQuestIsRecipe Then
+                Call modElementalBalanceLog.LogElementalBalance("quest_complete", modElementalBalanceLog.ElementalBalanceActorId(False, UserIndex), modElementalBalanceLog.ElementalBalanceActorClass(False, UserIndex), "0", "none", CLng(QuestIndex), 0, 0, 0, 0, modElementalBalanceLog.ElementalBalanceMap(False, UserIndex), modElementalBalanceLog.ElementalBalanceCharId(False, UserIndex), modElementalBalanceLog.ElementalBalanceAccountId(False, UserIndex), 0, 0, 0)
+            End If
         End If
         'Actualizamos el personaje
         Call UpdateUserInv(True, UserIndex, 0)

@@ -137,6 +137,8 @@ Public Sub IBaseEffectOverTime_Update(ByVal DeltaTime As Long)
     If DurationLeft <= 0 Then
         ' Expiracion: limpia penalidades cacheadas
         If DotInfo.TargetRef.RefType = eUser Then
+            ' Grupo 7 (plan 10.001, punto 7b): effect_end reason=expiro (motivo 0).
+            Call modElementalBalanceLog.LogPoisonEffectEnd(DotInfo.TargetRef.ArrayIndex, Source.ArrayIndex, Source.RefType = eNpc, IsValidRef(Source), DotInfo.EotId, DurationTotalMs - DurationLeft, 0, 0)
             Call ClearNeuroCache(DotInfo.TargetRef.ArrayIndex)
         End If
         DotInfo.RemoveEffect = True
@@ -176,6 +178,12 @@ End Function
 
 Public Property Get IBaseEffectOverTime_EotId() As Integer
     IBaseEffectOverTime_EotId = DotInfo.EotId
+End Property
+
+' Grupo 7 (plan 10.001, punto 7b): duracion servida para effect_end.
+Public Property Get TelemetryServedMs() As Long
+    TelemetryServedMs = DurationTotalMs - DurationLeft
+    If TelemetryServedMs < 0 Then TelemetryServedMs = 0
 End Property
 
 Public Sub IBaseEffectOverTime_OnRemove()

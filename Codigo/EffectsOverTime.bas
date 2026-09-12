@@ -457,6 +457,12 @@ Public Sub RemovePoisonMinor(ByVal TargetIndex As Integer, ByVal TargetType As e
         UserList(TargetIndex).flags.PoisonMinorActive = 0
         Do While i < UserList(TargetIndex).EffectOverTime.EffectCount
             If UserList(TargetIndex).EffectOverTime.EffectList(i).TypeId = e_EffectOverTimeType.ePoisonMinor Then
+                ' Grupo 7 (plan 10.001, punto 7b): effect_end reason=curado (motivo 1).
+                If modElementalBalanceLog.ElementalPlayerTelemetryEnabled() Then
+                    Dim ebMinorCured As PoisonMinorEffect
+                    Set ebMinorCured = UserList(TargetIndex).EffectOverTime.EffectList(i)
+                    Call modElementalBalanceLog.LogPoisonEffectEnd(TargetIndex, UserList(TargetIndex).EffectOverTime.EffectList(i).CasterArrayIndex, UserList(TargetIndex).EffectOverTime.EffectList(i).CasterRefType = eNpc, UserList(TargetIndex).EffectOverTime.EffectList(i).CasterIsValid, UserList(TargetIndex).EffectOverTime.EffectList(i).EotId, ebMinorCured.TelemetryServedMs, 0, 1)
+                End If
                 UserList(TargetIndex).EffectOverTime.EffectList(i).RemoveMe = True
                 Call RemoveEffectAtPos(UserList(TargetIndex).EffectOverTime, i)
             Else
@@ -542,6 +548,12 @@ Public Sub RemovePoisonHemo(ByVal TargetIndex As Integer, ByVal TargetType As e_
         UserList(TargetIndex).flags.PoisonHemoStacks = 0
         Do While i < UserList(TargetIndex).EffectOverTime.EffectCount
             If UserList(TargetIndex).EffectOverTime.EffectList(i).TypeId = e_EffectOverTimeType.ePoisonHemo Then
+                ' Grupo 7 (plan 10.001, punto 7b): effect_end reason=curado (motivo 1).
+                If modElementalBalanceLog.ElementalPlayerTelemetryEnabled() Then
+                    Dim ebHemoCured As PoisonHemoEffect
+                    Set ebHemoCured = UserList(TargetIndex).EffectOverTime.EffectList(i)
+                    Call modElementalBalanceLog.LogPoisonEffectEnd(TargetIndex, UserList(TargetIndex).EffectOverTime.EffectList(i).CasterArrayIndex, UserList(TargetIndex).EffectOverTime.EffectList(i).CasterRefType = eNpc, UserList(TargetIndex).EffectOverTime.EffectList(i).CasterIsValid, UserList(TargetIndex).EffectOverTime.EffectList(i).EotId, ebHemoCured.TelemetryServedMs, ebHemoCured.TelemetryPeakStacks, 1)
+                End If
                 UserList(TargetIndex).EffectOverTime.EffectList(i).RemoveMe = True
                 Call RemoveEffectAtPos(UserList(TargetIndex).EffectOverTime, i)
             Else
@@ -630,6 +642,12 @@ Public Sub RemovePoisonNeuro(ByVal TargetIndex As Integer, ByVal TargetType As e
         End With
         Do While i < UserList(TargetIndex).EffectOverTime.EffectCount
             If UserList(TargetIndex).EffectOverTime.EffectList(i).TypeId = e_EffectOverTimeType.ePoisonNeuro Then
+                ' Grupo 7 (plan 10.001, punto 7b): effect_end reason=curado (motivo 1).
+                If modElementalBalanceLog.ElementalPlayerTelemetryEnabled() Then
+                    Dim ebNeuroCured As PoisonNeuroEffect
+                    Set ebNeuroCured = UserList(TargetIndex).EffectOverTime.EffectList(i)
+                    Call modElementalBalanceLog.LogPoisonEffectEnd(TargetIndex, UserList(TargetIndex).EffectOverTime.EffectList(i).CasterArrayIndex, UserList(TargetIndex).EffectOverTime.EffectList(i).CasterRefType = eNpc, UserList(TargetIndex).EffectOverTime.EffectList(i).CasterIsValid, UserList(TargetIndex).EffectOverTime.EffectList(i).EotId, ebNeuroCured.TelemetryServedMs, 0, 1)
+                End If
                 UserList(TargetIndex).EffectOverTime.EffectList(i).RemoveMe = True
                 Call RemoveEffectAtPos(UserList(TargetIndex).EffectOverTime, i)
             Else

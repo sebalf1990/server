@@ -446,6 +446,11 @@ Sub AgregarHechizo(ByVal UserIndex As Integer, ByVal Slot As Integer)
             Call UpdateUserHechizos(False, UserIndex, CByte(j))
             'Quitamos del inv el item
             Call QuitarUserInvItem(UserIndex, CByte(Slot), 1)
+            ' Grupo 7 (plan 10.001, punto 7b): recipe_learned via pergamino suelto
+            ' (HECHIZO414-419). item=indice de Hechizos(), excepcion igual que "cast".
+            If modElementalBalanceLog.ElementalPlayerTelemetryEnabled() And modElementalBalanceLog.ElementalBalanceIsRecipeSpell(hIndex) Then
+                Call modElementalBalanceLog.LogElementalBalance("recipe_learned", modElementalBalanceLog.ElementalBalanceActorId(False, UserIndex), modElementalBalanceLog.ElementalBalanceActorClass(False, UserIndex), "0", "none", CLng(hIndex), 0, 0, 0, 0, modElementalBalanceLog.ElementalBalanceMap(False, UserIndex), modElementalBalanceLog.ElementalBalanceCharId(False, UserIndex), modElementalBalanceLog.ElementalBalanceAccountId(False, UserIndex), 0, 0, 0)
+            End If
         End If
         UserList(UserIndex).flags.ModificoHechizos = True
     Else

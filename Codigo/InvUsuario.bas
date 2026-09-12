@@ -679,6 +679,10 @@ Sub PickObj(ByVal UserIndex As Integer)
                 Else
                     Call WriteShowPickUpObj(UserIndex, MiObj.ObjIndex, MiObj.amount)
                 End If
+                ' Grupo 7 (plan 10.001, punto 7b): pickup, solo catalogo (igual criterio que buy/craft/sell).
+                If modElementalBalanceLog.ElementalPlayerTelemetryEnabled() And modElementalBalanceLog.ElementalBalanceInCatalog(MiObj.ObjIndex) Then
+                    Call modElementalBalanceLog.LogElementalBalance("pickup", modElementalBalanceLog.ElementalBalanceActorId(False, UserIndex), modElementalBalanceLog.ElementalBalanceActorClass(False, UserIndex), "0", "none", CLng(MiObj.ObjIndex), modElementalBalanceLog.ElementalBalanceCatalogTier(MiObj.ObjIndex), 0, CLng(MiObj.amount), 0, modElementalBalanceLog.ElementalBalanceMap(False, UserIndex), modElementalBalanceLog.ElementalBalanceCharId(False, UserIndex), modElementalBalanceLog.ElementalBalanceAccountId(False, UserIndex), 0, 0, 0)
+                End If
                 Call UserDidPickupItem(UserIndex, MiObj.ObjIndex)
                 If UserList(UserIndex).flags.jugando_captura = 1 Then
                     If Not InstanciaCaptura Is Nothing Then
@@ -2458,15 +2462,20 @@ Sub UseInvItem(ByVal UserIndex As Integer, ByVal Slot As Byte, ByVal ByClick As 
                         ' Detectar si hay algo que curar
                         Dim algoCurado As Boolean
                         algoCurado = False
+                        ' Grupo 7 (plan 10.001, punto 7b): antidote_use necesita saber CUAL
+                        ' veneno se curo en este uso, para el bitmask del campo final.
+                        Dim ebCuredMinor As Boolean, ebCuredHemo As Boolean, ebCuredNeuro As Boolean
                         ' Menor
                         If obj.CuraMenor = 1 And .flags.PoisonMinorActive <> 0 Then
                             Call RemovePoisonMinor(UserIndex, eUser)
                             algoCurado = True
+                            ebCuredMinor = True
                         End If
                         ' Hemo: 1=eliminar total, 2=reducir N stacks
                         If obj.CuraHemo = 1 And .flags.PoisonHemoStacks > 0 Then
                             Call RemovePoisonHemo(UserIndex, eUser)
                             algoCurado = True
+                            ebCuredHemo = True
                         ElseIf obj.CuraHemo = 2 And .flags.PoisonHemoStacks > 0 Then
                             ' Cooldown propio para parcial Hemo
                             If obj.PoisonCooldownMs > 0 And .Counters.LastPoisonHemoPartialPotion > 0 Then
@@ -2489,15 +2498,23 @@ Sub UseInvItem(ByVal UserIndex As Integer, ByVal Slot As Byte, ByVal ByClick As 
                             End If
                             .Counters.LastPoisonHemoPartialPotion = nowTick
                             algoCurado = True
+                            ebCuredHemo = True
                         End If
                         ' Neuro
                         If obj.CuraNeuro = 1 And .flags.PoisonNeuroActive <> 0 Then
                             Call RemovePoisonNeuro(UserIndex, eUser)
                             algoCurado = True
+                            ebCuredNeuro = True
                         End If
                         If algoCurado Then
                             .Counters.LastPoisonCurePotion = nowTick
                             Call QuitarUserInvItem(UserIndex, Slot, 1)
+                            ' Grupo 7 (plan 10.001, punto 7b): antidote_use, final=bitmask (1=Menor,2=Hemo,4=Neuro).
+                            If modElementalBalanceLog.ElementalPlayerTelemetryEnabled() Then
+                                Dim ebAntidoteMask As Long
+                                ebAntidoteMask = IIf(ebCuredMinor, 1, 0) + IIf(ebCuredHemo, 2, 0) + IIf(ebCuredNeuro, 4, 0)
+                                Call modElementalBalanceLog.LogElementalBalance("antidote_use", modElementalBalanceLog.ElementalBalanceActorId(False, UserIndex), modElementalBalanceLog.ElementalBalanceActorClass(False, UserIndex), "0", "none", CLng(.invent.Object(Slot).ObjIndex), modElementalBalanceLog.ElementalBalanceCatalogTier(.invent.Object(Slot).ObjIndex), 0, 1, ebAntidoteMask, modElementalBalanceLog.ElementalBalanceMap(False, UserIndex), modElementalBalanceLog.ElementalBalanceCharId(False, UserIndex), modElementalBalanceLog.ElementalBalanceAccountId(False, UserIndex), 0, 0, 0)
+                            End If
                             Call WriteLocaleMsg(UserIndex, MSG_CURADO_ENVENENAMIENTO, e_FontTypeNames.FONTTYPE_INFO)
                             If obj.Snd1 <> 0 Then
                                 Call SendData(SendTarget.ToPCAliveArea, UserIndex, PrepareMessagePlayWave(obj.Snd1, .pos.x, .pos.y))
