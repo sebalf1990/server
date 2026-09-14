@@ -339,7 +339,21 @@ Public Function ApplyElementalResist(ByVal RawDamage As Long, ByRef r As t_Eleme
     cap = ResistCapForType(dmgType)
     If pct > cap Then pct = cap
     If pct < 0 Then pct = 0
-    dmg = Int(CDbl(dmg) * (1# - pct))
+    ' Plan 10.001 decision 21: redondeo probabilistico en vez de truncar con Int().
+    ' Int() sola casi siempre trunca para abajo (medido: 6% nominal daba 26.5% real
+    ' en componentes chicos). La parte decimal perdida se convierte en la chance de
+    ' sumar 1, asi el promedio queda en el pct nominal para cualquier tamano de dano.
+    ' pct=0 -> scaled=dmg exacto, frac=0, no se tira dado y dmg queda intacto.
+    Dim scaled As Double
+    scaled = CDbl(dmg) * (1# - pct)
+    dmg = Int(scaled)
+    Dim frac As Double
+    frac = scaled - dmg
+    If frac > 0 Then
+        Dim roll As Long
+        roll = RandomNumber(1, 10000)
+        If roll <= CLng(frac * 10000) Then dmg = dmg + 1
+    End If
     If dmg < 0 Then dmg = 0
     ApplyElementalResist = dmg
 End Function
