@@ -1897,26 +1897,324 @@ Private Function GetElapsed() As Single
     Call QueryPerformanceCounter(sTime2)
 End Function
 
-Public Function RunScriptInFile(ByVal FilePath As String) As Boolean
-    Dim script As String
-    script = FileText(FilePath)
-    script = Replace(Replace(script, Chr(10), ""), Chr(13), "")
+Private Function EsBlancoSql(ByVal c As String) As Boolean
+    EsBlancoSql = (c = " " Or c = vbTab Or c = Chr(13) Or c = Chr(10))
+End Function
+
+Private Function TrimSqlWhitespace(ByVal s As String) As String
+    Dim inicio As Long, fin As Long
+    inicio = 1
+    fin = Len(s)
+    Do While inicio <= fin
+        If EsBlancoSql(Mid$(s, inicio, 1)) Then
+            inicio = inicio + 1
+        Else
+            Exit Do
+        End If
+    Loop
+    Do While fin >= inicio
+        If EsBlancoSql(Mid$(s, fin, 1)) Then
+            fin = fin - 1
+        Else
+            Exit Do
+        End If
+    Loop
+    If fin < inicio Then
+        TrimSqlWhitespace = vbNullString
+    Else
+        TrimSqlWhitespace = Mid$(s, inicio, fin - inicio + 1)
+    End If
+End Function
+
+Private Sub AgregarSentenciaSql(ByRef Statements() As String, ByRef count As Long, ByVal texto As String)
+    Dim limpio As String
+    limpio = TrimSqlWhitespace(texto)
+    If limpio = vbNullString Then Exit Sub
+    If count > UBound(Statements) Then ReDim Preserve Statements(0 To UBound(Statements) + 16)
+    Statements(count) = limpio
+    count = count + 1
+End Sub
+
+'Lexer caracter a caracter (plan 15.001). Parte un script SQL en sentencias separadas
+'por ';' fuera de literales y comentarios. Reconoce literales '...' (con ''), "..."
+'(con ""), `...` y [...], comentario de linea -- hasta CR/LF y comentario de bloque
+'/* ... */. Los comentarios se reemplazan por un espacio: nunca se borran CR, LF ni
+'tab, para no pegar tokens de lineas contiguas (el bug que este plan arregla).
+'Devuelve la cantidad de sentencias en Statements(), o -1 y ParseError si quedo un
+'literal o un comentario de bloque sin cerrar al final del archivo.
+Private Function SplitSqlStatements(ByVal script As String, ByRef Statements() As String, ByRef ParseError As String) As Long
+    Const ST_NORMAL As Long = 0
+    Const ST_SINGLE As Long = 1
+    Const ST_DOUBLE As Long = 2
+    Const ST_BACKTICK As Long = 3
+    Const ST_BRACKET As Long = 4
+    Const ST_LINECOMMENT As Long = 5
+    Const ST_BLOCKCOMMENT As Long = 6
+
+    Dim estado As Long
+    estado = ST_NORMAL
+
+    Dim actual As String
+    actual = vbNullString
+
+    Dim count As Long
+    count = 0
+    ReDim Statements(0 To 15)
+
+    Dim largo As Long
+    largo = Len(script)
+
+    Dim i As Long
+    Dim c As String
+
+    i = 1
+    Do While i <= largo
+        c = Mid$(script, i, 1)
+
+        Select Case estado
+            Case ST_NORMAL
+                If c = "'" Then
+                    estado = ST_SINGLE
+                    actual = actual & c
+                ElseIf c = """" Then
+                    estado = ST_DOUBLE
+                    actual = actual & c
+                ElseIf c = "`" Then
+                    estado = ST_BACKTICK
+                    actual = actual & c
+                ElseIf c = "[" Then
+                    estado = ST_BRACKET
+                    actual = actual & c
+                ElseIf c = "-" And Mid$(script, i + 1, 1) = "-" Then
+                    estado = ST_LINECOMMENT
+                    actual = actual & " "
+                    i = i + 1
+                ElseIf c = "/" And Mid$(script, i + 1, 1) = "*" Then
+                    estado = ST_BLOCKCOMMENT
+                    actual = actual & " "
+                    i = i + 1
+                ElseIf c = ";" Then
+                    Call AgregarSentenciaSql(Statements, count, actual)
+                    actual = vbNullString
+                Else
+                    actual = actual & c
+                End If
+
+            Case ST_SINGLE
+                actual = actual & c
+                If c = "'" Then
+                    If Mid$(script, i + 1, 1) = "'" Then
+                        actual = actual & "'"
+                        i = i + 1
+                    Else
+                        estado = ST_NORMAL
+                    End If
+                End If
+
+            Case ST_DOUBLE
+                actual = actual & c
+                If c = """" Then
+                    If Mid$(script, i + 1, 1) = """" Then
+                        actual = actual & """"
+                        i = i + 1
+                    Else
+                        estado = ST_NORMAL
+                    End If
+                End If
+
+            Case ST_BACKTICK
+                actual = actual & c
+                If c = "`" Then estado = ST_NORMAL
+
+            Case ST_BRACKET
+                actual = actual & c
+                If c = "]" Then estado = ST_NORMAL
+
+            Case ST_LINECOMMENT
+                If c = Chr(13) Or c = Chr(10) Then
+                    actual = actual & c
+                    estado = ST_NORMAL
+                End If
+                'el resto del comentario se descarta: ya se reemplazo por el espacio de arriba
+
+            Case ST_BLOCKCOMMENT
+                If c = "*" And Mid$(script, i + 1, 1) = "/" Then
+                    actual = actual & " "
+                    estado = ST_NORMAL
+                    i = i + 1
+                ElseIf c = Chr(13) Or c = Chr(10) Or c = vbTab Then
+                    actual = actual & c
+                End If
+                'el resto del comentario se descarta: ya se reemplazo por el espacio de arriba
+        End Select
+
+        i = i + 1
+    Loop
+
+    If estado = ST_SINGLE Or estado = ST_DOUBLE Or estado = ST_BACKTICK Or estado = ST_BRACKET Then
+        ParseError = "literal sin cerrar"
+        SplitSqlStatements = -1
+        Exit Function
+    End If
+    If estado = ST_BLOCKCOMMENT Then
+        ParseError = "comentario de bloque sin cerrar"
+        SplitSqlStatements = -1
+        Exit Function
+    End If
+
+    'La ultima sentencia sin ';' final tambien cuenta.
+    Call AgregarSentenciaSql(Statements, count, actual)
+
+    If count = 0 Then
+        ReDim Statements(0 To -1)
+    Else
+        ReDim Preserve Statements(0 To count - 1)
+    End If
+    SplitSqlStatements = count
+End Function
+
+'Primera palabra de una sentencia ya recortada (BEGIN, COMMIT, ROLLBACK, etc.), en
+'mayusculas, para decidir si el cargador la omite o la rechaza (plan 15.001).
+Private Function PrimeraPalabraSql(ByVal sentencia As String) As String
+    Dim largo As Long, i As Long, pos As Long
+    largo = Len(sentencia)
+    pos = 0
+    For i = 1 To largo
+        If EsBlancoSql(Mid$(sentencia, i, 1)) Or Mid$(sentencia, i, 1) = "(" Then
+            pos = i
+            Exit For
+        End If
+    Next i
+    If pos = 0 Then
+        PrimeraPalabraSql = UCase$(sentencia)
+    Else
+        PrimeraPalabraSql = UCase$(Left$(sentencia, pos - 1))
+    End If
+End Function
+
+'Nombre de archivo a partir de una ruta con '/' o '\', para los mensajes de log.
+Private Function NombreDeArchivoSql(ByVal RutaCompleta As String) As String
+    Dim pos As Long
+    pos = InStrRev(RutaCompleta, "/")
+    If InStrRev(RutaCompleta, "\") > pos Then pos = InStrRev(RutaCompleta, "\")
+    NombreDeArchivoSql = Mid$(RutaCompleta, pos + 1)
+End Function
+
+'Aplica un archivo de ScriptsDB completo, sentencia por sentencia, dentro de una unica
+'transaccion junto con su fila en migrations (plan 15.001, incidente 2026-06-10_): si
+'una sentencia falla no queda rastro de las previas ni la fila en migrations. El BEGIN/
+'COMMIT propio de un script se omite (la transaccion la maneja este cargador; un BEGIN
+'dentro de otra transaccion abierta falla, T16); ROLLBACK/SAVEPOINT/RELEASE rechazan la
+'migracion antes de tocar la base. Devuelve False sin tocar la base ante cualquier falla;
+'el llamador (LoadDBMigrations) sigue cortando la cadena en el primer False.
+Public Function RunScriptInFile(ByVal FilePath As String, ByVal date_ As String, ByVal Description As String) As Boolean
+    On Error GoTo RunScriptInFile_Err
+
+    Dim NombreArchivo As String
+    NombreArchivo = NombreDeArchivoSql(FilePath)
+
+    Dim Statements() As String
+    Dim ParseError As String
+    Dim n As Long
+    n = SplitSqlStatements(FileText(FilePath), Statements, ParseError)
+
+    If n = -1 Then
+        Call LogDatabaseError("Migracion FALLIDA " & NombreArchivo & ": " & ParseError)
+        RunScriptInFile = False
+        Exit Function
+    End If
+    If n = 0 Then
+        Call LogDatabaseError("Migracion FALLIDA " & NombreArchivo & ": sin sentencias ejecutables")
+        RunScriptInFile = False
+        Exit Function
+    End If
+
+    Dim EnTransaccion As Boolean
+    EnTransaccion = False
+
     Dim RS As Recordset
-    If script <> vbNullString Then
-        Set RS = Query(script)
-        If RS Is Nothing Then
+    Dim k As Long
+    Dim Palabra As String
+
+    'ROLLBACK/SAVEPOINT/RELEASE rechazan la migracion entera antes de abrir la
+    'transaccion: nunca deben llegar a tocar la base.
+    For k = 0 To n - 1
+        Palabra = PrimeraPalabraSql(Statements(k))
+        If Palabra = "ROLLBACK" Or Palabra = "SAVEPOINT" Or Palabra = "RELEASE" Then
+            Call LogDatabaseError("Migracion FALLIDA " & NombreArchivo & ": sentencia " & (k + 1) & " de " & n & ": " & Palabra & " no esta permitido en una migracion")
             RunScriptInFile = False
             Exit Function
         End If
+    Next k
+
+    DBError = vbNullString
+    Set RS = Query("BEGIN TRANSACTION")
+    If RS Is Nothing Then
+        Call LogDatabaseError("Migracion FALLIDA " & NombreArchivo & ": no se pudo abrir la transaccion: " & DBError)
+        RunScriptInFile = False
+        Exit Function
     End If
+    EnTransaccion = True
+
+    For k = 0 To n - 1
+        Palabra = PrimeraPalabraSql(Statements(k))
+        If Palabra = "BEGIN" Or Palabra = "COMMIT" Or Palabra = "END" Then
+            Call LogServerLifecycle("Migracion " & NombreArchivo & ": sentencia " & (k + 1) & " de " & n & " (" & Palabra & ") omitida, la transaccion la maneja el cargador")
+        Else
+            DBError = vbNullString
+            Set RS = Query(Statements(k))
+            If RS Is Nothing Then
+                Call Query("ROLLBACK")
+                EnTransaccion = False
+                Call LogDatabaseError("Migracion FALLIDA " & NombreArchivo & ": sentencia " & (k + 1) & " de " & n & ": " & DBError)
+                RunScriptInFile = False
+                Exit Function
+            End If
+        End If
+    Next k
+
+    DBError = vbNullString
+    Set RS = Query("insert into migrations (date, description) values (?,?);", date_, Description)
+    If RS Is Nothing Then
+        Call Query("ROLLBACK")
+        EnTransaccion = False
+        Call LogDatabaseError("Migracion FALLIDA " & NombreArchivo & ": no se pudo registrar en migrations: " & DBError)
+        RunScriptInFile = False
+        Exit Function
+    End If
+
+    DBError = vbNullString
+    Set RS = Query("COMMIT")
+    If RS Is Nothing Then
+        Call Query("ROLLBACK")
+        EnTransaccion = False
+        Call LogDatabaseError("Migracion FALLIDA " & NombreArchivo & ": no se pudo confirmar la transaccion: " & DBError)
+        RunScriptInFile = False
+        Exit Function
+    End If
+    EnTransaccion = False
+
+    Call LogServerLifecycle("Migracion aplicada: " & NombreArchivo & " (" & n & " sentencias)")
     RunScriptInFile = True
+    Exit Function
+
+RunScriptInFile_Err:
+    If EnTransaccion Then
+        Call Query("ROLLBACK")
+        EnTransaccion = False
+    End If
+    Call LogDatabaseError("Migracion FALLIDA " & NombreDeArchivoSql(FilePath) & ": " & Err.Description)
+    RunScriptInFile = False
 End Function
 
-'Reads the files inside the ScriptsDB folder, it can be a create table, alter, etc.
-'we are calling this files dbmigrations, this function check this
-'folder and the db, and run all the files that are not registered in the db migration table
-'the file should store the name in the format of YYYYMMDD-XX-description text.sql
-'where the XX is the number of migrations generated the same day
+'Lee los archivos de la carpeta ScriptsDB (.sql: create table, alter, insert, etc.) y
+'aplica los que todavia no esten registrados en la tabla migrations, en orden por
+'nombre. Formato del nombre: YYYYMMDD-NN-descripcion.sql (NN = numero de migracion del
+'dia); los primeros 11 caracteres son la identidad (date_) y un archivo aplicado nunca
+'se renombra. Cada archivo puede tener comentarios '--' y /* */ y varias sentencias
+'separadas por ';', partidas en varias lineas: se aplica completo dentro de una unica
+'transaccion junto con su fila en migrations (RunScriptInFile). No escribir BEGIN/
+'COMMIT propios (se ignoran) ni ROLLBACK/SAVEPOINT/RELEASE (hacen fallar la migracion).
 Public Sub LoadDBMigrations()
     On Error GoTo LoadDBMigrations_Err
     'Consulto a la DB a ver si existe la tabla migrations; si no existe, la creo.
@@ -1925,7 +2223,7 @@ Public Sub LoadDBMigrations()
     If RS Is Nothing Then
         Call Query("CREATE TABLE ""migrations"" (    ""id"" INTEGER NOT NULL,    ""date"" VARCHAR(11) NOT NULL,    ""description"" VARCHAR(50) NULL,    Primary key(""id""));")
     End If
-    'Recolectamos todos los scripts de ScriptsDB en un array.
+    'Recolectamos todos los scripts .sql de ScriptsDB en un array.
     Dim Files() As String
     Dim count As Long
     count = 0
@@ -1934,9 +2232,11 @@ Public Sub LoadDBMigrations()
     sFilename = dir(App.Path & "/ScriptsDB/")
     Do While sFilename <> ""
         If Len(sFilename) > 11 Then
-            If count > UBound(Files) Then ReDim Preserve Files(0 To UBound(Files) + 256)
-            Files(count) = sFilename
-            count = count + 1
+            If LCase$(Right$(sFilename, 4)) = ".sql" Then
+                If count > UBound(Files) Then ReDim Preserve Files(0 To UBound(Files) + 256)
+                Files(count) = sFilename
+                count = count + 1
+            End If
         End If
         sFilename = dir()
     Loop
@@ -1970,10 +2270,19 @@ Public Sub LoadDBMigrations()
             If Not Registrada.EOF Then YaRegistrada = True
         End If
         If Not YaRegistrada Then
-            If RunScriptInFile(App.Path & "/ScriptsDB/" & Files(i)) Then
-                Description = mid(Files(i), 13, Len(Files(i)) - 16)
-                Call Query("insert into migrations (date, description) values (?,?);", date_, Description)
-            Else
+            'Description: se quita un '-' o '_' inicial y el '.sql' final (sin
+            'distinguir mayusculas); el registro ahora va DENTRO de la transaccion
+            'de RunScriptInFile, no aparte.
+            Description = Mid$(Files(i), 12)
+            If Len(Description) > 0 Then
+                If Left$(Description, 1) = "-" Or Left$(Description, 1) = "_" Then
+                    Description = Mid$(Description, 2)
+                End If
+            End If
+            If LCase$(Right$(Description, 4)) = ".sql" Then
+                Description = Left$(Description, Len(Description) - 4)
+            End If
+            If Not RunScriptInFile(App.Path & "/ScriptsDB/" & Files(i), date_, Description) Then
                 Call Err.raise(5, , "invalid - " & Files(i))
             End If
         End If
