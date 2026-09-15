@@ -119,6 +119,13 @@ Public Sub Comercio(ByVal Modo As eModoComercio, ByVal UserIndex As Integer, ByV
             'Msg1085= Lo siento, no puedo comprarte ese item.
             Call WriteLocaleMsg(UserIndex, MSG_NO_SIENTO_PUEDO_COMPRARTE_ESE_ITEM_1085, e_FontTypeNames.FONTTYPE_TALK)
             Exit Sub
+        ' Plan 15.002 (Ola 2, hallazgo N7): ningun NPC recompra naves. Sin este guard, el
+        ' fallback de mas abajo ("si el NPC la vende, se la compramos igual") permite
+        ' revender al Armador las mismas naves que el vende (Comercio.bas, mas abajo).
+        ElseIf ObjData(Objeto.ObjIndex).OBJType = e_OBJType.otShips Then
+            'Msg1084= Lo siento, no puedo comprarte ese item.
+            Call WriteLocaleMsg(UserIndex, MSG_NO_SIENTO_PUEDO_COMPRARTE_ESE_ITEM, e_FontTypeNames.FONTTYPE_TALK)
+            Exit Sub
         ElseIf ((NpcList(NpcIndex).TipoItems <> ObjData(Objeto.ObjIndex).OBJType And NpcList(NpcIndex).TipoItems <> e_OBJType.otElse) Or Objeto.ObjIndex = iORO) Then
             'Agrego que si vende el item, lo compre tambien.
             Dim LoVende As Boolean
