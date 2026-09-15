@@ -3088,6 +3088,11 @@ Private Sub HandleCreateNewGuild(ByVal UserIndex As Integer)
             Call QuitarObjetos(408, 1, UserIndex)
             Call QuitarObjetos(409, 1, UserIndex)
             Call QuitarObjetos(412, 1, UserIndex)
+            ' Plan 15.002 (Ola 2, C1/C2): precio en oro de fundar, descontado una sola vez
+            ' aca (CrearNuevoClan -> PuedeFundarUnClan -> PuedeIniciarFundacion ya valido
+            ' el oro segundos antes; si en el medio se gasto, CrearNuevoClan no llega a True).
+            .Stats.GLD = .Stats.GLD - PriceFoundGuild
+            Call WriteUpdateGold(UserIndex)
             Call SendData(SendTarget.ToAll, UserIndex, PrepareMessageLocaleMsg(MSG_FUNDADO_CLAN_ALINEACION, GetUserDisplayName(UserIndex) & "¬" & GuildName & "¬" & GuildAlignment(.GuildIndex), _
                     e_FontTypeNames.FONTTYPE_GUILD)) 'Msg1642=¬1 ha fundado el clan <¬2> de alineación ¬3.
             Call SendData(SendTarget.ToAll, 0, PrepareMessagePlayWave(44, NO_3D_SOUND, NO_3D_SOUND))
@@ -3263,6 +3268,14 @@ Private Sub HandleModifySkills(ByVal UserIndex As Integer)
                             huboRechazo = True
                         End If
                     End If
+                End If
+                ' Plan 15.002 (Ola 2): Navegacion y Liderazgo dejaron de costar puntos de
+                ' skill (naves por oro+nivel, clan por oro); el guard rechaza y devuelve
+                ' cualquier punto puesto ahi, sin depender de ningun feature toggle.
+                If points(i) > 0 And (i = e_Skill.Navegacion Or i = e_Skill.liderazgo) Then
+                    Call WriteLocaleMsg(UserIndex, MSG_SKILL_YA_NO_SE_ASIGNA, e_FontTypeNames.FONTTYPE_INFO)
+                    points(i) = 0
+                    huboRechazo = True
                 End If
                 .SkillPts = .SkillPts - points(i)
                 If .UserSkills(i) <> .UserSkills(i) + points(i) Then
@@ -6504,26 +6517,17 @@ Private Sub HandleQuieroFundarClan(ByVal UserIndex As Integer)
     On Error GoTo ErrHandler
     With UserList(UserIndex)
         If UserList(UserIndex).flags.Privilegios And e_PlayerType.Consejero Then Exit Sub
-        If UserList(UserIndex).GuildIndex > 0 Then
-            'Msg1236= Ya perteneces a un clan, no podés fundar otro.
-            Call WriteLocaleMsg(UserIndex, MSG_NO_PERTENECES_CLAN_PODES_FUNDAR_OTRO, e_FontTypeNames.FONTTYPE_INFO)
-            Exit Sub
-        End If
-        If UserList(UserIndex).Stats.ELV < 23 Or UserList(UserIndex).Stats.UserSkills(e_Skill.liderazgo) < 50 Then
-            'Msg1237= Para fundar un clan debes ser Nivel 23, tener 50 en liderazgo y tener en tu inventario las 4 Gemas de Fundación: Gema Verde, Gema Roja, Gema Azul y Gema Polar.
-            Call WriteLocaleMsg(UserIndex, MSG_FUNDAR_CLAN_DEBES_NIVEL_TENER_LIDERAZGO_TENER_INVENTARIO, e_FontTypeNames.FONTTYPE_INFO)
-            Exit Sub
-        End If
-        If Not TieneObjetos(407, 1, UserIndex) Or Not TieneObjetos(408, 1, UserIndex) Or Not TieneObjetos(409, 1, UserIndex) Or Not TieneObjetos(412, 1, UserIndex) Then
-            'Msg1238= Para fundar un clan debes tener en tu inventario las 4 Gemas de Fundación: Gema Verde, Gema Roja, Gema Azul y Gema Polar.
-            Call WriteLocaleMsg(UserIndex, MSG_FUNDAR_CLAN_DEBES_TENER_INVENTARIO_GEMAS_FUNDACION_GEMA, e_FontTypeNames.FONTTYPE_INFO)
+        ' Plan 15.002 (Ola 2, C1): un solo chequeo (antes se repetia GuildIndex/nivel/
+        ' gemas/oro aca y de nuevo en PuedeFundarUnClan al confirmar el formulario).
+        Dim errorStr As String
+        If Not modGuilds.PuedeIniciarFundacion(UserIndex, errorStr) Then
+            Call WriteGuildRefError(UserIndex, errorStr)
             Exit Sub
         End If
         'Msg1239= Servidor » ¡Comenzamos a fundar el clan! Ingresa todos los datos solicitados.
         Call WriteLocaleMsg(UserIndex, MSG_SERVIDOR_COMENZAMOS_FUNDAR_CLAN_INGRESA_TODOS_DATOS_SOLICITADOS, e_FontTypeNames.FONTTYPE_INFO)
         Call WriteShowFundarClanForm(UserIndex)
     End With
-    Exit Sub
     Exit Sub
 ErrHandler:
     Call TraceError(Err.Number, Err.Description, "Protocol.HandleQuieroFundarClan", Erl)
