@@ -1141,12 +1141,13 @@ Public Sub CarpinteroConstruirItem(ByVal UserIndex As Integer, ByVal ItemIndex A
         Call WriteMacroTrabajoToggle(UserIndex, False)
         Exit Sub
     End If
-    Dim ebHasMats As Boolean, ebHasSkill As Boolean, ebValidRecipeType As Boolean, ebHasTool As Boolean
+    Dim ebHasMats As Boolean, ebHasSkill As Boolean, ebValidRecipeType As Boolean, ebHasTool As Boolean, ebKnowsRecipe As Boolean
     ebHasMats = CarpinteroTieneMateriales(UserIndex, ItemIndex, cantidad_a_construir)
     ebHasSkill = (UserList(UserIndex).Stats.UserSkills(e_Skill.Carpinteria) >= ObjData(ItemIndex).SkCarpinteria)
     ebValidRecipeType = PuedeConstruirCarpintero(ItemIndex)
     ebHasTool = (ObjData(UserList(UserIndex).invent.EquippedWorkingToolObjIndex).OBJType = e_OBJType.otWorkingTools And ObjData(UserList(UserIndex).invent.EquippedWorkingToolObjIndex).Subtipo = e_WorkingToolSubType.CarpentryHacksaw)
-    If ebHasMats And ebHasSkill And ebValidRecipeType And ebHasTool Then
+    ebKnowsRecipe = KnowsCraftingRecipe(UserIndex, ItemIndex)
+    If ebHasMats And ebHasSkill And ebValidRecipeType And ebHasTool And ebKnowsRecipe Then
         If UserList(UserIndex).Stats.MinSta > 2 Then
             Call QuitarSta(UserIndex, 2)
         Else
@@ -1183,7 +1184,7 @@ Public Sub CarpinteroConstruirItem(ByVal UserIndex As Integer, ByVal ItemIndex A
         UserList(UserIndex).Counters.Trabajando = UserList(UserIndex).Counters.Trabajando + 1
     Else
         ' Grupo 7 (plan 10.001, punto 7b): craft_fail, motivo por prioridad materiales>skill>receta>herramienta.
-        Call modElementalBalanceLog.LogCraftFail(UserIndex, CLng(ItemIndex), IIf(Not ebHasMats, 0, IIf(Not ebHasSkill, 1, IIf(Not ebValidRecipeType, 2, 3))))
+        Call modElementalBalanceLog.LogCraftFail(UserIndex, CLng(ItemIndex), IIf(Not ebHasMats, 0, IIf(Not ebHasSkill, 1, IIf(Not ebValidRecipeType Or Not ebKnowsRecipe, 2, 3))))
     End If
     Exit Sub
 CarpinteroConstruirItem_Err:
@@ -1283,12 +1284,13 @@ Public Sub SastreConstruirItem(ByVal UserIndex As Integer, ByVal ItemIndex As In
     If UserList(UserIndex).invent.EquippedWorkingToolObjIndex = 0 Then
         Exit Sub
     End If
-    Dim ebHasMats As Boolean, ebHasSkill As Boolean, ebValidRecipeType As Boolean, ebHasTool As Boolean
+    Dim ebHasMats As Boolean, ebHasSkill As Boolean, ebValidRecipeType As Boolean, ebHasTool As Boolean, ebKnowsRecipe As Boolean
     ebHasMats = SastreTieneMateriales(UserIndex, ItemIndex)
     ebHasSkill = (UserList(UserIndex).Stats.UserSkills(e_Skill.Sastreria) >= ObjData(ItemIndex).SkSastreria)
     ebValidRecipeType = PuedeConstruirSastre(ItemIndex)
     ebHasTool = (ObjData(UserList(UserIndex).invent.EquippedWorkingToolObjIndex).OBJType = e_OBJType.otWorkingTools And ObjData(UserList(UserIndex).invent.EquippedWorkingToolObjIndex).Subtipo = e_WorkingToolSubType.TailorSewingbox)
-    If ebHasMats And ebHasSkill And ebValidRecipeType And ebHasTool Then
+    ebKnowsRecipe = KnowsCraftingRecipe(UserIndex, ItemIndex)
+    If ebHasMats And ebHasSkill And ebValidRecipeType And ebHasTool And ebKnowsRecipe Then
         UserList(UserIndex).Stats.MinSta = UserList(UserIndex).Stats.MinSta - 2
         Call WriteUpdateSta(UserIndex)
         Dim MiObj As t_Obj
@@ -1314,7 +1316,7 @@ Public Sub SastreConstruirItem(ByVal UserIndex As Integer, ByVal ItemIndex As In
         UserList(UserIndex).Counters.Trabajando = UserList(UserIndex).Counters.Trabajando + 1
     Else
         ' Grupo 7 (plan 10.001, punto 7b): craft_fail, motivo por prioridad materiales>skill>receta>herramienta.
-        Call modElementalBalanceLog.LogCraftFail(UserIndex, CLng(ItemIndex), IIf(Not ebHasMats, 0, IIf(Not ebHasSkill, 1, IIf(Not ebValidRecipeType, 2, 3))))
+        Call modElementalBalanceLog.LogCraftFail(UserIndex, CLng(ItemIndex), IIf(Not ebHasMats, 0, IIf(Not ebHasSkill, 1, IIf(Not ebValidRecipeType Or Not ebKnowsRecipe, 2, 3))))
     End If
     Exit Sub
 SastreConstruirItem_Err:
