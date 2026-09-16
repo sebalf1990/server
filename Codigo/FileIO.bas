@@ -3241,6 +3241,9 @@ Sub LoadGuildsConfig()
         PriceAcceptMemberGuild(i) = CInt(val(GuildsIni.GetValue("GUILDPRICEACCEPTMEMBER", "PriceAcceptMemberGuildLevel" & CStr(i), "0")))
     Next i
     
+    'Precio en oro para fundar un clan (plan 15.002, C1/C2). Long: 0 si falta la clave/seccion.
+    PriceFoundGuild = CLng(val(GuildsIni.GetValue("GUILDFOUNDATION", "PriceFoundGuild", "0")))
+    
     Set GuildsIni = Nothing
     AgregarAConsola "Se cargó la configuración de clanes (Clanes.dat)"
     Exit Sub

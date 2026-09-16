@@ -30,6 +30,7 @@ Private Type t_ProfesionConfig
     ProbPorSkill       As Single
     CantidadFija       As Integer
     EsExtraccion       As Boolean
+    PenalizacionZonaSegura As Integer
     Cargada            As Boolean
 End Type
 
@@ -75,7 +76,10 @@ Private Sub LoadSeccionProfesion(ByRef Lector As clsIniManager, ByVal seccion As
             .CantidadMax = CInt(val(Lector.GetValue(seccion, "CantidadMax")))
             .ProbBase = CSng(val(Lector.GetValue(seccion, "ProbBase")))
             .ProbPorSkill = CSng(val(Lector.GetValue(seccion, "ProbPorSkill")))
+            .PenalizacionZonaSegura = CInt(val(Lector.GetValue(seccion, "PenalizacionZonaSegura", "0")))
             If .SkillParaMax <= 0 Then .SkillParaMax = 100
+            If .PenalizacionZonaSegura < 0 Then .PenalizacionZonaSegura = 0
+            If .PenalizacionZonaSegura > 100 Then .PenalizacionZonaSegura = 100
         Else
             .CantidadFija = CInt(val(Lector.GetValue(seccion, "CantidadFija")))
             If .CantidadFija = 0 Then .CantidadFija = 1
@@ -281,6 +285,12 @@ Public Function CalcularCantidadExtraccion(ByVal UserIndex As Integer, ByVal Pro
         rango = .CantidadMax - .CantidadMin
         If rango < 0 Then rango = 0
         resultado = CSng(.CantidadMin) + (CSng(rango) * CSng(skillActual) / CSng(.SkillParaMax))
+        ' Plan 15.002 (Ola 2, G1): el "grifo de oro" de extraer en zona segura -- sin
+        ' riesgo ni penalizacion, la pesca AFK en zona segura rendia mas oro/hora que
+        ' cualquier otra fuente. No toca la probabilidad de exito, solo la cantidad.
+        If MapInfo(UserList(UserIndex).pos.Map).Seguro = 1 And .PenalizacionZonaSegura > 0 Then
+            resultado = Int(resultado * CSng(100 - .PenalizacionZonaSegura) / 100)
+        End If
     End With
     If resultado < 1 Then resultado = 1
     CalcularCantidadExtraccion = CInt(resultado)

@@ -65,6 +65,10 @@ Public RequiredGuildLevelSeeInvisible As Byte
 Public RequiredGuildLevelSafe As Byte
 Public RequiredGuildLevelShowHPBar As Byte
 Public PriceAcceptMemberGuild(1 To MAX_LEVEL_GUILD) As Integer
+' Plan 15.002 (Ola 2, C1/C2): precio en oro para fundar un clan, leido de
+' Clanes.dat [GUILDFOUNDATION] PriceFoundGuild en FileIO.LoadGuildsConfig.
+' Long (no Integer): el valor de dato es 1.000.000, se desborda un Integer de 16 bits.
+Public PriceFoundGuild As Long
 Public Sub LoadGuildsDB()
     On Error GoTo LoadGuildsDB_Err
     Dim CantClanes As String
@@ -324,33 +328,51 @@ m_PuedeSalirDeClan_Err:
     Call TraceError(Err.Number, Err.Description, "modGuilds.m_PuedeSalirDeClan", Erl)
 End Function
 
-Public Function PuedeFundarUnClan(ByVal UserIndex As Integer, ByVal Alineacion As e_ALINEACION_GUILD, ByRef refError As String) As Boolean
-    On Error GoTo PuedeFundarUnClan_Err
-    PuedeFundarUnClan = False
+Public Function PuedeIniciarFundacion(ByVal UserIndex As Integer, ByRef refError As String) As Boolean
+    ' Plan 15.002 (Ola 2, C1): parte de PuedeFundarUnClan que NO depende de la
+    ' alineacion (membresia, nivel, gemas, oro). La usan PuedeFundarUnClan (que
+    ' agrega el chequeo de alineacion) y Protocol.HandleQuieroFundarClan (antes
+    ' de mostrar el formulario, donde la alineacion todavia no se eligio).
+    On Error GoTo PuedeIniciarFundacion_Err
+    PuedeIniciarFundacion = False
     If UserList(UserIndex).GuildIndex > 0 Then
         refError = 2023 'Ya perteneces a un clan, no podés fundar otro.
         Exit Function
     End If
-    If UserList(UserIndex).Stats.ELV < 23 Or UserList(UserIndex).Stats.UserSkills(e_Skill.liderazgo) < 50 Then
-        refError = 2024 'Para fundar un clan debes ser Nivel 23, tener 50 puntos en liderazgo y tener en tu inventario las Gemas de Fundación Verde, Roja, Azul y Polar.
+    If UserList(UserIndex).Stats.ELV < 21 Then
+        refError = 2024 'Para fundar un clan debes ser nivel 21, tener las 4 Gemas de Fundación y 1.000.000 de monedas de oro.
         Exit Function
     End If
     If Not TieneObjetos(407, 1, UserIndex) Then
-        refError = 2025 'Para fundar un clan debes ser nivel 23, tener 50 puntos en liderazgo y tener en tu inventario las Gemas de Fundación Verde, Roja, Azul y Polar.
+        refError = 2025 'Para fundar un clan debes ser nivel 21, tener las 4 Gemas de Fundación y 1.000.000 de monedas de oro.
         Exit Function
     End If
     If Not TieneObjetos(408, 1, UserIndex) Then
-        refError = 2026 'Para fundar un clan debes ser nivel 23, tener 50 puntos en liderazgo y tener en tu inventario las Gemas de Fundación Verde, Roja, Azul y Polar.
+        refError = 2026 'Para fundar un clan debes ser nivel 21, tener las 4 Gemas de Fundación y 1.000.000 de monedas de oro.
         Exit Function
     End If
     If Not TieneObjetos(409, 1, UserIndex) Then
-        refError = 2027 'Para fundar un clan debes ser nivel 23, tener 50 puntos en liderazgo y tener en tu inventario las Gemas de Fundación Verde, Roja, Azul y Polar.
+        refError = 2027 'Para fundar un clan debes ser nivel 21, tener las 4 Gemas de Fundación y 1.000.000 de monedas de oro.
         Exit Function
     End If
     If Not TieneObjetos(412, 1, UserIndex) Then
-        refError = 2028 'Para fundar un clan debes ser nivel 23, tener 50 puntos en liderazgo y tener en tu inventario las Gemas de Fundación Verde, Roja, Azul y Polar.
+        refError = 2028 'Para fundar un clan debes ser nivel 21, tener las 4 Gemas de Fundación y 1.000.000 de monedas de oro.
         Exit Function
     End If
+    If UserList(UserIndex).Stats.GLD < PriceFoundGuild Then
+        refError = MSG_FUNDAR_CLAN_NECESITAS_ORO & "¬" & PriceFoundGuild 'Msg2214: Para fundar un clan necesitas #1 monedas de oro.
+        Exit Function
+    End If
+    PuedeIniciarFundacion = True
+    Exit Function
+PuedeIniciarFundacion_Err:
+    Call TraceError(Err.Number, Err.Description, "modGuilds.PuedeIniciarFundacion", Erl)
+End Function
+
+Public Function PuedeFundarUnClan(ByVal UserIndex As Integer, ByVal Alineacion As e_ALINEACION_GUILD, ByRef refError As String) As Boolean
+    On Error GoTo PuedeFundarUnClan_Err
+    PuedeFundarUnClan = False
+    If Not PuedeIniciarFundacion(UserIndex, refError) Then Exit Function
     If Alineacion = e_ALINEACION_GUILD.ALINEACION_CIUDADANA And UserList(UserIndex).flags.Seguro = False Then
         refError = 2029 'Para fundar un clan ciudadano deberás tener activado el seguro.
         Exit Function

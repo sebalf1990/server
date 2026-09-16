@@ -2975,21 +2975,11 @@ Sub UseInvItem(ByVal UserIndex As Integer, ByVal Slot As Byte, ByVal ByClick As 
                 'Si llega aca es porque es o Laud o Tambor o Flauta
                 Call SendData(SendTarget.ToPCAliveArea, UserIndex, PrepareMessagePlayWave(obj.Snd1, .pos.x, .pos.y))
             Case e_OBJType.otShips
-                ' Piratas y trabajadores navegan al nivel 23
-                If .invent.Object(Slot).ObjIndex <> iObjTrajeAltoNw And .invent.Object(Slot).ObjIndex <> iObjTrajeBajoNw And .invent.Object(Slot).ObjIndex <> iObjTraje Then
-                    If .clase = e_Class.Trabajador Or .clase = e_Class.Pirat Then
-                        If .Stats.ELV < 23 Then
-                            'Msg911= Para recorrer los mares debes ser nivel 23 o superior.
-                            Call WriteLocaleMsg(UserIndex, MSG_RECORRER_MARES_DEBES_NIVEL_SUPERIOR, e_FontTypeNames.FONTTYPE_INFO)
-                            Exit Sub
-                        End If
-                        ' Nivel mínimo 25 para navegar, si no sos pirata ni trabajador
-                    ElseIf .Stats.ELV < 25 Then
-                        'Msg912= Para recorrer los mares debes ser nivel 25 o superior.
-                        Call WriteLocaleMsg(UserIndex, MSG_RECORRER_MARES_DEBES_NIVEL_SUPERIOR_912, e_FontTypeNames.FONTTYPE_INFO)
-                        Exit Sub
-                    End If
-                ElseIf .invent.Object(Slot).ObjIndex = iObjTrajeAltoNw Or .invent.Object(Slot).ObjIndex = iObjTrajeBajoNw Then
+                ' Plan 15.002 (Ola 2, N5): se elimino el chequeo hardcodeado de nivel
+                ' 23/25 (Piratas/Trabajadores vs el resto) para navegar -- MinELV en
+                ' obj.dat (InvUsuario.bas:1814) ya gatea por nivel de forma generica, y
+                ' con costo en oro (no en skill) las 4 naves declaran su propio MinELV.
+                If .invent.Object(Slot).ObjIndex = iObjTrajeAltoNw Or .invent.Object(Slot).ObjIndex = iObjTrajeBajoNw Then
                     If (.flags.Navegando = 0 Or (.invent.EquippedShipObjIndex <> iObjTrajeAltoNw And .invent.EquippedShipObjIndex <> iObjTrajeBajoNw)) And MapData(.pos.Map, _
                        .pos.x + 1, .pos.y).trigger <> e_Trigger.DETALLEAGUA And MapData(.pos.Map, .pos.x - 1, .pos.y).trigger <> e_Trigger.DETALLEAGUA And MapData(.pos.Map, _
                        .pos.x, .pos.y + 1).trigger <> e_Trigger.DETALLEAGUA And MapData(.pos.Map, .pos.x, .pos.y - 1).trigger <> e_Trigger.DETALLEAGUA Then
