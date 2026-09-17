@@ -60,7 +60,7 @@ name=gain_exp_while_working
 value=1
 [TOGGLE19]
 name=healers_and_tanks
-value=0
+value=1
 [TOGGLE20]
 name=destroy_npc_bought_items
 value=1
