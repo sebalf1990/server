@@ -80,3 +80,18 @@ Public Sub ChopWood(ByVal UserIndex As Integer)
         Call SubirSkill(UserIndex, e_Skill.Talar)
     End With
 End Sub
+
+' Plan 17.001 D59 (port de official/master): un arbol elfico solo se tala con un hacha elfica.
+Public Function CanUserExtractWood(ByVal UserIndex As Integer, ByVal TargetX As Byte, ByVal TargetY As Byte) As Boolean
+    With UserList(UserIndex)
+        If .invent.EquippedWorkingToolObjIndex <= 0 Then Exit Function
+        If ObjData(MapData(.pos.Map, TargetX, TargetY).ObjInfo.ObjIndex).Elfico > 0 Then
+            If Not ObjData(.invent.EquippedWorkingToolObjIndex).Elfico > 0 Then
+                'Msg601=Solo puedes talar arboles elficos con un hacha elfica.
+                Call WriteLocaleMsg(UserIndex, MSG_ONLY_ELVISH_AXE_ALLOWED, e_FontTypeNames.FONTTYPE_INFO)
+                Exit Function
+            End If
+        End If
+    End With
+    CanUserExtractWood = True
+End Function
