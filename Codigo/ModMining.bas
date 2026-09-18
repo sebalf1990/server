@@ -77,3 +77,18 @@ Public Sub MineMinerals(ByVal UserIndex As Integer)
     End With
     Exit Sub
 End Sub
+
+' Plan 17.001 D59 (port de official/master): un yacimiento de Blodium solo se mina con el piquete de Blodium.
+Public Function CanUserExtractMinerals(ByVal UserIndex As Integer, ByVal TargetX As Byte, ByVal TargetY As Byte) As Boolean
+    With UserList(UserIndex)
+        If .invent.EquippedWorkingToolObjIndex <= 0 Then Exit Function
+        If ObjData(MapData(.pos.Map, TargetX, TargetY).ObjInfo.ObjIndex).Blodium > 0 Then
+            If Not ObjData(.invent.EquippedWorkingToolObjIndex).Blodium > 0 Then
+                'Msg597=Para extraer minerales de Blodium necesitaras un piquete especial.
+                Call WriteLocaleMsg(UserIndex, MSG_BLODIUM_PICKAXE_REQUIRED, e_FontTypeNames.FONTTYPE_INFO)
+                Exit Function
+            End If
+        End If
+    End With
+    CanUserExtractMinerals = True
+End Function
