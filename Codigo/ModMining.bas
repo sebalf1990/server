@@ -89,6 +89,15 @@ Public Function CanUserExtractMinerals(ByVal UserIndex As Integer, ByVal TargetX
                 Exit Function
             End If
         End If
+        ' Plan 17.001 D58 (propio; la guia y el texto del item mandan): un yacimiento de oro (Dorada) solo con el
+        ' Piquete de Minero Dorado. Se exige piquete de minero porque las Tijeras doradas tambien son Dorada.
+        If ObjData(MapData(.pos.Map, TargetX, TargetY).ObjInfo.ObjIndex).Dorada > 0 Then
+            If Not (ObjData(.invent.EquippedWorkingToolObjIndex).Dorada > 0 And ObjData(.invent.EquippedWorkingToolObjIndex).Subtipo = e_WorkingToolSubType.MinerPickaxe) Then
+                'Msg1022=Para minar oro necesitas un Piquete de Minero Dorado.
+                Call WriteLocaleMsg(UserIndex, MSG_GOLD_PICKAXE_REQUIRED, e_FontTypeNames.FONTTYPE_INFO)
+                Exit Function
+            End If
+        End If
     End With
     CanUserExtractMinerals = True
 End Function
