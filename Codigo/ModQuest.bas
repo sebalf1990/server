@@ -27,6 +27,16 @@ Attribute VB_Name = "ModQuest"
 '
 Option Explicit
  
+Public Enum e_QuestPermittedFactions
+    None = 0
+    Citizen = 1
+    RoyalArmy = 2
+    RoyalCouncil = 4
+    Criminal = 8
+    ChaosLegion = 16
+    ChaosCouncil = 32
+End Enum
+ 
 'Constantes de las quests
 Public Function TieneQuest(ByVal UserIndex As Integer, ByVal QuestNumber As Integer) As Byte
     On Error GoTo TieneQuest_Err
@@ -481,6 +491,7 @@ Public Sub LoadQuests()
             .RewardGLD = val(reader.GetValue("QUEST" & i, "RewardGLD"))
             .RewardEXP = val(reader.GetValue("QUEST" & i, "RewardEXP"))
             .Repetible = val(reader.GetValue("QUEST" & i, "Repetible"))
+            .PermittedFactions = val(reader.GetValue("QUEST" & i, "PermittedFactions"))
             .GlobalQuestIndex = val(reader.GetValue("QUEST" & i, "GlobalQuestIndex"))
             .GlobalQuestThresholdNeeded = val(reader.GetValue("QUEST" & i, "GlobalQuestThresholdNeeded"))
             'CARGAMOS OBJETOS DE RECOMPENSA
@@ -789,6 +800,15 @@ Public Function CanUserAcceptQuest(ByVal UserIndex As Integer, ByVal NpcIndex As
         End If
     End If
     
+    'Facciones permitidas? (PermittedFactions: mascara de e_QuestPermittedFactions; 0 = cualquiera)
+    If tmpQuest.PermittedFactions > 0 Then
+        If Not IsSet(tmpQuest.PermittedFactions, QuestFactionBit(UserList(UserIndex).Faccion.Status)) Then
+            'Msg2215=Esta misión no está disponible para tu facción.
+            Call WriteLocaleMsg(UserIndex, MSG_MISSION_FACTION_NOT_AVAILABLE, e_FontTypeNames.FONTTYPE_INFO)
+            Exit Function
+        End If
+    End If
+    
     If tmpQuest.Repetible = 0 Then
         If UserDoneQuest(UserIndex, QuestIndex) Then
             Call WriteLocaleMsg(UserIndex, MSG_QUEST_ALREADY_COMPLETED, e_FontTypeNames.FONTTYPE_INFO)
@@ -817,6 +837,26 @@ Public Function CanUserAcceptQuest(ByVal UserIndex As Integer, ByVal NpcIndex As
     Exit Function
 ErrHandler:
     Call TraceError(Err.Number, Err.Description, "ModQuest.CanUserAcceptQuest", Erl)
+End Function
+'Bit de e_QuestPermittedFactions que corresponde al estado de faccion del usuario.
+'Una faccion sin bit devuelve None (0): IsSet da False y la quest se rechaza.
+Private Function QuestFactionBit(ByVal Status As e_Facciones) As Long
+    Select Case Status
+        Case e_Facciones.Ciudadano
+            QuestFactionBit = e_QuestPermittedFactions.Citizen
+        Case e_Facciones.Armada
+            QuestFactionBit = e_QuestPermittedFactions.RoyalArmy
+        Case e_Facciones.consejo
+            QuestFactionBit = e_QuestPermittedFactions.RoyalCouncil
+        Case e_Facciones.Criminal
+            QuestFactionBit = e_QuestPermittedFactions.Criminal
+        Case e_Facciones.Caos
+            QuestFactionBit = e_QuestPermittedFactions.ChaosLegion
+        Case e_Facciones.concilio
+            QuestFactionBit = e_QuestPermittedFactions.ChaosCouncil
+        Case Else
+            QuestFactionBit = e_QuestPermittedFactions.None
+    End Select
 End Function
 Public Function AllRequiredNPCsKilled(ByVal UserIndex As Integer, ByVal QuestIndex As Integer, ByVal QuestSlot As Byte) As Boolean
     On Error GoTo AllRequiredNPCsKilled_Err
