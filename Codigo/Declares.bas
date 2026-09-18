@@ -2267,6 +2267,7 @@ Public Type t_Quest
     RewardSpellCount As Byte
     RewardSpellList() As Integer
     Repetible As Byte
+    PermittedFactions As Integer
     GlobalQuestIndex As Integer
     GlobalQuestThresholdNeeded As Long
 End Type
