@@ -5931,10 +5931,15 @@ Public Sub HandleServerOpenToUsersToggle(ByVal UserIndex As Integer)
             'Msg1222= Servidor habilitado para todos.
             Call WriteLocaleMsg(UserIndex, MSG_SERVIDOR_HABILITADO_TODOS, e_FontTypeNames.FONTTYPE_INFO)
             ServerSoloGMs = 0
+            ' Upstream 45fefe5a: se persiste en Server.ini (si no, el toggle se perdia al reiniciar) y se loguea.
+            Call WriteVar(IniPath & "Server.ini", "INIT", "ServerSoloGMs", "0")
+            Call LogGM(GetUserRealName(UserIndex), "Desactivo Solo GMs (ServerSoloGMs=0)")
         Else
             'Msg1223= Servidor restringido a administradores.
             Call WriteLocaleMsg(UserIndex, MSG_SERVIDOR_RESTRINGIDO_ADMINISTRADORES, e_FontTypeNames.FONTTYPE_INFO)
             ServerSoloGMs = 1
+            Call WriteVar(IniPath & "Server.ini", "INIT", "ServerSoloGMs", "1")
+            Call LogGM(GetUserRealName(UserIndex), "Activo Solo GMs (ServerSoloGMs=1)")
         End If
     End With
     Exit Sub
