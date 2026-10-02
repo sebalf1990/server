@@ -2082,8 +2082,10 @@ Public Sub CargarMapaFormatoCSM(ByVal Map As Long, ByVal MAPFl As String)
             MapDat.restrict_mode = "0"
         End If
     End If
-    If TotalTiles > 0 Then
-        If SailingTiles * 100 / TotalTiles > SvrConfig.GetValue("FISHING_REQUIRED_PERCENT") And Not MapDat.Seguro Then
+    ' Upstream 3ceb0fb9: Seguro es Byte, y "Not Seguro" sobre un Byte es un NOT bit a bit (Not 1 = 254, que
+    ' sigue siendo verdadero), asi que las zonas de pesca tambien se agregaban a los mapas seguros.
+    If MapDat.Seguro = 0 And TotalTiles > 0 Then
+        If (CDbl(SailingTiles) / CDbl(TotalTiles)) * 100# > CDbl(SvrConfig.GetValue("FISHING_REQUIRED_PERCENT")) Then
             Call AddFishingPoolsToMap(Map)
         End If
     End If
