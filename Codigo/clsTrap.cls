@@ -229,6 +229,15 @@ End Function
 
 Public Function trigger(ByVal TargetIndex, ByVal TargetType As e_ReferenceType)
     trigger = False
+    ' Upstream #1755: un NPC marcado con AfectaParalisis (inmune a la paralisis) no activa la trampa de
+    ' inmovilizar; sale sin sonido y sin consumirla (RemoveEffect sigue en False).
+    If TargetType = eNpc Then
+        If EffectOverTime(mDotInfo.EotId).SubType = e_TrapTypes.eInmovilize Then
+            If NpcList(TargetIndex).flags.AfectaParalisis = 1 Then
+                Exit Function
+            End If
+        End If
+    End If
     Call modSendData.SendToAreaByPos(mWorldPosition.Map, mWorldPosition.x, mWorldPosition.y, PrepareMessagePlayWave(ACTIVATE_TRAOP_WAW_FILE, mWorldPosition.x, mWorldPosition.y, _
             False))
     If EffectOverTime(mDotInfo.EotId).OnHitWav > 0 Then Call modSendData.SendToAreaByPos(mWorldPosition.Map, mWorldPosition.x, mWorldPosition.y, PrepareMessagePlayWave( _
