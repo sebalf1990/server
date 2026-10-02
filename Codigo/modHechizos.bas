@@ -3646,6 +3646,39 @@ Sub HechizoCombinados(ByVal UserIndex As Integer, ByRef b As Boolean, ByRef IsAl
     enviarInfoHechizo = False
     h = UserList(UserIndex).Stats.UserHechizos(UserList(UserIndex).flags.Hechizo)
     targetUserIndex = UserList(UserIndex).flags.TargetUser.ArrayIndex
+    ' Upstream #1785: si el combinado inmoviliza o paraliza, se valida el objetivo ANTES de aplicar cualquier
+    ' otro efecto; antes el dano/buff ya se habia aplicado cuando el control tardio de abajo cortaba.
+    If IsSet(Hechizos(h).Effects, e_SpellEffects.Immobilize) Or IsSet(Hechizos(h).Effects, e_SpellEffects.Paralize) Then
+        If UserIndex = targetUserIndex Then
+            Call WriteLocaleMsg(UserIndex, MSG_CANNOT_ATTACK_YOURSELF, e_FontTypeNames.FONTTYPE_FIGHT)
+            b = False
+            Exit Sub
+        End If
+        If UserList(targetUserIndex).Counters.TiempoDeInmunidadParalisisNoMagicas > 0 Then
+            If IsSet(Hechizos(h).Effects, e_SpellEffects.Paralize) Then
+                Call WriteConsoleMsg(UserIndex, PrepareMessageLocaleMsg(MSG_NO_PUEDE_VOLVER_SER_PARALIZADO_TAN_RAPIDO, UserList(targetUserIndex).name, e_FontTypeNames.FONTTYPE_FIGHT))
+            Else
+                Call WriteConsoleMsg(UserIndex, PrepareMessageLocaleMsg(MSG_NO_PUEDE_VOLVER_SER_INMOVILIZADO_TAN_RAPIDO, UserList(targetUserIndex).name, e_FontTypeNames.FONTTYPE_FIGHT))
+            End If
+            b = False
+            Exit Sub
+        End If
+        If Not UserMod.CanMove(UserList(targetUserIndex).flags, UserList(targetUserIndex).Counters) Then
+            ' Msg661=No podes inmovilizar un objetivo que no puede moverse.
+            Call WriteLocaleMsg(UserIndex, MSG_NO_PODES_INMOVILIZAR_OBJETIVO_PUEDE_MOVERSE, e_FontTypeNames.FONTTYPE_FIGHT)
+            b = False
+            Exit Sub
+        End If
+        If IsSet(UserList(targetUserIndex).flags.StatusMask, eCCInmunity) Then
+            Call WriteLocaleMsg(UserIndex, MsgCCInunity, e_FontTypeNames.FONTTYPE_FIGHT)
+            b = False
+            Exit Sub
+        End If
+        If Not PuedeAtacar(UserIndex, targetUserIndex) Then
+            b = False
+            Exit Sub
+        End If
+    End If
     ' <-------- Agilidad ---------->
     If Hechizos(h).SubeAgilidad = 1 Then
         'Para poder tirar cl a un pk en el ring
