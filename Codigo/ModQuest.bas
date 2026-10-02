@@ -45,6 +45,11 @@ Public Function TieneQuest(ByVal UserIndex As Integer, ByVal QuestNumber As Inte
     'Last modified: 27/01/2010 by Amraphen
     '$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$$
     Dim i As Integer
+    ' Upstream #1671: con QuestNumber = 0 coincidia con cualquier slot vacio y daba un falso "la tiene".
+    If QuestNumber <= 0 Then
+        TieneQuest = 0
+        Exit Function
+    End If
     For i = 1 To MAXUSERQUESTS
         If UserList(UserIndex).QuestStats.Quests(i).QuestIndex = QuestNumber Then
             TieneQuest = i
@@ -559,24 +564,21 @@ Public Sub EnviarQuest(ByVal UserIndex As Integer)
         Call WriteLocaleMsg(UserIndex, MSG_SACERDOTE_PUEDE_CURARTE_DEBIDO_DEMASIADO_LEJOS, e_FontTypeNames.FONTTYPE_INFO)
         Exit Sub
     End If
-    'El NPC hace quests?
-    If NpcList(NpcIndex).NumQuest = 0 Then
-        Call WriteLocaleChatOverHead(UserIndex, "1341", "", NpcList(NpcIndex).Char.charindex, vbYellow) ' Msg1341=No tengo ninguna misión para ti.
-        Exit Sub
-    End If
-    'Hago un for para chequear si alguna de las misiones que da el NPC ya se completo.
+    'Primero: este NPC es el TalkTo de alguna quest que el jugador tiene activa?
+    'Upstream #1671: es independiente de NumQuest (solo cuenta las quests que el NPC OFRECE en su panel),
+    'asi un NPC que solo recibe la entrega de una quest de otro NPC tambien la completa.
     Dim q As Byte
-    Dim i As Long, j As Long
+    Dim i As Long
+    Dim avisoDado As Boolean
     For i = 1 To UBound(QuestList)
         If QuestList(i).TalkTo > 0 And QuestList(i).TalkTo = NpcList(NpcIndex).Numero Then
             tmpByte = TieneQuest(UserIndex, i)
             If tmpByte > 0 Then
-                For j = 1 To MAXUSERQUESTS
-                    If FinishQuestCheck(UserIndex, i, tmpByte) Then
-                        Call FinishQuest(UserIndex, i, tmpByte)
-                        Exit Sub
-                    End If
-                Next j
+                If FinishQuestCheck(UserIndex, i, tmpByte) Then
+                    Call FinishQuest(UserIndex, i, tmpByte)
+                    Exit Sub
+                End If
+                avisoDado = True
                 If QuestList(i).GlobalQuestIndex > 0 Then
                     ' Quest de evento global: FinishGlobalQuestCheck ya avisa con su propio mensaje.
                 ElseIf FaltaEspacioParaRecompensas(UserIndex, i) Then
@@ -587,6 +589,13 @@ Public Sub EnviarQuest(ByVal UserIndex As Integer)
             End If
         End If
     Next i
+    'El NPC ofrece quests propias? (si ya se aviso del TalkTo pendiente no se repite el "no tengo mision")
+    If NpcList(NpcIndex).NumQuest = 0 Then
+        If Not avisoDado Then
+            Call WriteLocaleChatOverHead(UserIndex, "1341", "", NpcList(NpcIndex).Char.charindex, vbYellow) ' Msg1341=No tengo ninguna misión para ti.
+        End If
+        Exit Sub
+    End If
     For q = 1 To NpcList(NpcIndex).NumQuest
         tmpByte = TieneQuest(UserIndex, NpcList(NpcIndex).QuestNumber(q))
         If tmpByte Then
