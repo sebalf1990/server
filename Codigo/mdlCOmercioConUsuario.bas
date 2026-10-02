@@ -239,20 +239,26 @@ Public Sub AceptarComercioUsu(ByVal UserIndex As Integer)
         Call WriteUpdateUserStats(OtroUserIndex)
     End If
     ' Confirmamos que SI tienen los objetos a comerciar, procedemos con el cambio.
+    ' Upstream #1786 (parcial): itemsAenviar tiene 6 slots y los vacios (ObjIndex = 0) no se transfieren;
+    ' antes MeterItemEnInventario/TirarItemAlPiso/QuitarObjetos corrian tambien con ellos.
     For i = 1 To UBound(UserList(OtroUserIndex).ComUsu.itemsAenviar)
-        If Not MeterItemEnInventario(UserIndex, UserList(OtroUserIndex).ComUsu.itemsAenviar(i)) Then
-            Call TirarItemAlPiso(UserList(UserIndex).pos, UserList(OtroUserIndex).ComUsu.itemsAenviar(i))
+        If UserList(OtroUserIndex).ComUsu.itemsAenviar(i).ObjIndex > 0 Then
+            If Not MeterItemEnInventario(UserIndex, UserList(OtroUserIndex).ComUsu.itemsAenviar(i)) Then
+                Call TirarItemAlPiso(UserList(UserIndex).pos, UserList(OtroUserIndex).ComUsu.itemsAenviar(i))
+            End If
+            Call QuitarObjetos(UserList(OtroUserIndex).ComUsu.itemsAenviar(i).ObjIndex, UserList(OtroUserIndex).ComUsu.itemsAenviar(i).amount, OtroUserIndex, UserList( _
+                    OtroUserIndex).ComUsu.itemsAenviar(i).ElementalTags, "trade")
         End If
-        Call QuitarObjetos(UserList(OtroUserIndex).ComUsu.itemsAenviar(i).ObjIndex, UserList(OtroUserIndex).ComUsu.itemsAenviar(i).amount, OtroUserIndex, UserList( _
-                OtroUserIndex).ComUsu.itemsAenviar(i).ElementalTags, "trade")
     Next i
     Dim j As Long
     For j = 1 To UBound(UserList(UserIndex).ComUsu.itemsAenviar)
-        If MeterItemEnInventario(OtroUserIndex, UserList(UserIndex).ComUsu.itemsAenviar(j)) = False Then
-            Call TirarItemAlPiso(UserList(OtroUserIndex).pos, UserList(UserIndex).ComUsu.itemsAenviar(j))
+        If UserList(UserIndex).ComUsu.itemsAenviar(j).ObjIndex > 0 Then
+            If MeterItemEnInventario(OtroUserIndex, UserList(UserIndex).ComUsu.itemsAenviar(j)) = False Then
+                Call TirarItemAlPiso(UserList(OtroUserIndex).pos, UserList(UserIndex).ComUsu.itemsAenviar(j))
+            End If
+            Call QuitarObjetos(UserList(UserIndex).ComUsu.itemsAenviar(j).ObjIndex, UserList(UserIndex).ComUsu.itemsAenviar(j).amount, UserIndex, UserList( _
+                    UserIndex).ComUsu.itemsAenviar(j).ElementalTags, "trade")
         End If
-        Call QuitarObjetos(UserList(UserIndex).ComUsu.itemsAenviar(j).ObjIndex, UserList(UserIndex).ComUsu.itemsAenviar(j).amount, UserIndex, UserList( _
-                UserIndex).ComUsu.itemsAenviar(j).ElementalTags, "trade")
     Next j
     Call UpdateUserInv(True, UserIndex, 0)
     Call UpdateUserInv(True, OtroUserIndex, 0)

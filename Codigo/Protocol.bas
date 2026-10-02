@@ -3624,11 +3624,9 @@ Private Sub HandleUserCommerceOffer(ByVal UserIndex As Integer)
                     End If
                 End If
             End If
-            'Prevent offer changes (otherwise people would ripp off other players)
-            'If .ComUsu.Objeto > 0 Then
-            'Msg1142= No podés cambiar tu oferta.
-            Call WriteLocaleMsg(UserIndex, MSG_NO_PODES_CAMBIAR_OFERTA, e_FontTypeNames.FONTTYPE_INFO)
-            '  End If
+            ' Upstream #1786 (parcial): el aviso "No podés cambiar tu oferta" (Msg1142) salia en CADA oferta, porque el
+            ' If que lo condicionaba estaba comentado. Se saca el aviso; NO se porta el Exit Sub del upstream (bloquearia
+            ' la 2da oferta de un intercambio de varios items).
             'Don't allow to sell boats if they are equipped (you can't take them off in the water and causes trouble)
             If .flags.Navegando = 1 Then
                 If .invent.EquippedShipSlot = Slot Then
