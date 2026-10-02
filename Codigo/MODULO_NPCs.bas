@@ -262,7 +262,7 @@ Sub MuereNpc(ByVal NpcIndex As Integer, ByVal UserIndex As Integer)
             .RespawnFlag = MiNPC.flags.Respawn
             .NpcNumber = MiNPC.Numero
             .SndRespawn = MiNPC.flags.SndRespawn
-            .SpawnMap = MiNPC.pos.Map
+            .SpawnMap = NpcRespawnMap(MiNPC)
             .Orig = MiNPC.Orig
             .IntervaloRespawn = MiNPC.Contadores.IntervaloRespawn
         End With
@@ -894,9 +894,19 @@ SpawnNpc_Err:
     Call TraceError(Err.Number, Err.Description, "NPCs.SpawnNpc", Erl)
 End Function
 
+' Upstream #1771: un NPC respawnea en el mapa donde nacio (Orig.Map), no en el que estaba al morir.
+' Si por algun camino Orig.Map no estuviera cargado (0), se usa el mapa actual como antes.
+Public Function NpcRespawnMap(ByRef Npc As t_Npc) As Integer
+    If Npc.Orig.Map > 0 Then
+        NpcRespawnMap = Npc.Orig.Map
+    Else
+        NpcRespawnMap = Npc.pos.Map
+    End If
+End Function
+
 Sub ReSpawnNpc(MiNPC As t_Npc)
     On Error GoTo ReSpawnNpc_Err
-    If (MiNPC.flags.Respawn = 0) Then Call CrearNPC(MiNPC.Numero, MiNPC.pos.Map, MiNPC.Orig)
+    If (MiNPC.flags.Respawn = 0) Then Call CrearNPC(MiNPC.Numero, NpcRespawnMap(MiNPC), MiNPC.Orig)
     Exit Sub
 ReSpawnNpc_Err:
     Call TraceError(Err.Number, Err.Description, "NPCs.ReSpawnNpc", Erl)
