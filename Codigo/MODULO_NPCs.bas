@@ -262,7 +262,7 @@ Sub MuereNpc(ByVal NpcIndex As Integer, ByVal UserIndex As Integer)
             .RespawnFlag = MiNPC.flags.Respawn
             .NpcNumber = MiNPC.Numero
             .SndRespawn = MiNPC.flags.SndRespawn
-            .SpawnMap = MiNPC.pos.Map
+            .SpawnMap = NpcRespawnMap(MiNPC)
             .Orig = MiNPC.Orig
             .IntervaloRespawn = MiNPC.Contadores.IntervaloRespawn
         End With
@@ -279,6 +279,7 @@ Sub ResetNpcFlags(ByVal NpcIndex As Integer)
         .AfectaParalisis = 0
         .ImmuneToSpells = 0
         .AguaValida = 0
+        .LavaValida = 0
         .AttackedBy = vbNullString
         .AttackedTime = 0
         .AttackedFirstBy = vbNullString
@@ -504,7 +505,8 @@ Public Function CrearNPC(NroNPC As Integer, Mapa As Integer, OrigPos As t_WorldP
         PuedeAgua = .flags.AguaValida = 1
         PuedeTierra = .flags.TierraInvalida = 0
         'Necesita ser respawned en un lugar especifico
-        If .flags.RespawnOrigPos And InMapBounds(OrigPos.Map, OrigPos.x, OrigPos.y) Then
+        If .flags.RespawnOrigPos And InMapBounds(OrigPos.Map, OrigPos.x, OrigPos.y) _
+                And (HayLava(OrigPos.Map, OrigPos.x, OrigPos.y) = (.flags.LavaValida = 1)) Then
             Map = OrigPos.Map
             x = OrigPos.x
             y = OrigPos.y
@@ -513,9 +515,13 @@ Public Function CrearNPC(NroNPC As Integer, Mapa As Integer, OrigPos As t_WorldP
         Else
             ' Primera búsqueda: buscamos una posición ideal hasta llegar al máximo de iteraciones
             Do
-                .pos.Map = Mapa
-                .pos.x = RandomNumber(MinXBorder + 2, MaxXBorder - 2) 'Obtenemos posicion al azar en x
-                .pos.y = RandomNumber(MinYBorder + 2, MaxYBorder - 2) 'Obtenemos posicion al azar en y
+                If Iteraciones = 0 And .flags.LavaValida = 1 And InMapBounds(OrigPos.Map, OrigPos.x, OrigPos.y) Then
+                    .pos = OrigPos
+                Else
+                    .pos.Map = Mapa
+                    .pos.x = RandomNumber(MinXBorder + 2, MaxXBorder - 2) 'Obtenemos posicion al azar en x
+                    .pos.y = RandomNumber(MinYBorder + 2, MaxYBorder - 2) 'Obtenemos posicion al azar en y
+                End If
                 .pos = ClosestLegalPosNPC(NpcIndex, 10, , True)     'Nos devuelve la posicion valida mas cercana
                 Iteraciones = Iteraciones + 1
             Loop While .pos.x = 0 And .pos.y = 0 And Iteraciones < MAXSPAWNATTEMPS
@@ -573,11 +579,28 @@ Sub MakeNPCChar(ByVal toMap As Boolean, sndIndex As Integer, NpcIndex As Integer
         Dim tmpByte As Byte
         GG = IIf(.showName > 0, .name & .SubName, vbNullString)
         If Not toMap Then
+            Dim HayFinalizada As Boolean
+            Dim HayDisponible As Boolean
+            Dim HayPendiente  As Boolean
+            ' Upstream #1671: quests que este NPC recibe via TalkTo (independiente de NumQuest, que solo
+            ' controla las quests que el NPC OFRECE / lista en su panel).
+            Dim qi As Long
+            For qi = 1 To UBound(QuestList)
+                If QuestList(qi).TalkTo > 0 And QuestList(qi).TalkTo = .Numero Then
+                    tmpByte = TieneQuest(sndIndex, qi)
+                    If tmpByte Then
+                        If FinishQuestCheck(sndIndex, qi, tmpByte) Then
+                            Simbolo = 3
+                            HayFinalizada = True
+                        Else
+                            HayPendiente = True
+                            Simbolo = 4
+                        End If
+                    End If
+                End If
+            Next qi
             If .NumQuest > 0 Then
-                Dim q             As Byte
-                Dim HayFinalizada As Boolean
-                Dim HayDisponible As Boolean
-                Dim HayPendiente  As Boolean
+                Dim q As Byte
                 For q = 1 To .NumQuest
                     tmpByte = TieneQuest(sndIndex, .QuestNumber(q))
                     If tmpByte Then
@@ -612,18 +635,18 @@ Sub MakeNPCChar(ByVal toMap As Boolean, sndIndex As Integer, NpcIndex As Integer
                         End If
                     End If
                 Next q
-                'Para darle prioridad a ciertos simbolos
-                If HayDisponible Then
-                    Simbolo = 1
-                End If
-                If HayPendiente Then
-                    Simbolo = 4
-                End If
-                If HayFinalizada Then
-                    Simbolo = 3
-                End If
-                'Para darle prioridad a ciertos simbolos
             End If
+            'Para darle prioridad a ciertos simbolos
+            If HayDisponible Then
+                Simbolo = 1
+            End If
+            If HayPendiente Then
+                Simbolo = 4
+            End If
+            If HayFinalizada Then
+                Simbolo = 3
+            End If
+            'Para darle prioridad a ciertos simbolos
             Dim body As Integer
             'Si está muerto el usuario y en zona insegura
             If UserList(sndIndex).flags.Muerto = 1 And MapInfo(UserList(sndIndex).pos.Map).Seguro = 0 Then
@@ -746,6 +769,8 @@ Public Function MoveNPCChar(ByVal NpcIndex As Integer, ByVal nHeading As Byte) A
         nPos = .pos
         Call HeadtoPos(nHeading, nPos)
         esGuardia = .npcType = e_NPCType.GuardiaReal Or .npcType = e_NPCType.GuardiasCaos
+        ' Upstream 666e601a: un NPC con LavaValida no sale de la lava.
+        If .flags.LavaValida = 1 And Not HayLava(nPos.Map, nPos.x, nPos.y) Then Exit Function
         ' es una posicion legal
         If LegalWalkNPC(nPos.Map, nPos.x, nPos.y, nHeading, .flags.AguaValida = 1, .flags.TierraInvalida = 0, IsValidUserRef(.MaestroUser), , esGuardia) Then
             UserIndex = MapData(.pos.Map, nPos.x, nPos.y).UserIndex
@@ -894,9 +919,19 @@ SpawnNpc_Err:
     Call TraceError(Err.Number, Err.Description, "NPCs.SpawnNpc", Erl)
 End Function
 
+' Upstream #1771: un NPC respawnea en el mapa donde nacio (Orig.Map), no en el que estaba al morir.
+' Si por algun camino Orig.Map no estuviera cargado (0), se usa el mapa actual como antes.
+Public Function NpcRespawnMap(ByRef Npc As t_Npc) As Integer
+    If Npc.Orig.Map > 0 Then
+        NpcRespawnMap = Npc.Orig.Map
+    Else
+        NpcRespawnMap = Npc.pos.Map
+    End If
+End Function
+
 Sub ReSpawnNpc(MiNPC As t_Npc)
     On Error GoTo ReSpawnNpc_Err
-    If (MiNPC.flags.Respawn = 0) Then Call CrearNPC(MiNPC.Numero, MiNPC.pos.Map, MiNPC.Orig)
+    If (MiNPC.flags.Respawn = 0) Then Call CrearNPC(MiNPC.Numero, NpcRespawnMap(MiNPC), MiNPC.Orig)
     Exit Sub
 ReSpawnNpc_Err:
     Call TraceError(Err.Number, Err.Description, "NPCs.ReSpawnNpc", Erl)
@@ -1086,6 +1121,7 @@ Private Sub LoadNpcInfoIntoCache(ByVal NpcNumber As Integer)
         .Movement = Val(LeerNPCs.GetValue(SectionName, "Movement"))
         .AguaValida = Val(LeerNPCs.GetValue(SectionName, "AguaValida"))
         .TierraInvalida = Val(LeerNPCs.GetValue(SectionName, "TierraInValida"))
+        .LavaValida = Val(LeerNPCs.GetValue(SectionName, "LavaValida"))
         .Faccion = Val(LeerNPCs.GetValue(SectionName, "Faccion"))
         .ElementalTags = Val(LeerNPCs.GetValue(SectionName, "ElementalTags"))
         .GlobalQuestBossIndex = val(LeerNPCs.GetValue(SectionName, "GlobalQuestBossIndex"))
@@ -1472,6 +1508,7 @@ Private Sub InitializeNpcFromInfo(ByVal NpcIndex As Integer, _
         .flags.AguaValida = Info.AguaValida
         .flags.GlobalQuestBossIndex = Info.GlobalQuestBossIndex
         .flags.TierraInvalida = Info.TierraInvalida
+        .flags.LavaValida = Info.LavaValida
         .flags.Faccion = Info.Faccion
         .flags.ElementalTags = Info.ElementalTags
         .npcType = Info.npcType
@@ -2479,7 +2516,7 @@ End Function
 
 Public Function CanPerformAttackAction(ByVal NpcIndex As Integer, ByVal AttackInterval As Long)
     With NpcList(NpcIndex)
-        CanPerformAttackAction = GlobalFrameTime - .Contadores.IntervaloLanzarHechizo > AttackInterval And GlobalFrameTime - .Contadores.IntervaloAtaque > AttackInterval
+        CanPerformAttackAction = TicksElapsed(.Contadores.IntervaloLanzarHechizo, GlobalFrameTime) > AttackInterval And TicksElapsed(.Contadores.IntervaloAtaque, GlobalFrameTime) > AttackInterval
     End With
 End Function
 
@@ -2510,7 +2547,7 @@ Public Function GetOwnedBy(ByVal NpcIndex As Integer) As Integer
     GetOwnedBy = 0
     With NpcList(NpcIndex).flags
         If .AttackedBy = vbNullString Then Exit Function
-        If GlobalFrameTime - .AttackedTime > IntervaloNpcOwner Then Exit Function
+        If TicksElapsed(.AttackedTime, GlobalFrameTime) > IntervaloNpcOwner Then Exit Function
         Dim Attacker As t_UserReference: Attacker = NameIndex(.AttackedBy)
         If Not IsValidUserRef(Attacker) Then Exit Function
         GetOwnedBy = Attacker.ArrayIndex

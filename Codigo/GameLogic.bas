@@ -520,25 +520,25 @@ Function ClosestLegalPosNPC(ByVal NpcIndex As Integer, ByVal MaxRange As Integer
         Do
             tY = .pos.y - LoopC
             For tX = .pos.x - LoopC To .pos.x + LoopC
-                If ValidNPCSpawnPos(ClosestLegalPosNPC, .pos.Map, tX, tY, .flags.AguaValida = 1, .flags.TierraInvalida = 0, IgnoreUsers, IgnoreDeadUsers) Then
+                If ValidNPCSpawnPos(ClosestLegalPosNPC, .pos.Map, tX, tY, .flags.AguaValida = 1, .flags.TierraInvalida = 0, .flags.LavaValida = 1, IgnoreUsers, IgnoreDeadUsers) Then
                     Exit Function
                 End If
             Next
             tX = .pos.x - LoopC
             For tY = .pos.y - LoopC + 1 To .pos.y + LoopC - 1
-                If ValidNPCSpawnPos(ClosestLegalPosNPC, .pos.Map, tX, tY, .flags.AguaValida = 1, .flags.TierraInvalida = 0, IgnoreUsers, IgnoreDeadUsers) Then
+                If ValidNPCSpawnPos(ClosestLegalPosNPC, .pos.Map, tX, tY, .flags.AguaValida = 1, .flags.TierraInvalida = 0, .flags.LavaValida = 1, IgnoreUsers, IgnoreDeadUsers) Then
                     Exit Function
                 End If
             Next
             tX = .pos.x + LoopC
             For tY = .pos.y - LoopC + 1 To .pos.y + LoopC - 1
-                If ValidNPCSpawnPos(ClosestLegalPosNPC, .pos.Map, tX, tY, .flags.AguaValida = 1, .flags.TierraInvalida = 0, IgnoreUsers, IgnoreDeadUsers) Then
+                If ValidNPCSpawnPos(ClosestLegalPosNPC, .pos.Map, tX, tY, .flags.AguaValida = 1, .flags.TierraInvalida = 0, .flags.LavaValida = 1, IgnoreUsers, IgnoreDeadUsers) Then
                     Exit Function
                 End If
             Next
             tY = .pos.y + LoopC
             For tX = .pos.x - LoopC To .pos.x + LoopC
-                If ValidNPCSpawnPos(ClosestLegalPosNPC, .pos.Map, tX, tY, .flags.AguaValida = 1, .flags.TierraInvalida = 0, IgnoreUsers, IgnoreDeadUsers) Then
+                If ValidNPCSpawnPos(ClosestLegalPosNPC, .pos.Map, tX, tY, .flags.AguaValida = 1, .flags.TierraInvalida = 0, .flags.LavaValida = 1, IgnoreUsers, IgnoreDeadUsers) Then
                     Exit Function
                 End If
             Next
@@ -556,9 +556,12 @@ Private Function ValidNPCSpawnPos(OutPos As t_WorldPos, _
                                   ByVal y As Integer, _
                                   ByVal AguaValida As Boolean, _
                                   ByVal TierraValida As Boolean, _
+                                  ByVal LavaValida As Boolean, _
                                   ByVal IgnoreUsers As Boolean, _
                                   ByVal IgnoreDeadUsers As Boolean) As Boolean
     If LegalPos(Map, x, y, AguaValida, TierraValida, , False) Then
+        ' Upstream 666e601a: el NPC con LavaValida solo nace en lava; el resto nunca en lava.
+        If HayLava(Map, x, y) <> LavaValida Then Exit Function
         If TestSpawnTrigger(Map, x, y) Then
             If Not HayPCarea(Map, x, y, IgnoreDeadUsers) Or IgnoreUsers Then
                 ValidNPCSpawnPos = True
@@ -2019,7 +2022,7 @@ Public Function PrepareStatusMsgsForNpcs(ByVal TargetNpcIndex As Integer, ByVal 
         If GetOwnedBy(TargetNpcIndex) <> 0 Then
             Call SetMask(NpcStatusMask, e_NpcInfoMask.Fighting)
             extraStrings = extraStrings & .flags.AttackedBy & "|"
-            extraStrings = extraStrings & CLng((IntervaloNpcOwner - (GlobalFrameTime - .flags.AttackedTime)) / 1000) & "-"
+            extraStrings = extraStrings & CLng((IntervaloNpcOwner - (TicksElapsed(.flags.AttackedTime, GlobalFrameTime))) / 1000) & "-"
         Else
             extraStrings = extraStrings & "-"
         End If

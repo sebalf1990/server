@@ -1010,7 +1010,9 @@ Private Function BuscarNpcEnArea(ByVal NpcIndex As Integer) As Integer
                 If MapData(.Orig.Map, x, y).NpcIndex > 0 And NpcIndex <> MapData(.Orig.Map, x, y).NpcIndex Then
                     Dim foundNpc As Integer
                     foundNpc = MapData(.Orig.Map, x, y).NpcIndex
-                    If NpcList(foundNpc).Hostile Then
+                    ' Upstream #1837 (parcial): una mascota de un usuario (MaestroUser valido) no es objetivo de la guardia,
+                    ' aunque su Hostile haya quedado en 1 al dejar de seguir (OldHostil). El resto de #1837 es de #1776.
+                    If NpcList(foundNpc).Hostile <> 0 And Not IsValidUserRef(NpcList(foundNpc).MaestroUser) Then
                         If Not IsValidUserRef(NpcList(foundNpc).TargetUser) Then
                             BuscarNpcEnArea = MapData(.Orig.Map, x, y).NpcIndex
                             Exit Function
@@ -1416,7 +1418,7 @@ UsuarioAtacableConMelee_Err:
 End Function
 
 Private Function CanCastSpell(ByRef Npc As t_Npc, ByVal Slot As Integer) As Boolean
-    CanCastSpell = GlobalFrameTime - Npc.Spells(Slot).lastUse > (Npc.Spells(Slot).Cd * 1000)
+    CanCastSpell = TicksElapsed(Npc.Spells(Slot).lastUse, GlobalFrameTime) > (Npc.Spells(Slot).Cd * 1000)
 End Function
 
 Public Function GetAvailableSpellEffects(ByVal NpcIndex As Integer) As Long

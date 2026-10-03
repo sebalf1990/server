@@ -28,11 +28,16 @@ Option Explicit
 ' Why NOT to use masked GetTickCount() for timing
 ' ============================================
 '
-' Windows timeGetTime() returns a 32-bit unsigned millisecond counter:
-'   Range: 0 .. 4,294,967,295 (2^32 - 1)
-'   Wrap period: ~49.7 days
+' Windows timeGetTime() returns a modulo-2^32 millisecond counter.
+' VB6 stores that bit pattern in a signed Long:
+'   &H7FFFFFFF =  2147483647
+'   &H80000000 = -2147483648
+'   &HFFFFFFFF =          -1
 '
-' Our legacy wrapper applied a mask:
+' Crossing &H7FFFFFFF -> &H80000000 only changes the signed representation.
+' The real timer wrap is &HFFFFFFFF -> &H00000000 after ~49.7 days.
+'
+' Our older wrapper applied a mask:
 '   GetTickCount = timeGetTime() And &H7FFFFFFF
 '
 ' That forces the high (sign) bit to 0, so the value is always >= 0.
@@ -43,22 +48,20 @@ Option Explicit
 ' The problem: code that does naive subtraction across a wrap breaks.
 '
 ' Example:
-'   start = 2,147,482,647   ' (2^31 - 1000), just before wrap
-'   now   = 500             ' just after wrap
+'   start = 2,147,482,647   ' (2^31 - 1000), just before masked wrap
+'   now   = 500             ' just after masked wrap
 '
 '   naive = now - start     ' 500 - 2,147,482,647 = -2,147,482,147
 '   If naive > delay Then   ' always False (negative), even though 500 ms passed
 '
-' This means timers, respawns, cooldowns, etc. can "stall" for ~24.9 days
-' after a wrap if they rely on (now - start > delay).
-'
 ' Correct approach:
-'   - Use the full unmasked tick: GetTickCountRaw() (0..2^32-1)
+'   - Use the full unmasked tick: GetTickCountRaw()
+'   - Convert signed Long bit patterns to unsigned Double before arithmetic
 '   - Compute elapsed with wrap-safe math: TicksElapsed(start, now)
 '   - Or compare deadlines with unsigned logic: TickAfter(now, deadline)
 '
-' This ensures timers keep working correctly across the natural wrap of the
-' Windows tick counter.
+' Double exactly represents every 32-bit integer, so it is safe as a temporary
+' unsigned-32 arithmetic representation.
 '
 '
 '
@@ -72,7 +75,7 @@ Option Explicit
 '       start = GetTickCount()
 '       If GetTickCount() - start > delay Then ...
 '
-'   This breaks across the 2^31 wrap (~24.9 days). The subtraction
+'   This breaks across the 2^31 masked wrap (~24.9 days). The subtraction
 '   goes negative and the timer stalls.
 '
 ' Correct usage with wrap-safe helpers:
@@ -116,9 +119,9 @@ Option Explicit
 '       Do While Not TickAfter(GetTickCountRaw(), wakeAt): DoEvents: Loop
 '
 ' Helpers provided by this module:
-'   - GetTickCountRaw()  : unmasked 2^32 tick counter
+'   - GetTickCountRaw()  : raw modulo-2^32 tick counter bit pattern
 '   - TicksElapsed()     : wrap-safe elapsed (ms)
-'   - TickAfter()        : wrap-safe "is A after B?" compare
+'   - TickAfter()        : wrap-safe "is A at-or-after B?" compare
 '   - AddMod32()         : add with wrap (for deadlines/intervals)
 '   - PosMod()           : normalize to positive range
 '
@@ -133,16 +136,18 @@ Public Function GetTickCountRaw() As Long
     'to simulare neg stamps do: Or &H80000000
 End Function
 
+' Upstream #1746: se pasa cada Long al dominio sin signo ANTES de restar. Con la resta con signo,
+' currentTick - startTick desbordaba (error 6) cuando los dos lados caian a cada lado de &H7FFFFFFF/&H80000000.
 Public Function TicksElapsed(ByVal startTick As Long, ByVal currentTick As Long) As Double
-    If currentTick >= startTick Then
-        TicksElapsed = CDbl(currentTick - startTick)
-    Else
-        TicksElapsed = (TICKS32 - CDbl(startTick)) + CDbl(currentTick)
-    End If
+    Dim elapsed As Double
+    elapsed = Tick32ToUnsigned(currentTick) - Tick32ToUnsigned(startTick)
+    If elapsed < 0# Then elapsed = elapsed + TICKS32
+    TicksElapsed = elapsed
 End Function
 
 Public Function TickAfter(ByVal a As Long, ByVal b As Long) As Boolean
-    TickAfter = (a - b) >= 0
+    ' Modular timestamp ordering is only unambiguous for intervals under 2^31 ms.
+    TickAfter = (TicksElapsed(b, a) < TICKS32_HALF)
 End Function
 
 Public Function PosMod(ByVal a As Double, ByVal m As Long) As Long
@@ -189,26 +194,12 @@ End Function
 '
 ' Why not just use TickAfter(now, deadline)?
 ' ------------------------------------------
-' The standard trick:
-'     TickAfter = (now - deadline) >= 0
-' works correctly on a modulo-2^32 tick ring as long as the
-' unsigned distance between "now" and "deadline" is < 2^31.
+' The comparison itself is handled by TickAfter(). DeadlinePassed() only adds
+' the server's legacy sentinel rule: deadline=0 means "no active future
+' deadline", so it is always treated as already passed.
 '
-' But in our stun/cooldown code, we sometimes store StunEndTime=0
-' to mean "no stun / unset".
-'
-' Problem:
-'   If deadline=0 and now has the high bit set
-'   (e.g. nowRaw = &H86F0E019 = -2031327897 signed),
-'   then (now - 0) is negative in signed math.
-'   TickAfter() returns False ? interpreted as "deadline not passed"
-'   ? player/NPC is treated as still stunned.
-'
-' In reality, a deadline of 0 should always mean "already expired".
-'
-' Fix:
-'   Special-case deadline=0 as always passed.
-'   Otherwise fall back to the wrap-safe TickAfter compare.
+' Without that sentinel case, a stored zero deadline would become ambiguous
+' once real raw ticks legitimately pass through the high signed Long bit.
 '
 ' Usage:
 '   If DeadlinePassed(GetTickCountRaw(), counters.StunEndTime) Then ...
@@ -218,11 +209,7 @@ Public Function DeadlinePassed(ByVal nowRaw As Long, ByVal deadline As Long) As 
     If deadline = 0 Then
         DeadlinePassed = True        ' treat 0 as "no deadline"
     Else
-        ' 06.002 Ola 2: la resta directa de Longs desborda (error 6) cuando now y deadline quedan
-        ' en mitades opuestas del anillo de 2^32. Distancia sin signo: < 2^31 = deadline pasado.
-        Dim d As Double
-        d = Tick32ToUnsigned(nowRaw) - Tick32ToUnsigned(deadline)
-        If d < 0 Then d = d + TICKS32
-        DeadlinePassed = (d < TICKS32_HALF)
+        ' Upstream #1746: la comparacion modular vive en TickAfter (06.002 Ola 2 la tenia inline aca).
+        DeadlinePassed = TickAfter(nowRaw, deadline)
     End If
 End Function
