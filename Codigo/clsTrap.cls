@@ -52,7 +52,7 @@ Private Enum e_TrapTypes
     ePoison
 End Enum
 
-Const ACTIVATE_TRAOP_WAW_FILE = 210
+Const ACTIVATE_TRAP_WAW_FILE = 210
 
 Public Sub Setup(ByVal SourceIndex As Integer, _
                  ByVal SourceType As e_ReferenceType, _
@@ -238,7 +238,7 @@ Public Function trigger(ByVal TargetIndex, ByVal TargetType As e_ReferenceType)
             End If
         End If
     End If
-    Call modSendData.SendToAreaByPos(mWorldPosition.Map, mWorldPosition.x, mWorldPosition.y, PrepareMessagePlayWave(ACTIVATE_TRAOP_WAW_FILE, mWorldPosition.x, mWorldPosition.y, _
+    Call modSendData.SendToAreaByPos(mWorldPosition.Map, mWorldPosition.x, mWorldPosition.y, PrepareMessagePlayWave(ACTIVATE_TRAP_WAW_FILE, mWorldPosition.x, mWorldPosition.y, _
             False))
     If EffectOverTime(mDotInfo.EotId).OnHitWav > 0 Then Call modSendData.SendToAreaByPos(mWorldPosition.Map, mWorldPosition.x, mWorldPosition.y, PrepareMessagePlayWave( _
             EffectOverTime(mDotInfo.EotId).OnHitWav, mWorldPosition.x, mWorldPosition.y, False))
